@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Road } from "./Road";
-import { Waypoint, Position } from "@shared/types";
+import { Waypoint } from "@shared/types";
 
 describe("Road", () => {
   let road: Road;
@@ -394,7 +394,10 @@ describe("Road", () => {
     it("should include all waypoints", () => {
       const state = road.toState();
 
-      expect(state.waypoints[0]).toEqual({ position: { x: 0, y: 0 }, index: 0 });
+      expect(state.waypoints[0]).toEqual({
+        position: { x: 0, y: 0 },
+        index: 0,
+      });
       expect(state.waypoints[1]).toEqual({
         position: { x: 100, y: 0 },
         index: 1,
@@ -525,7 +528,10 @@ describe("Road", () => {
 
       expect(roadWithZeroSegment.length).toBe(100);
 
-      const nearest = roadWithZeroSegment.getNearestPointOnRoad({ x: 0, y: 10 });
+      const nearest = roadWithZeroSegment.getNearestPointOnRoad({
+        x: 0,
+        y: 10,
+      });
       expect(nearest.distance).toBe(10);
     });
   });

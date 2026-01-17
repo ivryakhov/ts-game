@@ -11,12 +11,15 @@ import {
   STARTING_ETHER,
   PASSIVE_INCOME_PER_SEC,
   MATCH_DURATION_SEC,
+  MAX_UPGRADE_LEVEL,
 } from "@shared/constants";
 import {
   PlayerId,
   EntityId,
   RoadId,
+  ResourcePointId,
   TowerType,
+  ResourcePointType,
   Position,
   MatchStatus,
   UnitBehaviorState,
@@ -27,8 +30,10 @@ import {
 import { Tower } from "../entities/Tower";
 import { Unit } from "../entities/Unit";
 import { Road } from "../entities/Road";
+import { ResourcePoint } from "../entities/ResourcePoint";
 import { GameLoop, PerformanceStats } from "./GameLoop";
 import { CanvasRenderer } from "../rendering/CanvasRenderer";
+import { UpgradeSystem, UpgradeType } from "../systems/UpgradeSystem";
 
 /**
  * Конфигурация игры
@@ -72,6 +77,9 @@ export class Game {
   /** Дороги */
   private roads: Map<RoadId, Road> = new Map();
 
+  /** Ресурсные точки */
+  private resourcePoints: Map<ResourcePointId, ResourcePoint> = new Map();
+
   /** Игроки */
   private players: Map<PlayerId, PlayerState> = new Map();
 
@@ -89,6 +97,12 @@ export class Game {
 
   /** Позиция мыши в игровых координатах */
   private mousePosition: Position = { x: 0, y: 0 };
+
+  /** Показывать ли панель улучшений */
+  private showUpgradePanel: boolean = false;
+
+  /** Показывать ли панель башни */
+  private showTowerPanel: boolean = false;
 
   constructor(canvas: HTMLCanvasElement, config: Partial<GameConfig> = {}) {
     this.config = {
@@ -164,6 +178,9 @@ export class Game {
 
     // Создаём дороги
     this.createRoads();
+
+    // Создаём ресурсные точки
+    this.createResourcePoints();
 
     // Устанавливаем статус
     this.matchStatus = MatchStatus.IN_PROGRESS;
@@ -283,6 +300,243 @@ export class Game {
   }
 
   /**
+   * Создание ресурсных точек
+   */
+  private createResourcePoints(): void {
+    const centerX = GAME_WIDTH / 2;
+    const centerY = GAME_HEIGHT / 2;
+
+    // Главная кристаллическая шахта в центре
+    const crystalMine = new ResourcePoint(
+      "rp_center",
+      ResourcePointType.CRYSTAL_MINE,
+      centerX,
+      centerY,
+    );
+    this.resourcePoints.set(crystalMine.id, crystalMine);
+
+    // Малые кристаллы ближе к башням
+    const smallCrystalOffsets = [
+      { x: -200, y: -100 }, // Ближе к левой башне (верх)
+      { x: -200, y: 100 }, // Ближе к левой башне (низ)
+      { x: 200, y: -100 }, // Ближе к правой башне (верх)
+      { x: 200, y: 100 }, // Ближе к правой башне (низ)
+    ];
+
+    smallCrystalOffsets.forEach((offset, index) => {
+      const smallCrystal = new ResourcePoint(
+        `rp_small_${index}`,
+        ResourcePointType.SMALL_CRYSTAL,
+        centerX + offset.x,
+        centerY + offset.y,
+      );
+      this.resourcePoints.set(smallCrystal.id, smallCrystal);
+    });
+
+    // Нейтральные лагеря вдоль дорог
+    const campOffsets = [
+      { x: 0, y: -150 }, // Верх от центра
+      { x: 0, y: 150 }, // Низ от центра
+    ];
+
+    campOffsets.forEach((offset, index) => {
+      const camp = new ResourcePoint(
+        `rp_camp_${index}`,
+        ResourcePointType.NEUTRAL_CAMP,
+        centerX + offset.x,
+        centerY + offset.y,
+      );
+      this.resourcePoints.set(camp.id, camp);
+    });
+  }
+
+  /**
+   * Обновление ресурсных точек
+   */
+  private updateResourcePoints(dt: number): void {
+    for (const point of this.resourcePoints.values()) {
+      point.update(dt);
+
+      // Регенерация HP юнитов-охранников
+      if (point.ownerId && point.config.guardRegenPerSec > 0) {
+        for (const unitId of point.guardUnitIds) {
+          const unit = this.units.get(unitId);
+          if (unit && unit.isAlive) {
+            unit.heal(point.config.guardRegenPerSec * dt);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Обработка боёв с нейтральными защитниками
+   */
+  private processNeutralCombat(_dt: number): void {
+    for (const point of this.resourcePoints.values()) {
+      // Пропускаем точки без защитников
+      if (point.guardians.length === 0) continue;
+
+      // Находим юнитов рядом с точкой
+      for (const unit of this.units.values()) {
+        if (!unit.isAlive) continue;
+        if (unit.state === UnitBehaviorState.GUARDING) continue;
+
+        const distanceToPoint = unit.position.distanceTo(point.position);
+
+        // Юнит в зоне агрессии защитников?
+        const aggroRange = point.size + 60;
+        if (distanceToPoint > aggroRange) continue;
+
+        // Найти ближайшего защитника и атаковать его
+        for (const guardian of point.guardians) {
+          if (!guardian.isAlive) continue;
+
+          const distanceToGuardian = unit.position.distanceTo(
+            guardian.position,
+          );
+
+          // Юнит атакует защитника
+          if (distanceToGuardian <= unit.combat.attackRange + guardian.size) {
+            // Остановить юнита для боя
+            if (unit.state === UnitBehaviorState.MOVING) {
+              unit.state = UnitBehaviorState.FIGHTING;
+              unit.targetId = guardian.id;
+            }
+
+            if (unit.combat.canAttack()) {
+              const damage = unit.attackTarget(null); // базовый урон без бонусов контр-пиков
+              guardian.takeDamage(damage);
+            }
+          }
+
+          // Защитник атакует юнита
+          if (distanceToGuardian <= guardian.aggroRadius) {
+            guardian.targetId = unit.id;
+
+            if (guardian.canAttack()) {
+              const damage = guardian.attack();
+              unit.takeDamage(damage);
+            }
+          }
+        }
+      }
+
+      // Бой между охранниками игрока и атакующими юнитами
+      for (const guardUnitId of point.guardUnitIds) {
+        const guardUnit = this.units.get(guardUnitId);
+        if (!guardUnit || !guardUnit.isAlive) {
+          point.removeGuard(guardUnitId);
+          continue;
+        }
+
+        // Охранник атакует врагов рядом с точкой
+        for (const enemyUnit of this.units.values()) {
+          if (!enemyUnit.isAlive) continue;
+          if (enemyUnit.ownerId === guardUnit.ownerId) continue;
+
+          const distance = guardUnit.position.distanceTo(enemyUnit.position);
+          if (distance <= guardUnit.combat.attackRange + point.size) {
+            if (guardUnit.state !== UnitBehaviorState.FIGHTING) {
+              guardUnit.startFighting(enemyUnit.id);
+            }
+
+            if (guardUnit.combat.canAttack()) {
+              const damage = guardUnit.attackTarget(enemyUnit);
+              enemyUnit.takeDamage(damage);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Проверка захвата ресурсных точек
+   */
+  private checkResourcePointCaptures(): void {
+    for (const point of this.resourcePoints.values()) {
+      // Точка с защитниками не может быть захвачена
+      if (point.guardians.length > 0) continue;
+
+      // Находим юнитов на точке
+      for (const unit of this.units.values()) {
+        if (!unit.isAlive) continue;
+        if (unit.state === UnitBehaviorState.SPAWNING) continue;
+
+        const distance = unit.position.distanceTo(point.position);
+
+        // Юнит на точке?
+        if (distance <= point.size) {
+          const playerIndex = this.playerOrder.indexOf(unit.ownerId);
+
+          // Попытка захвата
+          if (point.canBeCaptured()) {
+            const captured = point.capture(unit.ownerId, playerIndex);
+
+            if (captured) {
+              // Для нейтрального лагеря - выдать бонус
+              if (point.pointType === ResourcePointType.NEUTRAL_CAMP) {
+                const bonus = point.config.oneTimeBonus ?? 0;
+                const player = this.players.get(unit.ownerId);
+                if (player && bonus > 0) {
+                  player.ether += bonus;
+                  console.log(
+                    `${player.name} получил +${bonus} эфира за нейтральный лагерь!`,
+                  );
+                }
+              } else {
+                const player = this.players.get(unit.ownerId);
+                console.log(`${player?.name} захватил ${point.config.name}!`);
+              }
+            }
+          }
+
+          // Оставить юнита в качестве охранника (если место есть)
+          if (
+            point.ownerId === unit.ownerId &&
+            point.config.maxGuards > 0 &&
+            unit.state === UnitBehaviorState.MOVING
+          ) {
+            if (point.addGuard(unit.id)) {
+              unit.startGuarding(point.id);
+              unit.position.copy(point.position); // Переместить к центру точки
+            }
+          }
+        }
+      }
+
+      // Если точка захвачена, но нет охранников - потерять контроль при атаке
+      if (point.ownerId && point.guardUnitIds.length === 0) {
+        // Проверяем, есть ли вражеские юниты на точке
+        for (const unit of this.units.values()) {
+          if (!unit.isAlive) continue;
+          if (unit.ownerId === point.ownerId) continue;
+
+          const distance = unit.position.distanceTo(point.position);
+          if (distance <= point.size) {
+            // Враг на точке без охраны - потеря контроля
+            const previousOwner = this.players.get(point.ownerId);
+            console.log(
+              `${previousOwner?.name} потерял контроль над ${point.config.name}!`,
+            );
+
+            point.loseControl();
+
+            // Новый владелец захватывает
+            const playerIndex = this.playerOrder.indexOf(unit.ownerId);
+            point.capture(unit.ownerId, playerIndex);
+
+            const newOwner = this.players.get(unit.ownerId);
+            console.log(`${newOwner?.name} захватил ${point.config.name}!`);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Создание дороги между двумя башнями
    */
   private createRoadBetweenTowers(
@@ -344,11 +598,20 @@ export class Game {
     // Обновляем башни
     this.updateTowers(dt);
 
+    // Обновляем ресурсные точки
+    this.updateResourcePoints(dt);
+
     // Обновляем юнитов
     this.updateUnits(dt);
 
     // Обрабатываем бои
     this.processCombat(dt);
+
+    // Обрабатываем бои с нейтралами
+    this.processNeutralCombat(dt);
+
+    // Проверяем захват ресурсных точек
+    this.checkResourcePointCaptures();
 
     // Проверяем условия победы
     this.checkWinConditions();
@@ -363,6 +626,13 @@ export class Game {
 
       // Пассивный доход
       player.ether += player.incomePerSec * dt;
+
+      // Доход от ресурсных точек
+      for (const point of this.resourcePoints.values()) {
+        if (point.ownerId === player.id) {
+          player.ether += point.getIncomePerSec() * dt;
+        }
+      }
     }
   }
 
@@ -590,6 +860,9 @@ export class Game {
     // Дороги
     this.renderer.renderRoads(Array.from(this.roads.values()));
 
+    // Ресурсные точки (под юнитами)
+    this.renderResourcePoints();
+
     // Башни
     this.renderer.renderTowers(Array.from(this.towers.values()));
 
@@ -616,8 +889,19 @@ export class Game {
         Units: this.units.size,
         Towers: this.towers.size,
         Roads: this.roads.size,
+        ResourcePoints: this.resourcePoints.size,
         Time: Math.floor(this.matchTime),
       });
+    }
+  }
+
+  /**
+   * Рендеринг ресурсных точек
+   */
+  private renderResourcePoints(): void {
+    const ctx = this.renderer.getContext();
+    for (const point of this.resourcePoints.values()) {
+      point.render(ctx);
     }
   }
 
@@ -630,6 +914,15 @@ export class Game {
 
     if (!player) return;
 
+    // Подсчитываем доход от ресурсных точек
+    let resourcePointIncome = 0;
+    for (const point of this.resourcePoints.values()) {
+      if (point.ownerId === player.id) {
+        resourcePointIncome += point.getIncomePerSec();
+      }
+    }
+    const totalIncome = player.incomePerSec + resourcePointIncome;
+
     // Панель ресурсов
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fillRect(10, GAME_HEIGHT - 80, 300, 70);
@@ -640,7 +933,13 @@ export class Game {
 
     ctx.font = "12px Arial";
     ctx.fillStyle = "#888";
-    ctx.fillText(`+${player.incomePerSec}/сек`, 120, GAME_HEIGHT - 55);
+    ctx.fillText(`+${totalIncome.toFixed(1)}/сек`, 120, GAME_HEIGHT - 55);
+
+    // Показываем доход от ресурсных точек отдельно
+    if (resourcePointIncome > 0) {
+      ctx.fillStyle = "#00ff00";
+      ctx.fillText(`(+${resourcePointIncome} от точек)`, 200, GAME_HEIGHT - 55);
+    }
 
     // Выбранный юнит
     const unitConfig = UNIT_CONFIG[this.selectedUnitType];
@@ -654,10 +953,20 @@ export class Game {
     // Подсказка
     ctx.fillStyle = "#666";
     ctx.fillText(
-      "1-4: выбор юнита | Клик по дороге: отправить",
+      "1-4: юнит | U: улучшения | R: разблокировка | T: башня | Клик: отправить",
       20,
       GAME_HEIGHT - 10,
     );
+
+    // Панель улучшений
+    if (this.showUpgradePanel) {
+      this.renderUpgradePanel(ctx, player);
+    }
+
+    // Панель башни
+    if (this.showTowerPanel) {
+      this.renderTowerPanel(ctx, player);
+    }
 
     // Таймер
     const remainingTime = Math.max(0, MATCH_DURATION_SEC - this.matchTime);
@@ -673,6 +982,297 @@ export class Game {
       30,
     );
     ctx.textAlign = "left";
+  }
+
+  /**
+   * Рендеринг панели улучшений
+   */
+  private renderUpgradePanel(
+    ctx: CanvasRenderingContext2D,
+    player: PlayerState,
+  ): void {
+    const panelX = GAME_WIDTH - 320;
+    const panelY = 60;
+    const panelWidth = 310;
+    const panelHeight = 280;
+
+    // Фон панели
+    ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+    ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+
+    // Рамка
+    ctx.strokeStyle = "#00ffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
+
+    // Заголовок
+    const unitConfig = UNIT_CONFIG[this.selectedUnitType];
+    ctx.font = "bold 16px Arial";
+    ctx.fillStyle = "#00ffff";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `Улучшения: ${unitConfig.name}`,
+      panelX + panelWidth / 2,
+      panelY + 25,
+    );
+
+    // Проверяем, разблокирован ли юнит
+    const unlockInfo = UpgradeSystem.getUnlockInfo(
+      player,
+      this.selectedUnitType,
+    );
+
+    if (!unlockInfo.unlocked) {
+      // Юнит не разблокирован
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#ff6600";
+      ctx.fillText(
+        "Юнит не разблокирован",
+        panelX + panelWidth / 2,
+        panelY + 80,
+      );
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(
+        `Стоимость: ${unlockInfo.cost} эфира`,
+        panelX + panelWidth / 2,
+        panelY + 110,
+      );
+
+      ctx.fillStyle = unlockInfo.canUnlock ? "#00ff00" : "#666";
+      ctx.fillText("[R] Разблокировать", panelX + panelWidth / 2, panelY + 140);
+
+      ctx.textAlign = "left";
+      return;
+    }
+
+    // Улучшения
+    const upgrades = UpgradeSystem.getAllUpgradeInfo(
+      player,
+      this.selectedUnitType,
+    );
+    const upgradeStats = UpgradeSystem.getUpgradedStats(
+      player,
+      this.selectedUnitType,
+    );
+
+    ctx.textAlign = "left";
+    ctx.font = "13px Arial";
+
+    let yOffset = panelY + 55;
+    const lineHeight = 55;
+
+    // HP
+    this.renderUpgradeLine(
+      ctx,
+      panelX + 15,
+      yOffset,
+      "Q",
+      "❤️ Здоровье",
+      upgrades.hp,
+      `${upgradeStats.hp} HP`,
+      player.ether,
+    );
+    yOffset += lineHeight;
+
+    // DPS
+    this.renderUpgradeLine(
+      ctx,
+      panelX + 15,
+      yOffset,
+      "W",
+      "⚔️ Урон",
+      upgrades.dps,
+      `${upgradeStats.dps} DPS`,
+      player.ether,
+    );
+    yOffset += lineHeight;
+
+    // Speed
+    this.renderUpgradeLine(
+      ctx,
+      panelX + 15,
+      yOffset,
+      "E",
+      "💨 Скорость",
+      upgrades.speed,
+      `${upgradeStats.speed}%`,
+      player.ether,
+    );
+
+    // Подсказка закрытия
+    ctx.font = "11px Arial";
+    ctx.fillStyle = "#666";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      "Нажмите [U] чтобы закрыть",
+      panelX + panelWidth / 2,
+      panelY + panelHeight - 15,
+    );
+    ctx.textAlign = "left";
+  }
+
+  /**
+   * Рендеринг панели башни
+   */
+  private renderTowerPanel(
+    ctx: CanvasRenderingContext2D,
+    player: PlayerState,
+  ): void {
+    const tower = this.towers.get(player.towerId);
+    if (!tower) return;
+
+    const panelX = 10;
+    const panelY = 60;
+    const panelWidth = 280;
+    const panelHeight = 200;
+
+    // Фон панели
+    ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+    ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+
+    // Рамка
+    ctx.strokeStyle = tower.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
+
+    // Заголовок
+    ctx.font = "bold 16px Arial";
+    ctx.fillStyle = tower.color;
+    ctx.textAlign = "center";
+    ctx.fillText("🏰 Главная башня", panelX + panelWidth / 2, panelY + 25);
+
+    // Информация об улучшении
+    const upgradeInfo = UpgradeSystem.getTowerUpgradeInfo(player, tower.level);
+
+    ctx.textAlign = "left";
+    ctx.font = "14px Arial";
+
+    // Текущий уровень
+    const stars =
+      "★".repeat(tower.level) + "☆".repeat(upgradeInfo.maxLevel - tower.level);
+    ctx.fillStyle = "#ffd700";
+    ctx.fillText(`Уровень: ${stars}`, panelX + 15, panelY + 55);
+
+    // Текущие характеристики
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(
+      `HP: ${tower.health.current}/${tower.health.max}`,
+      panelX + 15,
+      panelY + 80,
+    );
+    ctx.fillText(`DPS: ${tower.combat.dps}`, panelX + 15, panelY + 100);
+
+    // Улучшение
+    if (tower.isUpgrading) {
+      const remainingTime = Math.max(
+        0,
+        Math.ceil((tower.upgradeEndTime - Date.now()) / 1000),
+      );
+      ctx.fillStyle = "#ffff00";
+      ctx.fillText(
+        `⏳ Улучшение: ${remainingTime} сек...`,
+        panelX + 15,
+        panelY + 130,
+      );
+    } else if (tower.level < upgradeInfo.maxLevel) {
+      ctx.fillStyle = "#888";
+      ctx.fillText("Следующий уровень:", panelX + 15, panelY + 125);
+
+      ctx.fillStyle = "#00ff00";
+      ctx.fillText(
+        `HP: ${upgradeInfo.currentHp} → ${upgradeInfo.nextHp}`,
+        panelX + 25,
+        panelY + 145,
+      );
+      ctx.fillText(
+        `DPS: ${upgradeInfo.currentDps} → ${upgradeInfo.nextDps}`,
+        panelX + 25,
+        panelY + 165,
+      );
+
+      // Кнопка улучшения
+      ctx.fillStyle = upgradeInfo.canUpgrade ? "#00ffff" : "#444";
+      ctx.font = "bold 13px Arial";
+      ctx.fillText(
+        `[T] Улучшить (${upgradeInfo.cost} ⚡, ${upgradeInfo.upgradeTime}с)`,
+        panelX + 15,
+        panelY + panelHeight - 20,
+      );
+    } else {
+      ctx.fillStyle = "#00ff00";
+      ctx.font = "bold 14px Arial";
+      ctx.fillText("✓ Максимальный уровень!", panelX + 15, panelY + 130);
+    }
+
+    // Подсказка
+    ctx.font = "11px Arial";
+    ctx.fillStyle = "#666";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      "Нажмите [T] для улучшения / закрытия",
+      panelX + panelWidth / 2,
+      panelY + panelHeight - 5,
+    );
+    ctx.textAlign = "left";
+  }
+
+  /**
+   * Рендеринг строки улучшения
+   */
+  private renderUpgradeLine(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    key: string,
+    name: string,
+    info: {
+      level: number;
+      maxLevel: number;
+      cost: number;
+      canUpgrade: boolean;
+      currentBonus: number;
+    },
+    currentValue: string,
+    playerEther: number,
+  ): void {
+    // Клавиша
+    ctx.fillStyle = info.canUpgrade ? "#00ffff" : "#444";
+    ctx.font = "bold 14px Arial";
+    ctx.fillText(`[${key}]`, x, y);
+
+    // Название
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "13px Arial";
+    ctx.fillText(name, x + 35, y);
+
+    // Уровень (звёздочки)
+    const stars =
+      "★".repeat(info.level) + "☆".repeat(MAX_UPGRADE_LEVEL - info.level);
+    ctx.fillStyle = "#ffd700";
+    ctx.fillText(stars, x + 130, y);
+
+    // Текущее значение
+    ctx.fillStyle = "#00ff00";
+    ctx.fillText(currentValue, x + 200, y);
+
+    // Бонус
+    if (info.currentBonus > 0) {
+      ctx.fillStyle = "#88ff88";
+      ctx.font = "11px Arial";
+      ctx.fillText(`(+${info.currentBonus}%)`, x + 250, y);
+    }
+
+    // Стоимость следующего уровня
+    if (info.level < info.maxLevel) {
+      ctx.font = "11px Arial";
+      ctx.fillStyle = playerEther >= info.cost ? "#ffff00" : "#ff4444";
+      ctx.fillText(`${info.cost} ⚡`, x + 35, y + 18);
+    } else {
+      ctx.font = "11px Arial";
+      ctx.fillStyle = "#00ff00";
+      ctx.fillText("MAX", x + 35, y + 18);
+    }
   }
 
   /**
@@ -733,6 +1333,48 @@ export class Game {
       case "4":
         this.selectedUnitType = UnitType.SUPPORT;
         break;
+      case "u":
+      case "U":
+        // Toggle upgrade panel
+        this.showUpgradePanel = !this.showUpgradePanel;
+        this.showTowerPanel = false; // Close other panel
+        break;
+      case "q":
+      case "Q":
+        // Upgrade HP
+        if (this.showUpgradePanel) {
+          this.upgradeUnit(this.selectedUnitType, "hp");
+        }
+        break;
+      case "w":
+      case "W":
+        // Upgrade DPS
+        if (this.showUpgradePanel) {
+          this.upgradeUnit(this.selectedUnitType, "dps");
+        }
+        break;
+      case "e":
+      case "E":
+        // Upgrade Speed
+        if (this.showUpgradePanel) {
+          this.upgradeUnit(this.selectedUnitType, "speed");
+        }
+        break;
+      case "r":
+      case "R":
+        // Unlock unit
+        this.unlockUnit(this.selectedUnitType);
+        break;
+      case "t":
+      case "T":
+        // Tower upgrade panel / upgrade
+        if (this.showTowerPanel) {
+          this.upgradeTower();
+        } else {
+          this.showTowerPanel = true;
+          this.showUpgradePanel = false; // Close other panel
+        }
+        break;
       case "g":
         // Toggle grid
         const config = this.renderer.getConfig();
@@ -743,6 +1385,62 @@ export class Game {
         this.config.debugMode = !this.config.debugMode;
         this.renderer.updateConfig({ debugMode: this.config.debugMode });
         break;
+      case "Escape":
+        // Close all panels
+        this.showUpgradePanel = false;
+        this.showTowerPanel = false;
+        break;
+    }
+  }
+
+  /**
+   * Улучшить юнита
+   */
+  private upgradeUnit(unitType: UnitType, upgradeType: UpgradeType): void {
+    const player = this.players.get(this.localPlayerId);
+    if (!player || !player.isAlive) return;
+
+    const success = UpgradeSystem.applyUpgrade(player, unitType, upgradeType);
+    if (success) {
+      const upgradeName = UpgradeSystem.getUpgradeName(upgradeType);
+      const unitName = UNIT_CONFIG[unitType].name;
+      console.log(`Улучшено: ${unitName} - ${upgradeName}`);
+    }
+  }
+
+  /**
+   * Улучшить башню
+   */
+  private upgradeTower(): void {
+    const player = this.players.get(this.localPlayerId);
+    if (!player || !player.isAlive) return;
+
+    const tower = this.towers.get(player.towerId);
+    if (!tower || tower.isUpgrading) return;
+
+    const upgradeInfo = UpgradeSystem.getTowerUpgradeInfo(player, tower.level);
+    if (!upgradeInfo.canUpgrade) return;
+
+    // Снимаем ресурсы
+    player.ether -= upgradeInfo.cost;
+
+    // Запускаем улучшение
+    tower.upgrade();
+
+    console.log(`Улучшение башни до уровня ${tower.level + 1}...`);
+  }
+
+  /**
+   * Разблокировать юнита
+   */
+  private unlockUnit(unitType: UnitType): void {
+    const player = this.players.get(this.localPlayerId);
+    if (!player || !player.isAlive) return;
+
+    const success = UpgradeSystem.unlockUnit(player, unitType);
+    if (success) {
+      const unitName = UNIT_CONFIG[unitType].name;
+      console.log(`Разблокирован: ${unitName}`);
     }
   }
 
@@ -785,6 +1483,9 @@ export class Game {
     // Снимаем ресурсы
     player.ether -= unitConfig.cost;
 
+    // Получаем улучшенные характеристики
+    const upgradedStats = UpgradeSystem.getUpgradedStats(player, unitType);
+
     // Создаём юнита
     const unitId = generateId();
     const startPos = waypoints[0]?.position ?? playerTower.position.toObject();
@@ -796,6 +1497,7 @@ export class Game {
       this.playerOrder.indexOf(this.localPlayerId),
       startPos.x,
       startPos.y,
+      upgradedStats,
     );
 
     unit.waypoints = waypoints;

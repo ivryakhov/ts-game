@@ -102,6 +102,11 @@ export class Unit extends Entity {
   /** Радиус лечения (для поддержки) */
   public healRange: number = 0;
 
+  /**
+   * Улучшенные характеристики (опционально)
+   */
+  public upgradedStats?: { hp: number; dps: number; speed: number };
+
   constructor(
     id: EntityId,
     unitType: UnitType,
@@ -109,6 +114,7 @@ export class Unit extends Entity {
     playerIndex: number,
     x: number,
     y: number,
+    upgradedStats?: { hp: number; dps: number; speed: number },
   ) {
     super(id, x, y);
 
@@ -118,16 +124,22 @@ export class Unit extends Entity {
     void this.playerIndex; // Used for future extensions
     this.color = PLAYER_COLORS[playerIndex] ?? PLAYER_COLORS[0]!;
     this.tag = "unit";
+    this.upgradedStats = upgradedStats;
 
     // Получаем конфигурацию юнита
     const config = UNIT_CONFIG[unitType];
 
-    // Инициализация компонентов
-    this.health = new HealthComponent(config.hp);
-    this.combat = new CombatComponent(config.dps, config.range);
+    // Используем улучшенные характеристики, если они переданы
+    const hp = upgradedStats?.hp ?? config.hp;
+    const dps = upgradedStats?.dps ?? config.dps;
+    const speedPercent = upgradedStats?.speed ?? config.speed;
 
-    // Скорость: базовая * процент от конфига
-    const speed = (BASE_MOVEMENT_SPEED * config.speed) / 100;
+    // Инициализация компонентов
+    this.health = new HealthComponent(hp);
+    this.combat = new CombatComponent(dps, config.range);
+
+    // Скорость: базовая * процент от конфига (или улучшенный процент)
+    const speed = (BASE_MOVEMENT_SPEED * speedPercent) / 100;
     this.movement = new MovementComponent(speed);
 
     this.visionRange = config.visionRange;

@@ -3,7 +3,7 @@
  * Тесты для класса 2D вектора
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { Vector2 } from "./Vector2";
 
 describe("Vector2", () => {
