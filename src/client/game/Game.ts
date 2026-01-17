@@ -95,6 +95,9 @@ export class Game {
   /** Выбранная дорога */
   private selectedRoadId: RoadId | null = null;
 
+  /** Выбранная ресурсная точка */
+  private selectedResourcePointId: ResourcePointId | null = null;
+
   /** Позиция мыши в игровых координатах */
   private mousePosition: Position = { x: 0, y: 0 };
 
@@ -146,12 +149,12 @@ export class Game {
     // Обработка движения мыши
     canvas.addEventListener("mousemove", (e) => {
       this.mousePosition = this.renderer.screenToWorld(e.clientX, e.clientY);
-      this.updateRoadHighlight();
+      this.updateSelectionHighlight();
     });
 
     // Обработка ухода мыши с canvas
     canvas.addEventListener("mouseleave", () => {
-      this.clearRoadHighlight();
+      this.clearSelectionHighlight();
     });
 
     // Обработка клика
@@ -403,8 +406,11 @@ export class Game {
 
         const distanceToPoint = unit.position.distanceTo(point.position);
 
-        // Юнит в зоне агрессии защитников?
-        const aggroRange = point.size + 60;
+        // Юнит в зоне агрессии защитников? (увеличен радиус для юнитов идущих к точке)
+        const isGoingToThisPoint = unit.guardingPointId === point.id;
+        const aggroRange = isGoingToThisPoint
+          ? point.size + 150
+          : point.size + 60;
         if (distanceToPoint > aggroRange) continue;
 
         // Найти ближайшего защитника и атаковать его
@@ -528,10 +534,12 @@ export class Game {
           }
 
           // Оставить юнита в качестве охранника (если место есть)
+          // Приоритет юнитам, которые специально шли к этой точке
+          const isGoingToThisPoint = unit.guardingPointId === point.id;
           if (
             point.ownerId === unit.ownerId &&
             point.config.maxGuards > 0 &&
-            unit.state === UnitBehaviorState.MOVING
+            (unit.state === UnitBehaviorState.MOVING || isGoingToThisPoint)
           ) {
             if (point.addGuard(unit.id)) {
               unit.startGuarding(point.id);
@@ -936,6 +944,24 @@ export class Game {
   private renderResourcePoints(): void {
     const ctx = this.renderer.getContext();
     for (const point of this.resourcePoints.values()) {
+      // Подсветка выбранной точки
+      if (point.id === this.selectedResourcePointId) {
+        ctx.save();
+        ctx.strokeStyle = "#ffff00";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.arc(
+          point.position.x,
+          point.position.y,
+          point.size + 15,
+          0,
+          Math.PI * 2,
+        );
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
       point.render(ctx);
     }
   }
@@ -988,10 +1014,19 @@ export class Game {
     // Подсказка
     ctx.fillStyle = "#666";
     ctx.fillText(
-      "1-4: юнит | U: улучшения | R: разблокировка | T: башня | Клик: отправить",
+      "1-4: юнит | U: улучшения | R: разблокировка | T: башня | Клик: дорога/точка",
       20,
       GAME_HEIGHT - 10,
     );
+
+    // Индикатор выбранной ресурсной точки
+    if (this.selectedResourcePointId) {
+      const point = this.resourcePoints.get(this.selectedResourcePointId);
+      if (point) {
+        ctx.fillStyle = "#ffff00";
+        ctx.fillText(`► Цель: ${point.config.name}`, 20, GAME_HEIGHT - 90);
+      }
+    }
 
     // Панель улучшений
     if (this.showUpgradePanel) {
@@ -1311,42 +1346,74 @@ export class Game {
   }
 
   /**
-   * Обновление подсветки дороги под мышью
+   * Обновление подсветки дороги или ресурсной точки под мышью
    */
-  private updateRoadHighlight(): void {
-    let foundRoad = false;
+  private updateSelectionHighlight(): void {
+    // Сначала проверяем ресурсные точки (приоритет над дорогами)
+    let foundResourcePoint = false;
+    for (const point of this.resourcePoints.values()) {
+      const distance = Math.sqrt(
+        Math.pow(this.mousePosition.x - point.position.x, 2) +
+          Math.pow(this.mousePosition.y - point.position.y, 2),
+      );
 
-    for (const road of this.roads.values()) {
-      if (road.isPointNearRoad(this.mousePosition)) {
-        road.highlight();
-        this.selectedRoadId = road.id;
-        foundRoad = true;
-      } else {
+      if (distance <= point.size + 20) {
+        this.selectedResourcePointId = point.id;
+        foundResourcePoint = true;
+        break;
+      }
+    }
+
+    if (!foundResourcePoint) {
+      this.selectedResourcePointId = null;
+    }
+
+    // Затем проверяем дороги (только если не выбрана точка)
+    let foundRoad = false;
+    if (!foundResourcePoint) {
+      for (const road of this.roads.values()) {
+        if (road.isPointNearRoad(this.mousePosition)) {
+          road.highlight();
+          this.selectedRoadId = road.id;
+          foundRoad = true;
+        } else {
+          road.unhighlight();
+        }
+      }
+    } else {
+      // Снять подсветку с дорог если выбрана точка
+      for (const road of this.roads.values()) {
         road.unhighlight();
       }
     }
 
-    if (!foundRoad) {
+    if (!foundRoad && !foundResourcePoint) {
       this.selectedRoadId = null;
     }
   }
 
   /**
-   * Снятие подсветки со всех дорог
+   * Снятие подсветки со всех объектов
    */
-  private clearRoadHighlight(): void {
+  private clearSelectionHighlight(): void {
     for (const road of this.roads.values()) {
       road.unhighlight();
     }
     this.selectedRoadId = null;
+    this.selectedResourcePointId = null;
   }
 
   /**
    * Обработка клика
    */
   private handleClick(_position: Position): void {
-    // Если кликнули по дороге - создаём юнита
-    if (this.selectedRoadId) {
+    // Приоритет: ресурсная точка > дорога
+    if (this.selectedResourcePointId) {
+      this.spawnUnitToResourcePoint(
+        this.selectedUnitType,
+        this.selectedResourcePointId,
+      );
+    } else if (this.selectedRoadId) {
       this.spawnUnit(this.selectedUnitType, this.selectedRoadId);
     }
   }
@@ -1541,6 +1608,75 @@ export class Game {
     unit.currentWaypointIndex = 1; // Начинаем с 1, т.к. 0 - это стартовая позиция
 
     this.units.set(unitId, unit);
+  }
+
+  /**
+   * Создание юнита для захвата ресурсной точки
+   */
+  spawnUnitToResourcePoint(
+    unitType: UnitType,
+    resourcePointId: ResourcePointId,
+  ): void {
+    const player = this.players.get(this.localPlayerId);
+    if (!player || !player.isAlive) return;
+
+    const unitConfig = UNIT_CONFIG[unitType];
+
+    // Проверяем, разблокирован ли юнит
+    if (!player.unlockedUnits.includes(unitType)) {
+      console.log("Unit not unlocked");
+      return;
+    }
+
+    // Проверяем, хватает ли ресурсов
+    if (player.ether < unitConfig.cost) {
+      console.log("Not enough ether");
+      return;
+    }
+
+    // Получаем ресурсную точку
+    const resourcePoint = this.resourcePoints.get(resourcePointId);
+    if (!resourcePoint) return;
+
+    // Получаем башню игрока
+    const playerTower = this.towers.get(player.towerId);
+    if (!playerTower) return;
+
+    // Снимаем ресурсы
+    player.ether -= unitConfig.cost;
+
+    // Получаем улучшенные характеристики
+    const upgradedStats = UpgradeSystem.getUpgradedStats(player, unitType);
+
+    // Создаём юнита у башни
+    const unitId = generateId();
+    const startPos = playerTower.position.toObject();
+
+    const unit = new Unit(
+      unitId,
+      unitType,
+      this.localPlayerId,
+      this.playerOrder.indexOf(this.localPlayerId),
+      startPos.x,
+      startPos.y,
+      upgradedStats,
+    );
+
+    // Устанавливаем путь к ресурсной точке (прямое движение)
+    unit.waypoints = [
+      { position: startPos, index: 0 },
+      { position: resourcePoint.position.toObject(), index: 1 },
+    ];
+    unit.targetRoadId = ""; // Нет дороги
+    unit.targetTowerId = ""; // Нет целевой башни
+    unit.currentWaypointIndex = 1;
+
+    // Помечаем что юнит идёт к ресурсной точке
+    unit.guardingPointId = resourcePointId; // Используем это поле для указания цели
+
+    this.units.set(unitId, unit);
+
+    console.log(`${unitConfig.name} отправлен к ${resourcePoint.config.name}`);
   }
 
   /**

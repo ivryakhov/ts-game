@@ -244,8 +244,13 @@ export class Unit extends Entity {
 
       // Достигли конца пути
       if (this.currentWaypointIndex >= this.waypoints.length) {
-        // Юнит достиг цели (башни)
         this.currentWaypointIndex = this.waypoints.length - 1;
+
+        // Если юнит шёл к ресурсной точке (не к башне), остановиться
+        if (this.guardingPointId && !this.targetTowerId) {
+          // Юнит достиг ресурсной точки - ждём захвата в Game.ts
+          this.movement.stop();
+        }
       }
     }
   }
