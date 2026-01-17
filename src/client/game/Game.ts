@@ -413,7 +413,22 @@ export class Game {
           : point.size + 60;
         if (distanceToPoint > aggroRange) continue;
 
+        // Если юнит в бою, проверяем жива ли его цель
+        if (unit.state === UnitBehaviorState.FIGHTING && unit.targetId) {
+          const currentTarget = point.guardians.find(
+            (g) => g.id === unit.targetId,
+          );
+          if (!currentTarget || !currentTarget.isAlive) {
+            // Цель мертва - ищем новую или продолжаем движение
+            unit.targetId = null;
+            unit.state = UnitBehaviorState.MOVING;
+          }
+        }
+
         // Найти ближайшего защитника и атаковать его
+        let closestGuardian = null;
+        let closestDistance = Infinity;
+
         for (const guardian of point.guardians) {
           if (!guardian.isAlive) continue;
 
@@ -421,20 +436,9 @@ export class Game {
             guardian.position,
           );
 
-          // Юнит атакует защитника
-          if (distanceToGuardian <= unit.combat.attackRange + guardian.size) {
-            // Остановить юнита для боя
-            if (unit.state === UnitBehaviorState.MOVING) {
-              unit.state = UnitBehaviorState.FIGHTING;
-              unit.targetId = guardian.id;
-            }
-
-            if (unit.combat.canAttack()) {
-              const damage = unit.combat.attack(); // базовый урон без бонусов контр-пиков
-              if (damage > 0) {
-                guardian.takeDamage(damage);
-              }
-            }
+          if (distanceToGuardian < closestDistance) {
+            closestDistance = distanceToGuardian;
+            closestGuardian = guardian;
           }
 
           // Защитник атакует юнита
@@ -444,6 +448,36 @@ export class Game {
             if (guardian.canAttack()) {
               const damage = guardian.attack();
               unit.takeDamage(damage);
+            }
+          }
+        }
+
+        // Юнит атакует ближайшего защитника
+        if (closestGuardian) {
+          const distanceToGuardian = unit.position.distanceTo(
+            closestGuardian.position,
+          );
+
+          if (
+            distanceToGuardian <=
+            unit.combat.attackRange + closestGuardian.size
+          ) {
+            // Остановить юнита для боя
+            if (unit.state === UnitBehaviorState.MOVING) {
+              unit.state = UnitBehaviorState.FIGHTING;
+              unit.targetId = closestGuardian.id;
+            }
+
+            // Обновить цель если нужно
+            if (unit.targetId !== closestGuardian.id) {
+              unit.targetId = closestGuardian.id;
+            }
+
+            if (unit.combat.canAttack()) {
+              const damage = unit.combat.attack();
+              if (damage > 0) {
+                closestGuardian.takeDamage(damage);
+              }
             }
           }
         }
