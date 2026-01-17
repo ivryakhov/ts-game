@@ -375,7 +375,26 @@ export class Game {
   private processNeutralCombat(_dt: number): void {
     for (const point of this.resourcePoints.values()) {
       // Пропускаем точки без защитников
-      if (point.guardians.length === 0) continue;
+      if (point.guardians.length === 0) {
+        // Если защитников нет, юниты в бою рядом с точкой должны захватить её
+        for (const unit of this.units.values()) {
+          if (!unit.isAlive) continue;
+
+          const distanceToPoint = unit.position.distanceTo(point.position);
+
+          // Юнит рядом с точкой и сражался?
+          if (distanceToPoint <= point.size + 100) {
+            // Если юнит в бою - остановить бой и переместить к центру точки
+            if (unit.state === UnitBehaviorState.FIGHTING) {
+              unit.stopFighting();
+              // Переместить юнита к центру точки для захвата
+              unit.position.x = point.position.x;
+              unit.position.y = point.position.y;
+            }
+          }
+        }
+        continue;
+      }
 
       // Находим юнитов рядом с точкой
       for (const unit of this.units.values()) {
@@ -459,21 +478,35 @@ export class Game {
   private checkResourcePointCaptures(): void {
     for (const point of this.resourcePoints.values()) {
       // Точка с защитниками не может быть захвачена
-      if (point.guardians.length > 0) continue;
+      if (point.guardians.length > 0) {
+        // Debug: показать что защитники ещё живы
+        // console.log(`Point ${point.id} has ${point.guardians.length} guardians alive`);
+        continue;
+      }
 
       // Находим юнитов на точке
       for (const unit of this.units.values()) {
         if (!unit.isAlive) continue;
         if (unit.state === UnitBehaviorState.SPAWNING) continue;
+        if (unit.state === UnitBehaviorState.GUARDING) continue;
 
         const distance = unit.position.distanceTo(point.position);
 
-        // Юнит на точке?
-        if (distance <= point.size) {
+        // Юнит рядом с точкой? (большой радиус для захвата после боя)
+        const captureRange = point.size + 100;
+        if (distance <= captureRange) {
           const playerIndex = this.playerOrder.indexOf(unit.ownerId);
 
           // Попытка захвата
           if (point.canBeCaptured()) {
+            // Для лагерей проверяем bonusCollected отдельно
+            if (
+              point.pointType === ResourcePointType.NEUTRAL_CAMP &&
+              point.bonusCollected
+            ) {
+              continue; // Бонус уже собран
+            }
+
             const captured = point.capture(unit.ownerId, playerIndex);
 
             if (captured) {
