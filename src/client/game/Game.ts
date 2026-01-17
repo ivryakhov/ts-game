@@ -405,8 +405,10 @@ export class Game {
             }
 
             if (unit.combat.canAttack()) {
-              const damage = unit.attackTarget(null); // базовый урон без бонусов контр-пиков
-              guardian.takeDamage(damage);
+              const damage = unit.combat.attack(); // базовый урон без бонусов контр-пиков
+              if (damage > 0) {
+                guardian.takeDamage(damage);
+              }
             }
           }
 
