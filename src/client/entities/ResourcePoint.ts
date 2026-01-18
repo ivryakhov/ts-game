@@ -596,7 +596,7 @@ export class NeutralGuardianEntity {
   public aggroRadius: number = 100;
 
   /** Размер для рендеринга */
-  public size: number = 15;
+  public size: number = 25;
 
   constructor(id: EntityId, maxHp: number, dps: number, x: number, y: number) {
     this.id = id;

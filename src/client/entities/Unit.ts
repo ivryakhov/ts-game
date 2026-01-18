@@ -75,6 +75,9 @@ export class Unit extends Entity {
   /** ID текущей цели (враг) */
   public targetId: EntityId | null = null;
 
+  /** Позиция текущей цели (для преследования) */
+  public targetPosition: Vector2 | null = null;
+
   /** ID цели лечения (для поддержки) */
   public healTargetId: EntityId | null = null;
 
@@ -176,6 +179,12 @@ export class Unit extends Entity {
     unit.targetTowerId = state.targetTowerId;
     unit.currentWaypointIndex = state.currentWaypointIndex;
     unit.targetId = state.targetId;
+    if (state.targetPosition) {
+      unit.targetPosition = new Vector2(
+        state.targetPosition.x,
+        state.targetPosition.y,
+      );
+    }
     unit.healTargetId = state.healTargetId;
     unit.guardingPointId = state.guardingPointId;
     unit.isRecalling = state.isRecalling;
@@ -258,9 +267,23 @@ export class Unit extends Entity {
   /**
    * Обновление боя
    */
-  private updateFighting(_dt: number): void {
-    // Логика боя будет обрабатываться в Game классе
-    // Здесь только остановка движения
+  private updateFighting(dt: number): void {
+    // Если есть позиция цели, двигаемся к ней
+    if (this.targetPosition) {
+      const distSquared = this.position.distanceToSquared(
+        new Vector2(this.targetPosition.x, this.targetPosition.y),
+      );
+      // Если цель дальше радиуса атаки, двигаемся к ней
+      // attackRange * 0.9 для запаса, чтобы точно достать
+      const range = this.combat.attackRange * 0.9;
+
+      if (distSquared > range * range) {
+        this.movement.moveTowards(this, this.targetPosition, dt);
+        return;
+      }
+    }
+
+    // Иначе стоим
     this.movement.stop();
   }
 
@@ -553,19 +576,19 @@ export class Unit extends Entity {
   startFighting(targetId: EntityId): void {
     this.state = UnitBehaviorState.FIGHTING;
     this.targetId = targetId;
-    this.movement.stop();
+    // targetPosition должен назначаться извне (Game.ts)
+    // this.movement.stop(); // Не останавливаем сразу, даем шанс updateFighting решить нужно ли двигаться
   }
 
   /**
    * Закончить бой
    */
   stopFighting(): void {
-    if (this.guardingPointId) {
-      this.state = UnitBehaviorState.GUARDING;
-    } else {
-      this.state = UnitBehaviorState.MOVING;
-    }
+    // Always return to MOVING state when stopping combat
+    // The transition to GUARDING happens explicitly via startGuarding() after capture
+    this.state = UnitBehaviorState.MOVING;
     this.targetId = null;
+    this.targetPosition = null;
   }
 
   /**
@@ -659,6 +682,7 @@ export class Unit extends Entity {
       currentWaypointIndex: this.currentWaypointIndex,
       state: this.state,
       targetId: this.targetId,
+      targetPosition: this.targetPosition ? this.targetPosition.toObject() : undefined,
       healTargetId: this.healTargetId,
       guardingPointId: this.guardingPointId,
       isRecalling: this.isRecalling,

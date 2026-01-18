@@ -107,7 +107,7 @@ export const SUPPORT_TOWER_CONFIG = {
   /** Типы вспомогательных башен */
   TYPES: {
     DEFENSIVE: {
-      name: 'Оборонительная',
+      name: "Оборонительная",
       hp: 400,
       dps: 25,
       cost: 120,
@@ -115,7 +115,7 @@ export const SUPPORT_TOWER_CONFIG = {
       attackRange: 120,
     },
     BUFF: {
-      name: 'Усиливающая',
+      name: "Усиливающая",
       hp: 300,
       dps: 0,
       cost: 100,
@@ -124,7 +124,7 @@ export const SUPPORT_TOWER_CONFIG = {
       damageBonus: 20, // %
     },
     ECONOMIC: {
-      name: 'Экономическая',
+      name: "Экономическая",
       hp: 250,
       dps: 0,
       cost: 150,
@@ -140,56 +140,56 @@ export const SUPPORT_TOWER_CONFIG = {
 
 /** Типы юнитов */
 export enum UnitType {
-  SCOUT = 'scout',
-  TANK = 'tank',
-  RANGER = 'ranger',
-  SUPPORT = 'support',
+  SCOUT = "scout",
+  TANK = "tank",
+  RANGER = "ranger",
+  SUPPORT = "support",
 }
 
 /** Конфигурация юнитов */
 export const UNIT_CONFIG = {
   [UnitType.SCOUT]: {
-    name: 'Разведчик',
+    name: "Разведчик",
     hp: 50,
     dps: 15,
     speed: 150, // % от базовой скорости
     cost: 20,
-    range: 30, // ближний бой
+    range: 32, // ближний бой (увеличено на 2 для теста)
     visionRange: 200, // радиус видимости (большой для разведки)
     unlocked: true, // доступен с начала
     unlockCost: 0,
   },
   [UnitType.TANK]: {
-    name: 'Танк',
+    name: "Танк",
     hp: 200,
     dps: 20,
     speed: 70,
     cost: 50,
-    range: 35, // ближний бой
+    range: 37, // ближний бой (увеличено на 2 для теста)
     visionRange: 100,
     unlocked: true,
     unlockCost: 0,
     tauntChance: 70, // % шанс, что враги атакуют танка
   },
   [UnitType.RANGER]: {
-    name: 'Стрелок',
+    name: "Стрелок",
     hp: 70,
     dps: 30,
     speed: 100,
     cost: 40,
-    range: 150, // дальний бой
+    range: 152, // дальний бой (увеличено на 2 для теста)
     visionRange: 150,
     unlocked: false,
     unlockCost: 80,
     unlockTime: 10, // секунд на исследование
   },
   [UnitType.SUPPORT]: {
-    name: 'Поддержка',
+    name: "Поддержка",
     hp: 80,
     dps: 10,
     speed: 100,
     cost: 45,
-    range: 80, // средняя дистанция
+    range: 82, // средняя дистанция (увеличено на 2 для теста)
     visionRange: 120,
     unlocked: false,
     unlockCost: 100,
@@ -213,7 +213,10 @@ export const MAX_UNITS_IN_COMBAT = 8;
 // ===========================================
 
 /** Бонусы урона при контр-пике (множитель) */
-export const COUNTER_BONUSES: Record<UnitType, Partial<Record<UnitType, number>>> = {
+export const COUNTER_BONUSES: Record<
+  UnitType,
+  Partial<Record<UnitType, number>>
+> = {
   [UnitType.SCOUT]: {
     [UnitType.RANGER]: 1.3, // +30% урона по стрелкам
   },
@@ -255,31 +258,31 @@ export const UPGRADE_COST_INCREMENT = 20;
 export const RESOURCE_POINT_CONFIG = {
   /** Кристаллическая шахта (центр карты) */
   CRYSTAL_MINE: {
-    name: 'Кристаллическая шахта',
+    name: "Кристаллическая шахта",
     incomePerSec: 5,
     guardianCount: 3,
     guardianHp: 80,
     guardianDps: 10,
     respawnTime: 45, // секунд
-    maxGuards: 3, // максимум охранников игрока
+    maxGuards: 4, // максимум охранников игрока
     guardRegenPerSec: 5, // регенерация HP охранников
   },
 
   /** Малый кристалл (ближе к башням) */
   SMALL_CRYSTAL: {
-    name: 'Малый кристалл',
+    name: "Малый кристалл",
     incomePerSec: 2,
     guardianCount: 1,
     guardianHp: 50,
     guardianDps: 8,
     respawnTime: 45,
-    maxGuards: 3,
+    maxGuards: 4,
     guardRegenPerSec: 5,
   },
 
   /** Нейтральный лагерь (единоразовый бонус) */
   NEUTRAL_CAMP: {
-    name: 'Нейтральный лагерь',
+    name: "Нейтральный лагерь",
     oneTimeBonus: 20,
     guardianCount: 2,
     guardianHp: 60,
@@ -386,17 +389,17 @@ export const TIMING = {
 // ===========================================
 
 export const PLAYER_COLORS = [
-  '#00ffff', // Cyan - Player 1
-  '#ff00ff', // Magenta - Player 2
-  '#ffff00', // Yellow - Player 3
-  '#00ff00', // Green - Player 4
+  "#00ffff", // Cyan - Player 1
+  "#ff00ff", // Magenta - Player 2
+  "#ffff00", // Yellow - Player 3
+  "#00ff00", // Green - Player 4
 ] as const;
 
 /** Цвет нейтральных объектов */
-export const NEUTRAL_COLOR = '#888888';
+export const NEUTRAL_COLOR = "#888888";
 
 /** Цвет тумана войны */
-export const FOG_COLOR = 'rgba(0, 0, 0, 0.7)';
+export const FOG_COLOR = "rgba(0, 0, 0, 0.7)";
 
 // ===========================================
 // UI КОНСТАНТЫ

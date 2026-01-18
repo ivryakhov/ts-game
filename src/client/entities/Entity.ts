@@ -244,6 +244,7 @@ export class MovementComponent {
     }
 
     direction.normalize().multiply(moveDistance);
+
     entity.position.add(direction);
     this.velocity = direction.clone().divide(dt);
     this.isMoving = true;

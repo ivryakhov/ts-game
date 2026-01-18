@@ -128,6 +128,7 @@ export interface UnitState {
   /** Состояние */
   state: UnitBehaviorState;
   targetId: EntityId | null;
+  targetPosition?: Position;
 
   /** Для поддержки: цель лечения */
   healTargetId: EntityId | null;
@@ -449,7 +450,7 @@ export type ServerMessage =
 /** Генерация уникального ID */
 export function generateId(): EntityId {
   return Math.random().toString(36).substring(2, 15) +
-         Math.random().toString(36).substring(2, 15);
+    Math.random().toString(36).substring(2, 15);
 }
 
 /** Создание начальных улучшений юнита */

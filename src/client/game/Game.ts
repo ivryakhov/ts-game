@@ -13,6 +13,7 @@ import {
   MATCH_DURATION_SEC,
   MAX_UPGRADE_LEVEL,
 } from "@shared/constants";
+import { Vector2 } from "@shared/Vector2";
 import {
   PlayerId,
   EntityId,
@@ -34,6 +35,7 @@ import { ResourcePoint } from "../entities/ResourcePoint";
 import { GameLoop, PerformanceStats } from "./GameLoop";
 import { CanvasRenderer } from "../rendering/CanvasRenderer";
 import { UpgradeSystem, UpgradeType } from "../systems/UpgradeSystem";
+import { NeutralCombatSystem } from "../systems/NeutralCombatSystem";
 
 /**
  * Конфигурация игры
@@ -106,6 +108,9 @@ export class Game {
 
   /** Показывать ли панель башни */
   private showTowerPanel: boolean = false;
+
+  /** Счётчик для логирования (чтобы не спамить консоль) */
+  private debugLogCounter: number = 0;
 
   constructor(canvas: HTMLCanvasElement, config: Partial<GameConfig> = {}) {
     this.config = {
@@ -376,23 +381,31 @@ export class Game {
    * Обработка боёв с нейтральными защитниками
    */
   private processNeutralCombat(_dt: number): void {
+    const debug = this.config.debugMode;
+
     for (const point of this.resourcePoints.values()) {
-      // Пропускаем точки без защитников
-      if (point.guardians.length === 0) {
+      // Получаем живых защитников через NeutralCombatSystem
+      const aliveGuardians = NeutralCombatSystem.getAliveGuardians(point);
+
+      // Пропускаем точки без живых защитников
+      if (aliveGuardians.length === 0) {
         // Если защитников нет, юниты в бою рядом с точкой должны захватить её
         for (const unit of this.units.values()) {
           if (!unit.isAlive) continue;
 
           const distanceToPoint = unit.position.distanceTo(point.position);
 
-          // Юнит рядом с точкой и сражался?
+          // Юнит рядом с точкой?
           if (distanceToPoint <= point.size + 100) {
-            // Если юнит в бою - остановить бой и переместить к центру точки
-            if (unit.state === UnitBehaviorState.FIGHTING) {
-              unit.stopFighting();
-              // Переместить юнита к центру точки для захвата
-              unit.position.x = point.position.x;
-              unit.position.y = point.position.y;
+            // Проверяем, что юнит может захватить эту точку
+            const wasFightingHere = unit.state === UnitBehaviorState.FIGHTING;
+
+            // Если юнит в бою и может захватить точку - подготовить к захвату
+            if (
+              wasFightingHere &&
+              NeutralCombatSystem.canUnitCapturePoint(unit, point)
+            ) {
+              NeutralCombatSystem.prepareUnitForCapture(unit, point);
             }
           }
         }
@@ -403,83 +416,245 @@ export class Game {
       for (const unit of this.units.values()) {
         if (!unit.isAlive) continue;
         if (unit.state === UnitBehaviorState.GUARDING) continue;
+        if (unit.state === UnitBehaviorState.SPAWNING) continue;
 
-        const distanceToPoint = unit.position.distanceTo(point.position);
-
-        // Юнит в зоне агрессии защитников? (увеличен радиус для юнитов идущих к точке)
+        // Проверяем, находится ли юнит в зоне агрессии
         const isGoingToThisPoint = unit.guardingPointId === point.id;
-        const aggroRange = isGoingToThisPoint
-          ? point.size + 150
-          : point.size + 60;
-        if (distanceToPoint > aggroRange) continue;
 
-        // Если юнит в бою, проверяем жива ли его цель
-        if (unit.state === UnitBehaviorState.FIGHTING && unit.targetId) {
-          const currentTarget = point.guardians.find(
-            (g) => g.id === unit.targetId,
+        // Юниты в бою с защитниками этой точки или преследующие их тоже должны обрабатываться
+        // Проверяем, нацелен ли юнит на кого-то из защитников этой точки
+        const isTargetingGuardian =
+          unit.targetId &&
+          point.guardians.some(g => g.id === unit.targetId);
+
+        const isFightingHere = isTargetingGuardian || (unit.state === UnitBehaviorState.FIGHTING && isGoingToThisPoint);
+
+        // Расширяем aggro range для юнитов которые идут к этой точке или дерутся здесь
+        const useExtendedRange = isGoingToThisPoint || isFightingHere;
+
+        // Если юнит дерется с защитником этой точки или преследует его, считаем что он в радиусе (чтобы не завис)
+        const isInAggroRange = isFightingHere || NeutralCombatSystem.isUnitInAggroRange(
+          unit,
+          point,
+          useExtendedRange,
+        );
+
+
+
+        // Логируем только каждый 60-й кадр чтобы не спамить консоль
+        const shouldLog =
+          debug &&
+          (isGoingToThisPoint || isFightingHere) &&
+          this.debugLogCounter % 60 === 0;
+
+        // Важное логирование для юнитов в состоянии FIGHTING
+        if (
+          debug &&
+          unit.state === UnitBehaviorState.FIGHTING &&
+          this.debugLogCounter % 60 === 0
+        ) {
+          console.log(
+            `[DEBUG FIGHTING] Unit ${unit.id.slice(-6)}: targetId=${unit.targetId?.slice(-6)}, guardingPointId=${unit.guardingPointId}, point=${point.id}, isGoingToThisPoint=${isGoingToThisPoint}, isFightingHere=${isFightingHere}, inAggroRange=${isInAggroRange}`,
           );
-          if (!currentTarget || !currentTarget.isAlive) {
-            // Цель мертва - ищем новую или продолжаем движение
-            unit.targetId = null;
-            unit.state = UnitBehaviorState.MOVING;
+        }
+
+        if (shouldLog) {
+          const distToPoint = unit.position.distanceTo(point.position);
+          console.log(`[NeutralCombat] Unit ${unit.id} -> Point ${point.id}:`);
+          console.log(`  - State: ${unit.state}, targetId: ${unit.targetId}`);
+          console.log(
+            `  - Distance to point: ${distToPoint.toFixed(0)}, inAggroRange: ${isInAggroRange}, isFightingHere: ${isFightingHere}`,
+          );
+          console.log(`  - Unit HP: ${unit.health.current}/${unit.health.max}`);
+          console.log(
+            `  - Unit DPS: ${unit.combat.dps}, canAttack: ${unit.combat.canAttack()}`,
+          );
+          console.log(`  - Alive guardians: ${aliveGuardians.length}`);
+
+          // Дополнительное логирование состояния движения для диагностики
+          try {
+            const mv = unit.movement as any;
+            const vel = mv?.velocity;
+            const isMoving =
+              typeof mv?.isMoving !== "undefined" ? mv.isMoving : "unknown";
+            const velX = vel?.x !== undefined ? vel.x.toFixed(2) : "n/a";
+            const velY = vel?.y !== undefined ? vel.y.toFixed(2) : "n/a";
+            console.log(
+              `  - Movement: isMoving=${isMoving}, velocity=(${velX}, ${velY})`,
+            );
+          } catch (e) {
+            console.log(`  - Movement: <unavailable>`);
+          }
+
+          // Лог путевых точек и текущего индекса
+          try {
+            const wpCount = Array.isArray(unit.waypoints)
+              ? unit.waypoints.length
+              : 0;
+            const currentIdx = unit.currentWaypointIndex;
+            console.log(
+              `  - Waypoints: count=${wpCount}, currentWaypointIndex=${currentIdx}`,
+            );
+            if (wpCount > 0 && unit.waypoints[currentIdx]) {
+              const wp = unit.waypoints[currentIdx];
+              console.log(
+                `    - Current waypoint pos: (${wp.position.x.toFixed(2)}, ${wp.position.y.toFixed(2)})`,
+              );
+            } else if (wpCount > 0 && unit.waypoints[0]) {
+              console.log(
+                `    - Next waypoint pos: (${unit.waypoints[0].position.x.toFixed(2)}, ${unit.waypoints[0].position.y.toFixed(2)})`,
+              );
+            }
+          } catch (e) {
+            console.log(`  - Waypoints: <unavailable>`);
           }
         }
 
-        // Найти ближайшего защитника и атаковать его
-        let closestGuardian = null;
-        let closestDistance = Infinity;
-
-        for (const guardian of point.guardians) {
-          if (!guardian.isAlive) continue;
-
-          const distanceToGuardian = unit.position.distanceTo(
-            guardian.position,
-          );
-
-          if (distanceToGuardian < closestDistance) {
-            closestDistance = distanceToGuardian;
-            closestGuardian = guardian;
+        if (!isInAggroRange) {
+          if (shouldLog) {
+            console.log(`  - SKIPPED: not in aggro range`);
           }
+          continue;
+        }
 
-          // Защитник атакует юнита
-          if (distanceToGuardian <= guardian.aggroRadius) {
+        // Если юнит в бою, проверяем нужно ли переключить цель
+        if (unit.state === UnitBehaviorState.FIGHTING && unit.targetId) {
+          if (NeutralCombatSystem.shouldRetarget(unit, point)) {
+            // Цель мертва - переключаемся на следующего защитника
+            NeutralCombatSystem.retargetUnit(unit, point);
+          }
+        }
+
+        // Найти ближайшего живого защитника
+        const closestGuardian = NeutralCombatSystem.findClosestAliveGuardian(
+          unit,
+          point,
+        );
+
+        if (shouldLog && closestGuardian) {
+          const distToGuardian = unit.position.distanceTo(
+            closestGuardian.position,
+          );
+          const canAttackGuardian = NeutralCombatSystem.canUnitAttackGuardian(
+            unit,
+            closestGuardian,
+          );
+          console.log(
+            `  - Closest guardian: ${closestGuardian.id}, HP: ${closestGuardian.health.current}/${closestGuardian.health.max}`,
+            `  - Unit state: ${unit.state}, Target ID: ${unit.targetId}`,
+          );
+          console.log(
+            `  - Distance to guardian: ${distToGuardian.toFixed(0)}, attackRange: ${unit.combat.attackRange}, guardian.size: ${closestGuardian.size}, attackRange+size: ${unit.combat.attackRange + closestGuardian.size}`,
+          );
+          console.log(
+            `  - Unit state: ${unit.state}, Unit position: (${unit.position.x.toFixed(2)}, ${unit.position.y.toFixed(2)}), Guardian position: (${closestGuardian.position.x.toFixed(2)}, ${closestGuardian.position.y.toFixed(2)})`,
+          );
+          console.log(
+            `  - Unit position: (${unit.position.x.toFixed(2)}, ${unit.position.y.toFixed(2)}), Guardian position: (${closestGuardian.position.x.toFixed(2)}, ${closestGuardian.position.y.toFixed(2)})`,
+          );
+          console.log(`  - Guardian size: ${closestGuardian.size}`);
+          console.log(
+            `  - Can attack guardian: ${canAttackGuardian}, Unit canAttack(): ${unit.combat.canAttack()}`,
+          );
+        }
+
+        // Защитники атакуют юнита
+        for (const guardian of aliveGuardians) {
+          if (NeutralCombatSystem.canGuardianAttackUnit(guardian, unit)) {
             guardian.targetId = unit.id;
 
             if (guardian.canAttack()) {
               const damage = guardian.attack();
               unit.takeDamage(damage);
+              if (shouldLog) {
+                console.log(
+                  `  - Guardian ${guardian.id} dealt ${damage} damage to unit`,
+                );
+              }
             }
           }
         }
 
         // Юнит атакует ближайшего защитника
-        if (closestGuardian) {
-          const distanceToGuardian = unit.position.distanceTo(
-            closestGuardian.position,
-          );
+        const canAttackClosest =
+          closestGuardian &&
+          NeutralCombatSystem.canUnitAttackGuardian(unit, closestGuardian);
 
-          if (
-            distanceToGuardian <=
-            unit.combat.attackRange + closestGuardian.size
-          ) {
-            // Остановить юнита для боя
-            if (unit.state === UnitBehaviorState.MOVING) {
-              unit.state = UnitBehaviorState.FIGHTING;
-              unit.targetId = closestGuardian.id;
+        if (shouldLog) {
+          console.log(`  - canAttackClosest: ${canAttackClosest}`);
+        }
+
+        if (canAttackClosest && closestGuardian) {
+          // Начать бой или продолжить
+          if (unit.state !== UnitBehaviorState.FIGHTING) {
+            unit.startFighting(closestGuardian.id);
+            unit.targetPosition = closestGuardian.position;
+            if (shouldLog) {
+              console.log(
+                `  - Unit started FIGHTING, target: ${closestGuardian.id}, targetPos: ${closestGuardian.position.toString()}`,
+              );
             }
+          } else if (unit.targetId !== closestGuardian.id) {
+            // Если цель сменилась
+            unit.targetId = closestGuardian.id;
+            unit.targetPosition = closestGuardian.position;
+            if (shouldLog) {
+              console.log(`  - Unit changed target to: ${closestGuardian.id}`);
+            }
+          } else {
+            // Цель та же, обновляем позицию на всякий случай (если страж двигается)
+            unit.targetPosition = closestGuardian.position;
+            if (shouldLog) {
+              console.log(
+                `  - Unit is already in state: ${unit.state}, targetId: ${unit.targetId}`,
+              );
+            }
+          }
 
-            // Обновить цель если нужно
+          // Цель уже установлена в блоке выше, здесь не нужно перепроверять
+
+          const canAttackNow = unit.combat.canAttack();
+          if (shouldLog) {
+            console.log(
+              `  - Unit canAttack(): ${canAttackNow}, state: ${unit.state}`,
+            );
+          }
+
+          if (canAttackNow) {
+            const damage = unit.combat.attack();
+            if (damage > 0) {
+              closestGuardian.takeDamage(damage);
+              if (shouldLog) {
+                console.log(
+                  `  - Unit dealt ${damage} damage to ${closestGuardian.id}, guardian HP: ${closestGuardian.health.current}`,
+                );
+              }
+            } else if (shouldLog) {
+              console.log(
+                `  - Unit attack() returned 0 damage! DPS: ${unit.combat.dps}`,
+              );
+            }
+          }
+        } else if (closestGuardian) {
+          // Юнит не может атаковать - нужно подойти ближе к защитнику
+          // Мы остаемся в состоянии FIGHTING, чтобы Unit.ts сам двигал нас к targetPosition
+          if (unit.state !== UnitBehaviorState.FIGHTING) {
+            unit.startFighting(closestGuardian.id);
+            unit.targetPosition = closestGuardian.position;
+            if (shouldLog) {
+              console.log(
+                `  - Unit switched to FIGHTING to approach guardian ${closestGuardian.id}`,
+              );
+            }
+          } else {
+            // Обновляем цель и позицию
             if (unit.targetId !== closestGuardian.id) {
               unit.targetId = closestGuardian.id;
             }
-
-            if (unit.combat.canAttack()) {
-              const damage = unit.combat.attack();
-              if (damage > 0) {
-                closestGuardian.takeDamage(damage);
-              }
-            }
+            unit.targetPosition = closestGuardian.position;
           }
+        } else if (shouldLog) {
+          console.log(`  - No closest guardian found!`);
         }
       }
 
@@ -567,17 +742,17 @@ export class Game {
             }
           }
 
-          // Оставить юнита в качестве охранника (если место есть)
-          // Приоритет юнитам, которые специально шли к этой точке
-          const isGoingToThisPoint = unit.guardingPointId === point.id;
-          if (
-            point.ownerId === unit.ownerId &&
-            point.config.maxGuards > 0 &&
-            (unit.state === UnitBehaviorState.MOVING || isGoingToThisPoint)
-          ) {
+          /**
+           * Оставить юнита в качестве охранника (если место есть)
+           * Используем NeutralCombatSystem для проверки
+           */
+          if (NeutralCombatSystem.canUnitGuardPoint(unit, point)) {
             if (point.addGuard(unit.id)) {
               unit.startGuarding(point.id);
               unit.position.copy(point.position); // Переместить к центру точки
+            } else if (NeutralCombatSystem.isPointFull(point)) {
+              // Точка заполнена - перенаправить юнита к вражеской башне
+              this.redirectUnitToEnemyTower(unit);
             }
           }
         }
@@ -610,6 +785,73 @@ export class Game {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Перенаправить юнита к вражеской башне (когда ресурсная точка заполнена)
+   */
+  private redirectUnitToEnemyTower(unit: Unit): void {
+    // Найти вражескую башню
+    let enemyTower: Tower | null = null;
+    for (const tower of this.towers.values()) {
+      if (tower.ownerId !== unit.ownerId && tower.isAlive) {
+        enemyTower = tower;
+        break;
+      }
+    }
+
+    if (!enemyTower) return;
+
+    // Найти ближайшую дорогу к вражеской башне
+    let bestRoad: Road | null = null;
+    let bestDistance = Infinity;
+
+    for (const road of this.roads.values()) {
+      // Проверяем, ведёт ли дорога к вражеской башне
+      if (
+        road.fromTowerId === enemyTower.id ||
+        road.toTowerId === enemyTower.id
+      ) {
+        // Используем первую точку дороги как стартовую позицию
+        const firstWaypoint = road.waypoints[0];
+        if (firstWaypoint) {
+          const distance = unit.position.distanceTo(
+            new Vector2(firstWaypoint.position.x, firstWaypoint.position.y),
+          );
+
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestRoad = road;
+          }
+        }
+      }
+    }
+
+    if (bestRoad) {
+      // Сбрасываем состояние охраны
+      unit.guardingPointId = null;
+      unit.state = UnitBehaviorState.MOVING;
+
+      // Устанавливаем путь к вражеской башне
+      unit.targetRoadId = bestRoad.id;
+      unit.targetTowerId = enemyTower.id;
+
+      // Получаем waypoints для движения к вражеской башне
+      // Найдём свою башню, от которой юнит будет идти
+      const ownTower = this.towers.get(unit.ownerId);
+      if (ownTower) {
+        const waypoints = bestRoad.getWaypointsFrom(ownTower.id);
+        unit.waypoints = waypoints;
+      } else {
+        // Если своя башня не найдена, используем направление дороги
+        unit.waypoints = bestRoad.waypoints;
+      }
+      unit.currentWaypointIndex = 0;
+
+      console.log(
+        `Юнит ${unit.id} перенаправлен к вражеской башне (ресурсная точка заполнена)`,
+      );
     }
   }
 
@@ -692,6 +934,9 @@ export class Game {
 
     // Проверяем условия победы
     this.checkWinConditions();
+
+    // Увеличиваем счётчик для логирования
+    this.debugLogCounter++;
   }
 
   /**
@@ -798,8 +1043,7 @@ export class Game {
 
     // Если юнит достиг башни, атакуем её
     if (distance <= unit.combat.attackRange + targetTower.size / 2) {
-      unit.state = UnitBehaviorState.FIGHTING;
-      unit.targetId = targetTower.id;
+      unit.startFighting(targetTower.id);
     }
   }
 
@@ -817,15 +1061,18 @@ export class Game {
       // Юнит атакует башню
       if (unit1.state === UnitBehaviorState.FIGHTING && unit1.targetId) {
         const target = this.towers.get(unit1.targetId);
-        if (target && unit1.combat.canAttack()) {
-          const damage = unit1.combat.attack() * 0.5; // 50% урона по башням
-          const destroyed = target.takeDamage(damage);
+        if (target) {
+          if (unit1.combat.canAttack()) {
+            const damage = unit1.combat.attack() * 0.5; // 50% урона по башням
+            const destroyed = target.takeDamage(damage);
 
-          if (destroyed) {
-            this.onTowerDestroyed(target);
+            if (destroyed) {
+              this.onTowerDestroyed(target);
+            }
           }
+          continue; // Продолжаем только если нашли и атаковали башню
         }
-        continue;
+        // Если это не башня, идем дальше к проверке юнитов
       }
 
       // Проверяем столкновения с другими юнитами
@@ -1388,7 +1635,7 @@ export class Game {
     for (const point of this.resourcePoints.values()) {
       const distance = Math.sqrt(
         Math.pow(this.mousePosition.x - point.position.x, 2) +
-          Math.pow(this.mousePosition.y - point.position.y, 2),
+        Math.pow(this.mousePosition.y - point.position.y, 2),
       );
 
       if (distance <= point.size + 20) {

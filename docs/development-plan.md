@@ -1,8 +1,8 @@
 # Neon Arcana — План разработки
 
-**Версия:** 1.5  
+**Версия:** 1.6  
 **Дата создания:** 2024  
-**Последнее обновление:** 2024
+**Последнее обновление:** 18 января 2026
 
 ---
 
@@ -10,7 +10,7 @@
 
 Этот документ описывает поэтапный план разработки игры Neon Arcana — браузерной мультиплеерной стратегии в реальном времени.
 
-### Текущий статус: Этап 2 — ЗАВЕРШЁН ✅
+### Текущий статус: Этап 2 — ЗАВЕРШЁН ✅ (Полировка механик боя)
 
 ---
 
@@ -105,6 +105,8 @@
 - [x] Ресурсные точки в центре (Crystal Mine, Small Crystals, Neutral Camps)
 - [x] Нейтральные защитники (NeutralGuardianEntity)
 - [x] Прямая отправка юнитов к ресурсным точкам (клик по точке)
+- [x] Юниты последовательно атакуют всех защитников на точке
+- [x] Перенаправление юнитов к башне если точка заполнена (maxGuards=4)
 - [ ] Препятствия на дорогах (опционально)
 
 ### 2.4 Улучшения ✅
@@ -133,6 +135,9 @@
 - ✅ Разблокировка юнитов работает
 - ✅ Улучшение башни работает
 - ✅ Прямая отправка юнитов к ресурсным точкам
+- ✅ Юниты последовательно атакуют всех защитников точки
+- ✅ До 4 юнитов могут охранять точку
+- ✅ Избыточные юниты перенаправляются к вражеской башне
 
 ---
 
@@ -280,9 +285,9 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Файлов TypeScript | 16 |
-| Строк кода | ~7500 |
-| Unit-тестов | 396 |
+| Файлов TypeScript | 17 |
+| Строк кода | ~8000 |
+| Unit-тестов | 436 |
 | Покрытие кода | ~90% |
 
 ### Git история
@@ -295,6 +300,10 @@
 | `0536ee4` | Fix: Units now deal damage to neutral guardians |
 | `17dc20a` | Fix: Resource point capture now works after killing guardians |
 | `9d683f0` | Feature: Direct unit deployment to resource points |
+| `(pending)` | Fix: Units now attack all guardians sequentially before capturing |
+| `(pending)` | Add NeutralCombatSystem with 40 unit tests |
+| `(pending)` | Refactor: Move combat chase logic into Unit class with targetPosition |
+| `(pending)` | Fix: Resolve unit freezing bug - stopFighting() state transition |
 
 ---
 
