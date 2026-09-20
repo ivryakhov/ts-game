@@ -27,7 +27,7 @@ export interface RoadSpec {
   readonly id: string;
   readonly from: SideId;
   readonly to: SideId;
-  /** Четыре контрольные точки кубической кривой Безье, включая концы. */
+  /** Цепочка кубических кривых Безье: 3n+1 контрольная точка, включая концы. */
   readonly points: readonly Point[];
 }
 

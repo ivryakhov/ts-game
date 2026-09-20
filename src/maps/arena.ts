@@ -1,4 +1,4 @@
-import type { GameMap } from '@sim/index';
+import type { GameMap, Point } from '@sim/index';
 
 /**
  * Единственная карта v1: симметричная арена на две Стороны.
@@ -15,11 +15,31 @@ const WIDTH = 1200;
 const HEIGHT = 840;
 /** Высота, на которой стоят обе Цитадели. */
 const CITADEL_Y = 420;
-/** Отступ обходных Дорог от верхнего и нижнего края поля. */
-const DETOUR_MARGIN = 60;
+/** Высота прямого участка обходных Дорог. */
+const DETOUR_Y = 80;
 
-const A = { x: 150, y: CITADEL_Y };
-const B = { x: 1050, y: CITADEL_Y };
+const p = (x: number, y: number): Point => ({ x, y });
+/** Отражение точки по горизонтальной оси поля: обходные Дороги зеркальны. */
+const flip = (point: Point): Point => p(point.x, HEIGHT - point.y);
+
+const A = p(150, CITADEL_Y);
+const B = p(1050, CITADEL_Y);
+
+/**
+ * Обходной маршрут: подъём от Цитадели A, прямой участок вдоль края,
+ * спуск к Цитадели B. Три сегмента — два излома, поэтому на экране это
+ * читается как отдельная дорога, а не как половина овала.
+ *
+ * Из Цитадели маршрут выходит под углом, а не строго вверх: иначе обе
+ * обходные Дороги касаются друг друга у Цитадели и сливаются в глазах
+ * в один замкнутый контур вместо развилки из трёх маршрутов.
+ */
+const NORTH: readonly Point[] = [
+  A,
+  p(210, 300), p(250, DETOUR_Y), p(380, DETOUR_Y),
+  p(520, DETOUR_Y), p(680, DETOUR_Y), p(820, DETOUR_Y),
+  p(950, DETOUR_Y), p(990, 300), B,
+];
 
 export const arena: GameMap = {
   size: { width: WIDTH, height: HEIGHT },
@@ -34,22 +54,12 @@ export const arena: GameMap = {
       id: 'short',
       from: 'A',
       to: 'B',
-      // Почти прямая: короткий маршрут в лоб, слегка изогнутый, чтобы
+      // Один сегмент: короткий маршрут в лоб, слегка изогнутый, чтобы
       // не выглядеть чертёжной линией.
-      points: [A, { x: 430, y: CITADEL_Y - 70 }, { x: 770, y: CITADEL_Y + 70 }, B],
+      points: [A, p(430, CITADEL_Y - 70), p(770, CITADEL_Y + 70), B],
     },
-    {
-      id: 'north',
-      from: 'A',
-      to: 'B',
-      points: [A, { x: 180, y: DETOUR_MARGIN }, { x: 1020, y: DETOUR_MARGIN }, B],
-    },
-    {
-      id: 'south',
-      from: 'A',
-      to: 'B',
-      points: [A, { x: 180, y: HEIGHT - DETOUR_MARGIN }, { x: 1020, y: HEIGHT - DETOUR_MARGIN }, B],
-    },
+    { id: 'north', from: 'A', to: 'B', points: NORTH },
+    { id: 'south', from: 'A', to: 'B', points: NORTH.map(flip) },
   ],
 
   // Ресурсные точки появятся в тикете 07 спеки 0003; поле объявлено

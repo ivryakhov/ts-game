@@ -6,7 +6,9 @@ import type { GameMap, RoadSpec } from './types.js';
  * сейм, а не отдельной проверкой данных в обход него.
  */
 
-const CUBIC_POINTS = 4;
+/** Минимум — один кубический сегмент. Дальше каждый добавляет три точки. */
+const MIN_POINTS = 4;
+const POINTS_PER_SEGMENT = 3;
 /** На сколько условных единиц конец Дороги может отстоять от Цитадели. */
 const ENDPOINT_TOLERANCE = 1;
 
@@ -21,8 +23,11 @@ export function validateMap(map: GameMap): void {
 }
 
 function validateRoad(road: RoadSpec, map: GameMap): void {
-  if (road.points.length !== CUBIC_POINTS) {
-    throw new Error(`Дорога ${road.id}: ожидались ${CUBIC_POINTS} контрольные точки`);
+  const extra = road.points.length - 1;
+  if (road.points.length < MIN_POINTS || extra % POINTS_PER_SEGMENT !== 0) {
+    throw new Error(
+      `Дорога ${road.id}: контрольных точек должно быть 3n+1, а их ${road.points.length}`,
+    );
   }
 
   if (road.from === road.to) {
@@ -31,7 +36,7 @@ function validateRoad(road: RoadSpec, map: GameMap): void {
 
   for (const [side, point] of [
     [road.from, road.points[0]],
-    [road.to, road.points[CUBIC_POINTS - 1]],
+    [road.to, road.points[road.points.length - 1]],
   ] as const) {
     const citadel = map.citadels.find((candidate) => candidate.side === side);
     if (!citadel) throw new Error(`Дорога ${road.id}: нет Цитадели Стороны ${side}`);
