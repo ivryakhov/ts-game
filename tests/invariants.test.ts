@@ -80,6 +80,36 @@ describe('слои не перепутаны', () => {
   });
 });
 
+describe('словарь предметной области', () => {
+  /**
+   * Слова из строк «_Избегать_» в CONTEXT.md, которые легко проскакивают.
+   *
+   * Границы слова заданы просмотром вперёд и назад, а не \b: в JavaScript
+   * \b определяется по латинице, и с кириллицей не срабатывает вовсе —
+   * первая версия этой проверки пропускала всё подряд.
+   */
+  const edge = (stem: string): RegExp => new RegExp(`(?<![а-яёa-z])${stem}(?![а-яёa-z])`, 'i');
+  const forbidden = [
+    edge('бо[йюяем]'),
+    edge('отряд[а-яё]*'),
+    edge('групп[аыуе]'),
+    edge('сражени[а-яё]*'),
+    edge('squad'),
+    edge('лейн[а-яё]*'),
+    edge('крип[а-яё]*'),
+    edge('апгрейд[а-яё]*'),
+  ];
+
+  it.each(forbidden)('не употребляет %s вместо термина из глоссария', (pattern) => {
+    const offenders = [...filesUnder('src'), ...filesUnder('tests')]
+      // Этот файл сам содержит запрещённые слова — в правилах ниже.
+      .filter((file) => !file.endsWith('invariants.test.ts'))
+      .filter((file) => pattern.test(readFileSync(file, 'utf-8')));
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('размер модулей', () => {
   it(`ни один файл не длиннее ${MAX_LINES} строк`, () => {
     const oversized = [...filesUnder('src'), ...filesUnder('tests')]

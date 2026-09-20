@@ -8,16 +8,19 @@
  * Покупка Юнитов появится в тикете 07; пока они выходят по расписанию.
  */
 import { createMatch, TICKS_PER_SECOND } from '@sim/index';
-import type { MatchSetup, ScheduledAction, WorldSnapshot } from '@sim/index';
+import type { MatchSetup, ScheduledAction, UnitId, WorldSnapshot } from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
 
-/** Сколько Тиков между появлением Юнитов у одной Стороны. */
-const DEPLOY_PERIOD = 45;
-const DEMO_WAVES = 40;
+/** Сколько Тиков между волнами. */
+const DEPLOY_PERIOD = 90;
+/** Сколько Юнитов в волне и через сколько Тиков они выходят друг за другом. */
+const WAVE_SIZE = 5;
+const WAVE_GAP = 4;
+const DEMO_WAVES = 20;
 
 /** Сид берётся из адреса: ?seed=123 — так матч можно переиграть заново. */
 function seedFromLocation(): number {
@@ -25,16 +28,24 @@ function seedFromLocation(): number {
   return Number.isInteger(asked) && asked >= 0 ? asked : 1;
 }
 
-/** Демонстрационное расписание: обе Стороны по очереди шлют Юнитов по всем Дорогам. */
+/**
+ * Демонстрационное расписание: обе Стороны шлют по волне Юнитов навстречу
+ * друг другу. Волна больше лимита Стычки, поэтому видно и саму Стычку,
+ * и очередь за спинами. Настоящие волны появятся с покупкой в тикете 07.
+ */
 function demoSchedule(): ScheduledAction[] {
   const roads = arena.roads.map((road) => road.id);
   const actions: ScheduledAction[] = [];
 
   for (let wave = 0; wave < DEMO_WAVES; wave += 1) {
     const roadId = roads[wave % roads.length] ?? 'short';
-    const tick = 10 + wave * DEPLOY_PERIOD;
-    actions.push({ tick, side: 'A', kind: 'deploy', roadId });
-    actions.push({ tick: tick + 20, side: 'B', kind: 'deploy', roadId });
+    const start = 10 + wave * DEPLOY_PERIOD;
+
+    for (let index = 0; index < WAVE_SIZE; index += 1) {
+      const tick = start + index * WAVE_GAP;
+      actions.push({ tick, side: 'A', kind: 'deploy', roadId });
+      actions.push({ tick, side: 'B', kind: 'deploy', roadId });
+    }
   }
 
   return actions;
@@ -69,9 +80,14 @@ function frame(nowMs: number): void {
   const due = pacer.advance(nowMs - lastFrameMs);
   lastFrameMs = nowMs;
 
+  // Смерти копятся за все Тики кадра: на восьмикратной скорости их
+  // в одном кадре несколько, и ни одна не должна пропасть.
+  const deaths = new Set<UnitId>();
   for (let tick = 0; tick < due && !match.finished; tick += 1) {
     previous = current;
-    match.step();
+    for (const event of match.step()) {
+      if (event.kind === 'unit-died') deaths.add(event.unitId);
+    }
     current = match.snapshot();
   }
 
@@ -86,7 +102,7 @@ function frame(nowMs: number): void {
   // на Дорогах продолжало бы бежать на паузе и не ускорялось бы вместе
   // с симуляцией.
   const matchMs = ((current.tick + alpha) * 1000) / TICKS_PER_SECOND;
-  renderer.draw({ previous, current, alpha, matchMs });
+  renderer.draw({ previous, current, deaths, alpha, matchMs });
   hud.update({ tick: current.tick, speed: pacer.speed, paused: pacer.paused, seed });
   window.requestAnimationFrame(frame);
 }

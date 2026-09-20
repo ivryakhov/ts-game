@@ -100,12 +100,27 @@ export type MatchEvent =
       readonly unitId: UnitId;
       readonly side: SideId;
       readonly roadId: string;
+    }
+  | {
+      readonly kind: 'unit-died';
+      readonly tick: number;
+      readonly unitId: UnitId;
+      readonly side: SideId;
+      readonly roadId: string;
+      readonly killedBy: UnitId;
     };
 
 /** Разрушение Цитадели как причина окончания появится в тикете 06. */
 export type EndReason = 'tick-limit';
 
 export type UnitId = number;
+
+/**
+ * Чем Юнит занят прямо сейчас. Состояние выводится заново каждый Тик
+ * из расстановки на Дороге, а не хранится: так не бывает Юнита, который
+ * помнит, что дерётся, когда драться уже не с кем.
+ */
+export type UnitState = 'moving' | 'fighting' | 'waiting';
 
 /**
  * Юнит глазами рендера. Положение задано долей пройденной Дороги,
@@ -118,6 +133,7 @@ export interface UnitSnapshot {
   readonly roadId: string;
   /** Доля пройденного пути от 0 до 1. */
   readonly progress: number;
+  readonly state: UnitState;
   readonly hp: number;
   readonly maxHp: number;
 }

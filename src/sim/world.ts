@@ -1,6 +1,15 @@
 import { measureRoad, type RoadMetrics } from './geometry.js';
-import type { MatchEvent, MatchSetup, ScheduledAction, SideId, WorldSnapshot } from './types.js';
+import type {
+  MatchEvent,
+  MatchSetup,
+  ScheduledAction,
+  SideId,
+  UnitId,
+  WorldSnapshot,
+} from './types.js';
 import type { Rng } from './rng.js';
+import { applyPlan } from './combat.js';
+import { planSkirmish } from './skirmish.js';
 import { createUnit, moveUnit, unitSnapshot, type Unit } from './unit.js';
 
 /**
@@ -52,16 +61,39 @@ export function createWorld(setup: MatchSetup): World {
 }
 
 /**
- * Один шаг симуляции: сперва вступают в силу действия, назначенные на этот
- * Тик, затем двигаются Юниты. Порядок строго такой и не зависит ни от чего
- * внешнего — в этом весь смысл фиксированного Тика (ADR-0001).
+ * Один шаг симуляции. Порядок строго такой и не зависит ни от чего
+ * внешнего — в этом весь смысл фиксированного Тика (ADR-0001):
+ *
+ * 1. вступают в силу действия, назначенные на этот Тик;
+ * 2. по расстановке определяется, кто дерётся, кто ждёт, кто идёт;
+ * 3. одновременно наносится урон и убираются погибшие;
+ * 4. двигаются только те, кому ничто не мешает.
  */
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
 
   for (const action of world.schedule.get(world.tick) ?? []) applyAction(world, action, events);
 
+  fight(world, events);
   moveUnits(world, events);
+}
+
+function fight(world: World, events: MatchEvent[]): void {
+  const fallen = new Set<UnitId>();
+  const byRoad = new Map<string, Unit[]>();
+
+  for (const unit of world.units) {
+    const onRoad = byRoad.get(unit.roadId);
+    if (onRoad) onRoad.push(unit);
+    else byRoad.set(unit.roadId, [unit]);
+  }
+
+  for (const [roadId, onRoad] of byRoad) {
+    const plan = planSkirmish(onRoad, roadOf(world, roadId).metrics.length);
+    for (const id of applyPlan(onRoad, plan, world.tick, events)) fallen.add(id);
+  }
+
+  if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
 }
 
 /** Расписание и карта проверены при создании матча, поэтому Дорога обязана найтись. */
@@ -91,6 +123,11 @@ function moveUnits(world: World, events: MatchEvent[]): void {
   const surviving: Unit[] = [];
 
   for (const unit of world.units) {
+    if (unit.state !== 'moving') {
+      surviving.push(unit);
+      continue;
+    }
+
     if (moveUnit(unit, roadOf(world, unit.roadId).metrics)) {
       events.push({
         kind: 'unit-arrived',

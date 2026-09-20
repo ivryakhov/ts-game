@@ -1,4 +1,4 @@
-import type { WorldSnapshot } from '@sim/index';
+import type { UnitId, WorldSnapshot } from '@sim/index';
 
 /**
  * Граница отрисовки. Рендер получает два снимка мира и долю пути между
@@ -20,6 +20,12 @@ export interface Renderer {
 export interface Frame {
   readonly previous: WorldSnapshot;
   readonly current: WorldSnapshot;
+  /**
+   * Кто погиб с прошлого кадра. Исчезнуть из мира Юнит может двояко —
+   * погибнув или дойдя до чужой Цитадели, — и показ обязан различать
+   * эти случаи.
+   */
+  readonly deaths: ReadonlySet<UnitId>;
   /** Доля пути от предыдущего Тика к текущему, от 0 до 1. */
   readonly alpha: number;
   /**

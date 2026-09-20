@@ -1,8 +1,16 @@
-import type { CitadelSpec, GameMap, Point, RoadMetrics, RoadSpec } from '@sim/index';
+import type {
+  CitadelSpec,
+  GameMap,
+  Point,
+  RoadMetrics,
+  RoadSpec,
+  UnitSnapshot,
+} from '@sim/index';
 import { measureRoad, roadPolyline } from '@sim/index';
 import { BACKGROUND, CITADEL, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
-import { drawUnit, smoother } from './units.js';
+import { createFading } from './fading.js';
+import { drawUnit, hindsight } from './units.js';
 
 /** Во сколько граней рисуется Цитадель. */
 const CITADEL_FACETS = 6;
@@ -28,6 +36,7 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
   const metrics = new Map<string, RoadMetrics>(
     map.roads.map((road) => [road.id, measureRoad(road)]),
   );
+  const fading = createFading();
   let cssWidth = 0;
   let cssHeight = 0;
 
@@ -103,6 +112,12 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     context.restore();
   }
 
+  function placeOf(unit: UnitSnapshot, progress: number): Point | null {
+    const road = metrics.get(unit.roadId);
+    if (!road) return null;
+    return toScreen(road.pointAtDistance(progress * road.length));
+  }
+
   function drawCitadel(citadel: CitadelSpec): void {
     context.save();
     const center = toScreen(citadel.at);
@@ -166,12 +181,18 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
       for (const road of map.roads) drawRoad(road, frame.matchMs);
       for (const citadel of map.citadels) drawCitadel(citadel);
 
-      const smooth = smoother(frame.previous);
+      const seen = hindsight(frame.previous);
+      fading.remember(frame.previous.units, frame.deaths, frame.matchMs);
+
+      for (const dead of fading.visible(frame.matchMs)) {
+        const place = placeOf(dead.unit, dead.progress);
+        if (place) drawUnit(context, dead.unit, place, view.scale, { fade: dead.fade });
+      }
+
       for (const unit of frame.current.units) {
-        const road = metrics.get(unit.roadId);
-        if (!road) continue;
-        const center = toScreen(road.pointAtDistance(smooth(unit, frame.alpha) * road.length));
-        drawUnit(context, unit, center, view.scale);
+        const place = placeOf(unit, seen.progressOf(unit, frame.alpha));
+        if (!place) continue;
+        drawUnit(context, unit, place, view.scale, { flash: seen.flashOf(unit, frame.alpha) });
       }
     },
   };

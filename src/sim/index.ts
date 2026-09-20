@@ -21,5 +21,6 @@ export type {
   SideSetup,
   UnitId,
   UnitSnapshot,
+  UnitState,
   WorldSnapshot,
 } from './types.js';

@@ -8,17 +8,40 @@ import { SIDE_COLORS, UNIT_VISUAL, withAlpha } from './visual-contract.js';
  */
 
 /**
- * Сглаживание положения Юнитов между двумя Тиками. Юнит, которого
- * в прошлом снимке не было, рисуется на своём месте без сглаживания —
- * иначе он выехал бы из начала Дороги рывком.
+ * Взгляд на предыдущий снимок: где Юнит был и сколько у него было
+ * здоровья. Строится раз в кадр, чтобы не искать каждого Юнита
+ * перебором по всему прошлому состоянию.
  */
-export function smoother(previous: WorldSnapshot): (unit: UnitSnapshot, alpha: number) => number {
-  const before = new Map(previous.units.map((unit) => [unit.id, unit.progress]));
+export interface Hindsight {
+  /**
+   * Доля пройденной Дороги, сглаженная между двумя Тиками. Юнит, которого
+   * в прошлом снимке не было, встаёт на своё место без сглаживания —
+   * иначе он выехал бы из начала Дороги рывком.
+   */
+  progressOf(unit: UnitSnapshot, alpha: number): number;
+  /**
+   * Сила вспышки от полученного урона. Вспышка загорается в начале Тика
+   * и гаснет к следующему, поэтому Стычка читается как пульсация,
+   * а не как ровное свечение.
+   */
+  flashOf(unit: UnitSnapshot, alpha: number): number;
+}
 
-  return (unit, alpha) => {
-    const from = before.get(unit.id);
-    if (from === undefined) return unit.progress;
-    return from + (unit.progress - from) * alpha;
+export function hindsight(previous: WorldSnapshot): Hindsight {
+  const before = new Map(previous.units.map((unit) => [unit.id, unit]));
+
+  return {
+    progressOf(unit, alpha) {
+      const from = before.get(unit.id);
+      if (!from) return unit.progress;
+      return from.progress + (unit.progress - from.progress) * alpha;
+    },
+
+    flashOf(unit, alpha) {
+      const from = before.get(unit.id);
+      if (!from || from.hp <= unit.hp) return 0;
+      return 1 - alpha;
+    },
   };
 }
 
@@ -27,11 +50,16 @@ export function drawUnit(
   unit: UnitSnapshot,
   center: Point,
   scale: number,
+  options: { flash?: number; fade?: number } = {},
 ): void {
   context.save();
   const color = SIDE_COLORS[unit.side];
-  const radius = UNIT_VISUAL.radius * scale;
-  const glowRadius = UNIT_VISUAL.glowRadius * scale;
+  const fade = options.fade ?? 1;
+  const waiting = unit.state === 'waiting';
+  const shrink = (waiting ? UNIT_VISUAL.waitingScale : 1) * fade;
+  context.globalAlpha = (waiting ? UNIT_VISUAL.waitingAlpha : 1) * fade;
+  const radius = UNIT_VISUAL.radius * scale * shrink;
+  const glowRadius = UNIT_VISUAL.glowRadius * scale * shrink;
 
   const glow = context.createRadialGradient(center.x, center.y, 0, center.x, center.y, glowRadius);
   glow.addColorStop(0, withAlpha(color, 0.45));
@@ -47,7 +75,15 @@ export function drawUnit(
   context.lineWidth = Math.max(1, 1.5 * scale);
   context.stroke();
 
-  drawHealthBar(context, unit, center, scale);
+  const flash = options.flash ?? 0;
+  if (flash > 0) {
+    context.beginPath();
+    context.arc(center.x, center.y, radius * (1 + flash * 0.7), 0, Math.PI * 2);
+    context.fillStyle = `rgba(255, 255, 255, ${0.55 * flash})`;
+    context.fill();
+  }
+
+  if (fade >= 1) drawHealthBar(context, unit, center, scale);
   context.restore();
 }
 

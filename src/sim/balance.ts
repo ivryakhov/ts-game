@@ -9,9 +9,26 @@ export const TICKS_PER_SECOND = 20;
 
 /** Условных единиц карты в секунду. */
 const BASE_SPEED_PER_SECOND = 120;
+/** Урона в секунду. */
+const BASE_DAMAGE_PER_SECOND = 15;
 
 export const UNIT_STATS = {
   maxHp: 50,
   /** Условных единиц карты за один Тик. */
   speedPerTick: BASE_SPEED_PER_SECOND / TICKS_PER_SECOND,
+  /** Урона за один Тик. */
+  damagePerTick: BASE_DAMAGE_PER_SECOND / TICKS_PER_SECOND,
+} as const;
+
+export const SKIRMISH = {
+  /** На каком расстоянии вдоль Дороги враги замечают друг друга и встают. */
+  engageRange: 26,
+  /**
+   * Сколько Юнитов с каждой Стороны бьётся одновременно. Концепт говорит
+   * о восьми; пока тип Юнита один, взято три — чтобы очередь была видна
+   * на глаз и проверяема. Число уточнится на плейтестах.
+   */
+  limit: 3,
+  /** Насколько плотно Юниты встают в очередь за теми, кто уже в Стычке. */
+  spacing: 20,
 } as const;

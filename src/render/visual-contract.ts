@@ -36,10 +36,15 @@ export const ROAD = {
 export const UNIT_VISUAL = {
   radius: 13,
   glowRadius: 34,
+  /** Ожидающий очереди Юнит меньше и тусклее бьющегося. */
+  waitingScale: 0.78,
+  waitingAlpha: 0.5,
   /** Полоса здоровья над Юнитом. */
   barWidth: 30,
   barHeight: 5,
   barOffset: 26,
+  /** Сколько миллисекунд матча Юнит схлопывается после смерти. */
+  fadeMs: 260,
 } as const;
 
 export function withAlpha(hex: string, alpha: number): string {

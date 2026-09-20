@@ -1,0 +1,41 @@
+import { UNIT_STATS } from './balance.js';
+import type { SkirmishPlan } from './skirmish.js';
+import type { MatchEvent, UnitId } from './types.js';
+import type { Unit } from './unit.js';
+
+/**
+ * Применение решения Стычки: урон, смерти, новые состояния.
+ *
+ * Урон за Тик одинаков для всех, поэтому суммарное здоровье участников
+ * Стычки строго убывает — а значит, она не может длиться вечно.
+ */
+export function applyPlan(
+  units: readonly Unit[],
+  plan: SkirmishPlan,
+  tick: number,
+  events: MatchEvent[],
+): Set<UnitId> {
+  const fallen = new Set<UnitId>();
+
+  for (const unit of units) {
+    unit.state = plan.states.get(unit.id) ?? 'moving';
+
+    const incoming = plan.damage.get(unit.id);
+    if (!incoming) continue;
+
+    unit.hp -= UNIT_STATS.damagePerTick * incoming.hits;
+    if (unit.hp > 0) continue;
+
+    fallen.add(unit.id);
+    events.push({
+      kind: 'unit-died',
+      tick,
+      unitId: unit.id,
+      side: unit.side,
+      roadId: unit.roadId,
+      killedBy: incoming.lastAttacker,
+    });
+  }
+
+  return fallen;
+}

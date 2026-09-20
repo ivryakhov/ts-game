@@ -10,8 +10,12 @@ import { advance, createWorld, snapshot, type World } from './world.js';
  * не могут разойтись.
  */
 export interface LiveMatch {
-  /** Выполнить один Тик. После окончания матча ничего не делает. */
-  step(): void;
+  /**
+   * Выполнить один Тик и вернуть случившееся в нём. События нужны показу:
+   * без них он не отличит погибшего Юнита от дошедшего, а на ускоренном
+   * воспроизведении потеряет и те и другие между кадрами.
+   */
+  step(): readonly MatchEvent[];
   snapshot(): WorldSnapshot;
   readonly finished: boolean;
   /** Итог матча. До окончания показывает положение дел на текущий Тик. */
@@ -36,10 +40,14 @@ export function createMatch(setup: MatchSetup): LiveMatch {
   if (setup.maxTicks <= 0) finish();
 
   return {
-    step(): void {
-      if (ended) return;
+    step(): readonly MatchEvent[] {
+      if (ended) return [];
+
+      const before = events.length;
       advance(world, rng, events);
       if (world.tick >= setup.maxTicks) finish();
+
+      return events.slice(before);
     },
 
     snapshot: () => snapshot(world),

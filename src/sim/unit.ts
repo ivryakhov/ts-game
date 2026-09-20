@@ -1,6 +1,6 @@
 import { UNIT_STATS } from './balance.js';
 import type { RoadMetrics } from './geometry.js';
-import type { SideId, UnitId, UnitSnapshot } from './types.js';
+import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 
 /**
  * Юнит в симуляции. Положение хранится как пройденное расстояние,
@@ -19,12 +19,23 @@ export interface Unit {
   readonly forward: boolean;
   /** Пройденное расстояние от своей Цитадели. */
   travelled: number;
+  /** Выводится заново каждый Тик из расстановки на Дороге. */
+  state: UnitState;
   hp: number;
   readonly maxHp: number;
 }
 
 export function createUnit(id: UnitId, side: SideId, roadId: string, forward: boolean): Unit {
-  return { id, side, roadId, forward, travelled: 0, hp: UNIT_STATS.maxHp, maxHp: UNIT_STATS.maxHp };
+  return {
+    id,
+    side,
+    roadId,
+    forward,
+    travelled: 0,
+    state: 'moving',
+    hp: UNIT_STATS.maxHp,
+    maxHp: UNIT_STATS.maxHp,
+  };
 }
 
 /** Двигает Юнита на один Тик. Возвращает true, если он дошёл до конца Дороги. */
@@ -43,6 +54,7 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     // Доля отсчитывается от начала Дороги, а не от своей Цитадели,
     // чтобы рендеру не приходилось знать о направлениях.
     progress: unit.forward ? covered : 1 - covered,
+    state: unit.state,
     hp: unit.hp,
     maxHp: unit.maxHp,
   };
