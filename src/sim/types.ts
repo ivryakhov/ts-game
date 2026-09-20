@@ -59,19 +59,22 @@ export interface SideSetup {
 }
 
 /**
- * Действие игрока, привязанное к номеру Тика, а не к реальному времени:
- * иначе при ускорении воспроизведения действие «уезжает» и матч перестаёт
- * быть воспроизводимым.
+ * Выпустить Юнита на Дорогу. Списание Эфира появится в тикете 07;
+ * пока действие бесплатно и служит расписанием появления Юнитов.
  */
-export interface ScheduledAction {
+export interface DeployAction {
   readonly tick: number;
   readonly side: SideId;
-  /**
-   * Открытая строка — временно. Словарь действий игрока закрыт спекой
-   * и станет union-типом в тикете 07, когда появится покупка Юнитов.
-   */
-  readonly kind: string;
+  readonly kind: 'deploy';
+  readonly roadId: string;
 }
+
+/**
+ * Действие игрока, привязанное к номеру Тика, а не к реальному времени:
+ * иначе при ускорении воспроизведения действие «уезжает» и матч перестаёт
+ * быть воспроизводимым. Словарь закрыт и растёт вместе со спекой.
+ */
+export type ScheduledAction = DeployAction;
 
 export interface MatchSetup {
   readonly seed: Seed;
@@ -83,14 +86,46 @@ export interface MatchSetup {
 
 export type MatchEvent =
   | { readonly kind: 'match-started'; readonly tick: number; readonly seed: Seed }
-  | { readonly kind: 'match-ended'; readonly tick: number; readonly reason: EndReason };
+  | { readonly kind: 'match-ended'; readonly tick: number; readonly reason: EndReason }
+  | {
+      readonly kind: 'unit-deployed';
+      readonly tick: number;
+      readonly unitId: UnitId;
+      readonly side: SideId;
+      readonly roadId: string;
+    }
+  | {
+      readonly kind: 'unit-arrived';
+      readonly tick: number;
+      readonly unitId: UnitId;
+      readonly side: SideId;
+      readonly roadId: string;
+    };
 
 /** Разрушение Цитадели как причина окончания появится в тикете 06. */
 export type EndReason = 'tick-limit';
 
+export type UnitId = number;
+
+/**
+ * Юнит глазами рендера. Положение задано долей пройденной Дороги,
+ * а не точкой: так рендер может сгладить движение между Тиками,
+ * не сходя с маршрута.
+ */
+export interface UnitSnapshot {
+  readonly id: UnitId;
+  readonly side: SideId;
+  readonly roadId: string;
+  /** Доля пройденного пути от 0 до 1. */
+  readonly progress: number;
+  readonly hp: number;
+  readonly maxHp: number;
+}
+
 export interface WorldSnapshot {
   readonly tick: number;
   readonly sides: readonly SideId[];
+  readonly units: readonly UnitSnapshot[];
 }
 
 export interface MatchStats {

@@ -33,6 +33,15 @@ export const ROAD = {
   dashSpeed: 55,
 } as const;
 
+export const UNIT_VISUAL = {
+  radius: 13,
+  glowRadius: 34,
+  /** Полоса здоровья над Юнитом. */
+  barWidth: 30,
+  barHeight: 5,
+  barOffset: 26,
+} as const;
+
 export function withAlpha(hex: string, alpha: number): string {
   const value = hex.replace('#', '');
   const r = Number.parseInt(value.slice(0, 2), 16);

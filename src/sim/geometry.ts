@@ -73,3 +73,58 @@ export function roadPolyline(road: RoadSpec): readonly Point[] {
   for (let step = 0; step <= steps; step += 1) points.push(pointAt(road, step / steps));
   return points;
 }
+
+/**
+ * Промеры Дороги: её длина и способ найти точку по пройденному расстоянию.
+ *
+ * Нужны потому, что параметр кривой Безье распределён неравномерно по
+ * длине — шаг по нему на изломе даёт меньшее перемещение, чем на прямом
+ * участке. Юнит, идущий по параметру, дёргался бы на поворотах; идущий
+ * по расстоянию — движется ровно.
+ */
+export interface RoadMetrics {
+  readonly length: number;
+  /** Точка на Дороге в заданном расстоянии от её начала. */
+  pointAtDistance(distance: number): Point;
+}
+
+export function measureRoad(road: RoadSpec): RoadMetrics {
+  const shape = roadPolyline(road);
+  const cumulative: number[] = [0];
+
+  for (let index = 1; index < shape.length; index += 1) {
+    const previous = shape[index - 1];
+    const current = shape[index];
+    if (!previous || !current) continue;
+    cumulative.push(
+      (cumulative[index - 1] ?? 0) + Math.hypot(current.x - previous.x, current.y - previous.y),
+    );
+  }
+
+  const length = cumulative[cumulative.length - 1] ?? 0;
+
+  return {
+    length,
+    pointAtDistance(distance: number): Point {
+      const target = Math.min(length, Math.max(0, distance));
+
+      let low = 0;
+      let high = cumulative.length - 1;
+      while (high - low > 1) {
+        const middle = (low + high) >> 1;
+        if ((cumulative[middle] ?? 0) <= target) low = middle;
+        else high = middle;
+      }
+
+      const from = shape[low];
+      const to = shape[high];
+      const spanStart = cumulative[low] ?? 0;
+      const span = (cumulative[high] ?? 0) - spanStart;
+      if (!from || !to) throw new Error(`Дорога ${road.id}: ломаная повреждена`);
+      if (span === 0) return from;
+
+      const ratio = (target - spanStart) / span;
+      return { x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio };
+    },
+  };
+}

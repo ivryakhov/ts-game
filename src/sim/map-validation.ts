@@ -1,4 +1,4 @@
-import type { GameMap, RoadSpec } from './types.js';
+import type { GameMap, MatchSetup, RoadSpec } from './types.js';
 
 /**
  * Проверка целостности карты. Выполняется при запуске матча, поэтому
@@ -45,6 +45,32 @@ function validateRoad(road: RoadSpec, map: GameMap): void {
     const gap = Math.hypot(point.x - citadel.at.x, point.y - citadel.at.y);
     if (gap > ENDPOINT_TOLERANCE) {
       throw new Error(`Дорога ${road.id}: конец не сходится с Цитаделью Стороны ${side}`);
+    }
+  }
+}
+
+/**
+ * Проверка действий игрока до начала матча.
+ *
+ * Раньше негодное действие роняло матч посреди Тика — в браузере это
+ * навсегда останавливало цикл кадров, и экран замирал без объяснений.
+ * Ошибка в расписании должна обнаруживаться на входе, а не на сотом Тике.
+ */
+export function validateActions(setup: MatchSetup): void {
+  const roads = new Map(setup.map.roads.map((road) => [road.id, road]));
+
+  for (const action of setup.playerActions) {
+    if (action.tick < 1 || action.tick > setup.maxTicks) {
+      throw new Error(`Действие на Тике ${action.tick}: вне отрезка матча`);
+    }
+
+    const road = roads.get(action.roadId);
+    if (!road) throw new Error(`Действие на Тике ${action.tick}: Дороги ${action.roadId} нет на карте`);
+
+    if (action.side !== road.from && action.side !== road.to) {
+      throw new Error(
+        `Действие на Тике ${action.tick}: Дорога ${action.roadId} не ведёт от Цитадели ${action.side}`,
+      );
     }
   }
 }

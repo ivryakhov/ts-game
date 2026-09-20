@@ -1,7 +1,8 @@
-import type { CitadelSpec, GameMap, Point, RoadSpec } from '@sim/index';
-import { roadPolyline } from '@sim/index';
+import type { CitadelSpec, GameMap, Point, RoadMetrics, RoadSpec } from '@sim/index';
+import { measureRoad, roadPolyline } from '@sim/index';
 import { BACKGROUND, CITADEL, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
+import { drawUnit, smoother } from './units.js';
 
 /** Во сколько граней рисуется Цитадель. */
 const CITADEL_FACETS = 6;
@@ -24,6 +25,9 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
 
   const view: Viewport = { scale: 1, offsetX: 0, offsetY: 0 };
   const shapes = new Map<string, readonly Point[]>();
+  const metrics = new Map<string, RoadMetrics>(
+    map.roads.map((road) => [road.id, measureRoad(road)]),
+  );
   let cssWidth = 0;
   let cssHeight = 0;
 
@@ -161,6 +165,14 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
 
       for (const road of map.roads) drawRoad(road, frame.elapsedMs);
       for (const citadel of map.citadels) drawCitadel(citadel);
+
+      const smooth = smoother(frame.previous);
+      for (const unit of frame.current.units) {
+        const road = metrics.get(unit.roadId);
+        if (!road) continue;
+        const center = toScreen(road.pointAtDistance(smooth(unit, frame.alpha) * road.length));
+        drawUnit(context, unit, center, view.scale);
+      }
     },
   };
 }

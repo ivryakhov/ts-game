@@ -1,8 +1,10 @@
 /** Публичная граница ядра симуляции — сейм, на котором живут все тесты. */
-export { runMatch } from './match.js';
-export { roadPolyline } from './geometry.js';
+export { createMatch, runMatch, type LiveMatch } from './match.js';
+export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
+export { TICKS_PER_SECOND } from './balance.js';
 export type {
   CitadelSpec,
+  DeployAction,
   EndReason,
   GameMap,
   MatchEvent,
@@ -17,5 +19,7 @@ export type {
   Seed,
   SideId,
   SideSetup,
+  UnitId,
+  UnitSnapshot,
   WorldSnapshot,
 } from './types.js';
