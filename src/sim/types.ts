@@ -27,7 +27,7 @@ export interface RoadSpec {
   readonly id: string;
   readonly from: SideId;
   readonly to: SideId;
-  /** Контрольные точки кривой, включая концы. */
+  /** Четыре контрольные точки кубической кривой Безье, включая концы. */
   readonly points: readonly Point[];
 }
 
@@ -40,7 +40,14 @@ export interface ResourcePointSpec {
   readonly at: Point;
 }
 
+export interface MapSize {
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface GameMap {
+  /** Собственные координаты поля; рендер вписывает их в окно. */
+  readonly size: MapSize;
   readonly citadels: readonly CitadelSpec[];
   readonly roads: readonly RoadSpec[];
   readonly resourcePoints: readonly ResourcePointSpec[];

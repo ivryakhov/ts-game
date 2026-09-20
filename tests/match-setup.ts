@@ -7,7 +7,7 @@ import type { MatchSetup } from '@sim/index';
 export function matchSetup(overrides: Partial<MatchSetup> = {}): MatchSetup {
   return {
     seed: 1,
-    map: { citadels: [], roads: [], resourcePoints: [] },
+    map: { size: { width: 1200, height: 840 }, citadels: [], roads: [], resourcePoints: [] },
     sides: [{ id: 'A' }, { id: 'B' }],
     playerActions: [],
     maxTicks: 100,

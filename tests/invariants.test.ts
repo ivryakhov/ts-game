@@ -47,6 +47,16 @@ describe('ядро симуляции детерминировано по пос
   });
 });
 
+describe('рендер не может изменить мир', () => {
+  it('не импортирует изменяемое состояние — только снимок и чистую геометрию', () => {
+    const offenders = filesUnder('src/render').filter((file) =>
+      /from '.*sim\/world/.test(readFileSync(file, 'utf-8')),
+    );
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('размер модулей', () => {
   it(`ни один файл не длиннее ${MAX_LINES} строк`, () => {
     const oversized = [...filesUnder('src'), ...filesUnder('tests')]
