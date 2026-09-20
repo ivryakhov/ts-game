@@ -76,7 +76,7 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     return gradient;
   }
 
-  function drawRoad(road: RoadSpec, elapsedMs: number): void {
+  function drawRoad(road: RoadSpec, matchMs: number): void {
     context.save();
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -97,7 +97,7 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     context.strokeStyle = roadGradient(road);
     context.lineWidth = scaled(ROAD.dashWidth);
     context.setLineDash(ROAD.dash.map(scaled));
-    context.lineDashOffset = -scaled((elapsedMs / 1000) * ROAD.dashSpeed);
+    context.lineDashOffset = -scaled((matchMs / 1000) * ROAD.dashSpeed);
     context.stroke();
 
     context.restore();
@@ -163,7 +163,7 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
       context.fillStyle = BACKGROUND;
       context.fillRect(0, 0, cssWidth, cssHeight);
 
-      for (const road of map.roads) drawRoad(road, frame.elapsedMs);
+      for (const road of map.roads) drawRoad(road, frame.matchMs);
       for (const citadel of map.citadels) drawCitadel(citadel);
 
       const smooth = smoother(frame.previous);

@@ -7,10 +7,62 @@
     <style>
       html, body { margin: 0; height: 100%; background: #0a0a14; overflow: hidden; }
       canvas { display: block; }
+
+      :root {
+        --ink: #cbd5f5;
+        --ink-dim: #6b7aa8;
+        --panel: rgba(10, 10, 20, 0.55);
+        --edge: rgba(120, 140, 220, 0.18);
+      }
+
+      .hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        font: 500 14px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--ink);
+        letter-spacing: 0.04em;
+      }
+
+      .hud__clock {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 30px;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 18px rgba(34, 211, 238, 0.35);
+      }
+
+      .hud__panel {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        padding: 10px 14px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+        backdrop-filter: blur(6px);
+      }
+
+      .hud__row { display: flex; gap: 10px; }
+      .hud__label { color: var(--ink-dim); }
+      .hud__keys { margin-top: 8px; color: var(--ink-dim); font-size: 12px; }
+      .hud__paused { color: #fbbf24; }
     </style>
   </head>
   <body>
     <canvas id="stage"></canvas>
+
+    <div class="hud">
+      <div class="hud__clock" id="hud-clock">00:00</div>
+      <div class="hud__panel">
+        <div class="hud__row"><span class="hud__label">темп</span><span id="hud-speed">×1</span></div>
+        <div class="hud__row"><span class="hud__label">Сид</span><span id="hud-seed">—</span></div>
+        <div class="hud__keys">пробел — пауза · − = — темп · ?seed=число в адресе</div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

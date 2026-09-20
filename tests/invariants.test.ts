@@ -57,6 +57,29 @@ describe('рендер не может изменить мир', () => {
   });
 });
 
+describe('слои не перепутаны', () => {
+  it('ядро симуляции не знает ни о показе, ни о клавишах', () => {
+    const offenders = filesUnder('src/sim').filter((file) => {
+      const source = readFileSync(file, 'utf-8');
+      return /from '\.\.\/(render|ui|app)/.test(source);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('темп воспроизведения не тянет за собой браузер', () => {
+    const offenders = filesUnder('src/app').filter((file) =>
+      /\b(document|window|performance)\s*\./.test(
+        readFileSync(file, 'utf-8').replace(/^\s*\*.*$/gm, ''),
+      ),
+    );
+
+    // Клавиши живут в src/app и по необходимости знают про window;
+    // всё остальное здесь обязано оставаться чистым.
+    expect(offenders.filter((file) => !file.endsWith('controls.ts'))).toEqual([]);
+  });
+});
+
 describe('размер модулей', () => {
   it(`ни один файл не длиннее ${MAX_LINES} строк`, () => {
     const oversized = [...filesUnder('src'), ...filesUnder('tests')]
