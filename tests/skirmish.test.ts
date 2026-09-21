@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { MatchEvent, MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
+import type { MatchEvent, MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
@@ -9,10 +9,10 @@ const deploy = (
   side: SideId,
   roadId = 'short',
   unit: UnitKind = 'scout',
-): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
+): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
-const run = (actions: readonly ScheduledAction[], maxTicks = 3000): MatchResult =>
-  runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
+const run = (actions: readonly ScheduledRelease[], maxTicks = 3000): MatchResult =>
+  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
 
 const deaths = (events: readonly MatchEvent[]) => events.filter((e) => e.kind === 'unit-died');
 const arrivals = (events: readonly MatchEvent[]) => events.filter((e) => e.kind === 'unit-arrived');
@@ -93,7 +93,7 @@ describe('исход Стычки', () => {
 
 describe('лимит Стычки', () => {
   it('одновременно дерётся не больше положенного с каждой Стороны', () => {
-    const wave = (side: SideId): ScheduledAction[] =>
+    const wave = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
     const result = run([...wave('A'), ...wave('B')], 70);
 
@@ -105,7 +105,7 @@ describe('лимит Стычки', () => {
   });
 
   it('остальные ждут очереди, а не идут сквозь Стычку', () => {
-    const wave = (side: SideId): ScheduledAction[] =>
+    const wave = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
     const units = run([...wave('A'), ...wave('B')], 70).finalState.units;
 
@@ -113,7 +113,7 @@ describe('лимит Стычки', () => {
   });
 
   it('место выбывшего занимает следующий, и Стычка идёт до конца', () => {
-    const wave = (side: SideId): ScheduledAction[] =>
+    const wave = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 5 }, (_, index) => deploy(1 + index, side));
     const result = run([...wave('A'), ...wave('B')], 8000);
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { ScheduledAction } from '@sim/index';
+import type { ScheduledRelease } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
@@ -9,8 +9,8 @@ import { matchSetup } from './match-setup.js';
  * его посреди Тика: в браузере бросок из середины симуляции навсегда
  * останавливает цикл кадров, и экран замирает без объяснений.
  */
-const withActions = (actions: readonly ScheduledAction[]) => () =>
-  runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks: 100 }));
+const withActions = (actions: readonly ScheduledRelease[]) => () =>
+  runMatch(matchSetup({ map: arena, releases: actions, maxTicks: 100 }));
 
 describe('матч отвергает негодное расписание на входе', () => {
   it('когда Дороги нет на карте', () => {

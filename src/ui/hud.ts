@@ -20,6 +20,8 @@ export interface Hud {
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
+  /** Показать ошибку, которую игрок должен исправить сам. */
+  warn(message: string): void;
   /** Объявить исход. Победитель null означает, что время вышло вничью. */
   announce(outcome: { winner: SideId | null; tick: number } | null): void;
 }
@@ -45,6 +47,7 @@ export function createHud(): Hud {
   const outcome = element('hud-outcome');
   const ether = element('hud-ether');
   const kinds = element('hud-kinds');
+  const warning = element('hud-warning');
 
   /** Названия типов по-русски — словарь из CONTEXT.md. */
   const titles: Readonly<Record<UnitKind, string>> = {
@@ -73,6 +76,11 @@ export function createHud(): Hud {
         slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);
         slot.classList.toggle('hud__kind--broke', state.ether < UNIT_STATS[kind].cost);
       }
+    },
+
+    warn(message: string): void {
+      warning.textContent = message;
+      warning.hidden = false;
     },
 
     refuse(): void {

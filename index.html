@@ -55,6 +55,19 @@
       .hud__kind--broke { opacity: 0.4; }
       .hud__paused { color: #fbbf24; }
 
+      .hud__warning {
+        position: absolute;
+        top: 64px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: min(720px, 90vw);
+        padding: 10px 16px;
+        color: #fca5a5;
+        background: rgba(40, 10, 16, 0.85);
+        border: 1px solid rgba(248, 113, 113, 0.45);
+        border-radius: 10px;
+      }
+
       .hud__refused { animation: refused 500ms ease; }
       @keyframes refused {
         0%, 100% { color: var(--ink); }
@@ -86,6 +99,7 @@
     <div class="hud">
       <div class="hud__clock" id="hud-clock">00:00</div>
       <div class="hud__outcome" id="hud-outcome"></div>
+      <div class="hud__warning" id="hud-warning" hidden></div>
       <div class="hud__panel">
         <div class="hud__row"><span class="hud__label">эфир</span><span id="hud-ether">—</span></div>
         <div class="hud__kinds" id="hud-kinds"></div>

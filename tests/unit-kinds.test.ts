@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MELEE_RANGE, runMatch, UNIT_STATS } from '@sim/index';
-import type { MatchEvent, MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
+import type { MatchEvent, MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
 
@@ -9,10 +9,10 @@ const deploy = (
   side: SideId,
   unit: UnitKind,
   roadId = 'short',
-): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
+): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
-const run = (actions: readonly ScheduledAction[], maxTicks = 20_000): MatchResult =>
-  runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
+const run = (actions: readonly ScheduledRelease[], maxTicks = 20_000): MatchResult =>
+  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
 
 const arrivalOf = (events: readonly MatchEvent[]) => {
   const arrived = events.find((event) => event.kind === 'unit-arrived');

@@ -2,7 +2,7 @@ import { measureRoad, type RoadMetrics } from './geometry.js';
 import type {
   MatchEvent,
   MatchSetup,
-  ScheduledAction,
+  ScheduledRelease,
   SideId,
   UnitId,
   WorldSnapshot,
@@ -16,11 +16,14 @@ import {
   type Citadel,
   type InReach,
 } from './citadel.js';
+import { choose, surroundingsOn } from './behave.js';
 import { applyPlan } from './combat.js';
-import { CITADEL_STATS, SKIRMISH } from './balance.js';
+import { CITADEL_STATS } from './balance.js';
 import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } from './ether.js';
 import { planSkirmish } from './skirmish.js';
-import { createUnit, moveUnit, unitSnapshot, type Unit } from './unit.js';
+import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
+import { moveUnits } from './movement.js';
+import { createUnit, unitSnapshot, type Unit } from './unit.js';
 
 /**
  * Изменяемое состояние мира. Живёт только внутри одного матча и наружу
@@ -36,11 +39,13 @@ export interface World {
   units: Unit[];
   readonly roads: ReadonlyMap<string, RoadRuntime>;
   readonly citadels: ReadonlyMap<SideId, Citadel>;
+  /** Поведение каждой Стороны: по нему её Юниты решают, что делать. */
+  readonly behaviours: ReadonlyMap<SideId, Behaviour>;
   readonly purses: ReadonlyMap<SideId, Purse>;
   /** Сторона, чья Цитадель пала. Пока никто не пал — null. */
   defeated: SideId | null;
-  /** Действия игрока, разложенные по Тикам, на которые они назначены. */
-  readonly schedule: Map<number, ScheduledAction[]>;
+  /** Выпуски, разложенные по Тикам, на которые они назначены. */
+  readonly schedule: Map<number, ScheduledRelease[]>;
   nextUnitId: number;
 }
 
@@ -51,8 +56,8 @@ export interface RoadRuntime {
   readonly metrics: RoadMetrics;
 }
 
-/** Ставит действие игрока в очередь на указанный Тик. */
-export function schedule(world: World, action: ScheduledAction): void {
+/** Ставит Выпуск в очередь на указанный Тик. */
+export function schedule(world: World, action: ScheduledRelease): void {
   const atTick = world.schedule.get(action.tick) ?? [];
   atTick.push(action);
   world.schedule.set(action.tick, atTick);
@@ -66,6 +71,9 @@ export function createWorld(setup: MatchSetup): World {
     sides,
     units: [],
     citadels: createCitadels(sides),
+    behaviours: new Map(
+      setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
+    ),
     purses: createPurses(sides),
     defeated: null,
     roads: new Map(
@@ -78,7 +86,7 @@ export function createWorld(setup: MatchSetup): World {
     nextUnitId: 1,
   };
 
-  for (const action of setup.playerActions) schedule(world, action);
+  for (const action of setup.releases) schedule(world, action);
   return world;
 }
 
@@ -97,12 +105,36 @@ export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
 
   collectIncome(world.purses);
-  for (const action of world.schedule.get(world.tick) ?? []) applyAction(world, action, events);
+  for (const action of world.schedule.get(world.tick) ?? []) applyRelease(world, action, events);
 
+  decide(world);
   fight(world, events);
   moveUnits(world, events);
   siege(world, events);
   holdTheWalls(world, events);
+}
+
+/** Каждый Юнит выбирает Действие по Правилам своей Стороны. */
+function decide(world: World): void {
+  for (const [roadId, onRoad] of unitsByRoad(world)) {
+    const around = surroundingsOn(onRoad, roadOf(world, roadId).metrics.length);
+
+    for (const unit of onRoad) {
+      const behaviour = world.behaviours.get(unit.side) ?? DEFAULT_BEHAVIOUR;
+      const surroundings = around.get(unit.id);
+      if (surroundings) unit.intent = choose(behaviour, unit, surroundings);
+    }
+  }
+}
+
+function unitsByRoad(world: World): Map<string, Unit[]> {
+  const byRoad = new Map<string, Unit[]>();
+  for (const unit of world.units) {
+    const onRoad = byRoad.get(unit.roadId);
+    if (onRoad) onRoad.push(unit);
+    else byRoad.set(unit.roadId, [unit]);
+  }
+  return byRoad;
 }
 
 /**
@@ -141,15 +173,8 @@ function siege(world: World, events: MatchEvent[]): void {
 
 function fight(world: World, events: MatchEvent[]): void {
   const fallen = new Set<UnitId>();
-  const byRoad = new Map<string, Unit[]>();
 
-  for (const unit of world.units) {
-    const onRoad = byRoad.get(unit.roadId);
-    if (onRoad) onRoad.push(unit);
-    else byRoad.set(unit.roadId, [unit]);
-  }
-
-  for (const [roadId, onRoad] of byRoad) {
+  for (const [roadId, onRoad] of unitsByRoad(world)) {
     const plan = planSkirmish(onRoad, roadOf(world, roadId).metrics.length);
     for (const id of applyPlan(onRoad, plan, world.tick, events)) fallen.add(id);
   }
@@ -158,13 +183,13 @@ function fight(world: World, events: MatchEvent[]): void {
 }
 
 /** Расписание и карта проверены при создании матча, поэтому Дорога обязана найтись. */
-function roadOf(world: World, roadId: string): RoadRuntime {
+export function roadOf(world: World, roadId: string): RoadRuntime {
   const road = world.roads.get(roadId);
   if (!road) throw new Error(`Дороги ${roadId} нет на карте`);
   return road;
 }
 
-function applyAction(world: World, action: ScheduledAction, events: MatchEvent[]): void {
+function applyRelease(world: World, action: ScheduledRelease, events: MatchEvent[]): void {
   const road = roadOf(world, action.roadId);
 
   if (!payForUnit(world.purses.get(action.side), action.unit)) {
@@ -197,78 +222,6 @@ function applyAction(world: World, action: ScheduledAction, events: MatchEvent[]
     roadId: unit.roadId,
     unit: unit.kind,
   });
-}
-
-function moveUnits(world: World, events: MatchEvent[]): void {
-  const surviving: Unit[] = [];
-
-  for (const unit of world.units) {
-    if (unit.state !== 'moving') {
-      surviving.push(unit);
-      continue;
-    }
-
-    // Дошедший не исчезает и никуда больше не идёт: он принимается
-    // за чужую Цитадель и стоит у неё, пока его не убьют.
-    if (unit.arrived) {
-      unit.state = 'sieging';
-      surviving.push(unit);
-      continue;
-    }
-
-    if (moveUnit(unit, roadOf(world, unit.roadId).metrics)) {
-      unit.arrived = true;
-      unit.arrivedAt = world.tick;
-      unit.state = 'sieging';
-      events.push({
-        kind: 'unit-arrived',
-        tick: world.tick,
-        unitId: unit.id,
-        side: unit.side,
-        roadId: unit.roadId,
-      });
-    }
-
-    surviving.push(unit);
-  }
-
-  world.units = surviving;
-  keepFormation(world);
-}
-
-/**
- * Юнит не обгоняет своих по Дороге: догнав вышедшего раньше, он держится
- * за его спиной.
- *
- * Порядок задаёт старшинство — кто раньше вышел, тот и впереди, — а не
- * пройденный путь. Упорядочивать по пути значит узаконить обгон: быстрый
- * Стрелок, успев за Тик пройти больше Танка, становился «передним»,
- * и зажимали уже Танка. Тогда стрелять из-за спин, ради чего Стрелок
- * и заведён, было бы негде, а к стенам первым приходил бы он.
- */
-function keepFormation(world: World): void {
-  const columns = new Map<string, Unit[]>();
-
-  for (const unit of world.units) {
-    if (unit.arrived) continue;
-    const key = `${unit.roadId}:${unit.side}`;
-    const column = columns.get(key);
-    if (column) column.push(unit);
-    else columns.set(key, [unit]);
-  }
-
-  for (const column of columns.values()) {
-    column.sort((left, right) => left.id - right.id);
-
-    for (let index = 1; index < column.length; index += 1) {
-      const unit = column[index];
-      const ahead = column[index - 1];
-      if (!unit || !ahead) continue;
-      // Ниже нуля не опускаем: иначе Юнит, зажатый Колонной у самой
-      // Цитадели, уезжает за начало Дороги.
-      unit.travelled = Math.max(0, Math.min(unit.travelled, ahead.travelled - SKIRMISH.spacing));
-    }
-  }
 }
 
 export function snapshot(world: World): WorldSnapshot {

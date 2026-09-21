@@ -1,4 +1,4 @@
-import type { GameMap, MatchSetup, RoadSpec, ScheduledAction } from './types.js';
+import type { GameMap, MatchSetup, RoadSpec, ScheduledRelease } from './types.js';
 
 /**
  * Проверка целостности карты. Выполняется при запуске матча, поэтому
@@ -56,8 +56,8 @@ function validateRoad(road: RoadSpec, map: GameMap): void {
  * навсегда останавливало цикл кадров, и экран замирал без объяснений.
  * Ошибка в расписании должна обнаруживаться на входе, а не на сотом Тике.
  */
-export function validateActions(setup: MatchSetup): void {
-  for (const action of setup.playerActions) validateAction(action, setup.map, setup.maxTicks);
+export function validateReleases(setup: MatchSetup): void {
+  for (const action of setup.releases) validateRelease(action, setup.map, setup.maxTicks);
 }
 
 /**
@@ -65,7 +65,7 @@ export function validateActions(setup: MatchSetup): void {
  * игрок совершает по ходу матча: негодное действие обязано отвергаться
  * на входе, а не ронять симуляцию посреди Тика.
  */
-export function validateAction(action: ScheduledAction, map: GameMap, maxTicks: number): void {
+export function validateRelease(action: ScheduledRelease, map: GameMap, maxTicks: number): void {
   if (action.tick < 1 || action.tick > maxTicks) {
     throw new Error(`Действие на Тике ${action.tick}: вне отрезка матча`);
   }

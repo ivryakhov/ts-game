@@ -6,6 +6,7 @@
  */
 
 import type { UnitKind } from './balance.js';
+import type { Behaviour } from './rules.js';
 
 export type { UnitKind };
 
@@ -57,16 +58,18 @@ export interface GameMap {
   readonly resourcePoints: readonly ResourcePointSpec[];
 }
 
-/** Настройка одной Стороны. Поведение и экономика появятся в тикетах 09 и 12. */
+/** Настройка одной Стороны. Экономическая политика появится в тикете 12. */
 export interface SideSetup {
   readonly id: SideId;
+  /** Правила для каждого типа Юнита. Без них — Поведение по умолчанию. */
+  readonly behaviour?: Behaviour;
 }
 
 /**
  * Выпустить Юнита на Дорогу. Списание Эфира появится в тикете 07;
  * пока действие бесплатно и служит расписанием появления Юнитов.
  */
-export interface DeployAction {
+export interface Release {
   readonly tick: number;
   readonly side: SideId;
   readonly kind: 'deploy';
@@ -75,24 +78,24 @@ export interface DeployAction {
 }
 
 /**
- * Действие игрока, ещё не привязанное к Тику. Номер назначает сам матч —
+ * Выпуск, ещё не привязанный к Тику. Номер назначает сам матч —
  * ближайший не сыгранный, — поэтому воспроизводимость сохраняется
  * и на паузе, и при ускорении.
  */
-export type UnscheduledAction = Omit<DeployAction, 'tick'>;
+export type UnscheduledRelease = Omit<Release, 'tick'>;
 
 /**
- * Действие игрока, привязанное к номеру Тика, а не к реальному времени:
+ * Выпуск, привязанный к номеру Тика, а не к реальному времени:
  * иначе при ускорении воспроизведения действие «уезжает» и матч перестаёт
  * быть воспроизводимым. Словарь закрыт и растёт вместе со спекой.
  */
-export type ScheduledAction = DeployAction;
+export type ScheduledRelease = Release;
 
 export interface MatchSetup {
   readonly seed: Seed;
   readonly map: GameMap;
   readonly sides: readonly SideSetup[];
-  readonly playerActions: readonly ScheduledAction[];
+  readonly releases: readonly ScheduledRelease[];
   readonly maxTicks: number;
 }
 
@@ -143,7 +146,7 @@ export type Killer =
 
 export type EndReason = 'tick-limit' | 'citadel-destroyed';
 
-/** Почему действие игрока не исполнилось. */
+/** Почему Выпуск не состоялся. */
 export type RefusalReason = 'not-enough-ether';
 
 export type UnitId = number;
@@ -153,7 +156,7 @@ export type UnitId = number;
  * из расстановки на Дороге, а не хранится: так не бывает Юнита, который
  * помнит, что дерётся, когда драться уже не с кем.
  */
-export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging';
+export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging' | 'retreating';
 
 /**
  * Юнит глазами рендера. Положение задано долей пройденной Дороги,

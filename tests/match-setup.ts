@@ -1,5 +1,5 @@
 import { ECONOMY, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
-import type { MatchSetup, ScheduledAction, SideId, UnitKind } from '@sim/index';
+import type { MatchSetup, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 
 /**
  * Настройка матча по умолчанию для тестов: пустая карта, две Стороны,
@@ -10,7 +10,7 @@ export function matchSetup(overrides: Partial<MatchSetup> = {}): MatchSetup {
     seed: 1,
     map: { size: { width: 1200, height: 840 }, citadels: [], roads: [], resourcePoints: [] },
     sides: [{ id: 'A' }, { id: 'B' }],
-    playerActions: [],
+    releases: [],
     maxTicks: 100,
     ...overrides,
   };
@@ -26,7 +26,7 @@ export function wave(
   kinds: readonly UnitKind[],
   side: SideId = 'A',
   roadId = 'short',
-): ScheduledAction[] {
+): ScheduledRelease[] {
   const cost = kinds.reduce((sum, kind) => sum + UNIT_STATS[kind].cost, 0);
   const perTick = ECONOMY.incomePerSecond / TICKS_PER_SECOND;
   const start = Math.max(1, Math.ceil((cost - ECONOMY.startingEther) / perTick) + 1);

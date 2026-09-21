@@ -25,7 +25,7 @@ const setup = (): MatchSetup =>
     map: arena,
     seed: 4242,
     maxTicks: 100_000,
-    playerActions: ['short', 'north', 'south'].flatMap((roadId, index) => [
+    releases: ['short', 'north', 'south'].flatMap((roadId, index) => [
       {
         tick: 1 + index * 17,
         side: 'A' as const,

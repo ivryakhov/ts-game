@@ -1,4 +1,4 @@
-import { SKIRMISH } from './balance.js';
+import { MELEE_RANGE, SKIRMISH } from './balance.js';
 import type { UnitId, UnitState } from './types.js';
 import { statsOf, type Unit } from './unit.js';
 
@@ -54,15 +54,54 @@ export function planSkirmish(units: readonly Unit[], roadLength: number): Skirmi
   const reach = Math.max(...units.map((unit) => statsOf(unit).range));
   if (gap > reach) return { states, damage };
 
-  const frontOf = (column: Column): readonly Unit[] => column.ordered.slice(0, SKIRMISH.limit);
+  strike(reaching(forward, gap, roadLength), backward.ordered, roadLength, states, damage);
+  strike(reaching(backward, gap, roadLength), forward.ordered, roadLength, states, damage);
 
-  strike(reaching(forward, gap, roadLength), frontOf(backward), states, damage);
-  strike(reaching(backward, gap, roadLength), frontOf(forward), states, damage);
+  // Сошлись вплотную — сквозь врага не пройти, даже тому, кто драться
+  // не собирается. Он встаёт и ждёт, а не проходит насквозь.
+  if (gap <= MELEE_RANGE) {
+    for (const column of [forward, backward]) {
+      const leader = column.ordered[0];
+      if (leader && leader.intent !== 'retreat' && states.get(leader.id) === 'moving') {
+        states.set(leader.id, 'waiting');
+      }
+    }
+  }
 
   queueUp(forward.ordered, roadLength, states);
   queueUp(backward.ordered, roadLength, states);
 
   return { states, damage };
+}
+
+/**
+ * Дотягивается ли Юнит до врага — сам или в свалке своей Колонны.
+ *
+ * Это и есть смысл Условия «враг в радиусе атаки». Оно обязано совпадать
+ * с тем, что Стычка считает «дотянулся»: иначе второй ряд свалки, стоящий
+ * чуть позади переднего края, видел бы врага вне радиуса, его Правило
+ * велело бы идти, и лимит Стычки оставался бы мёртвой буквой.
+ */
+function reaches(unit: Unit, column: Column, gap: number, roadLength: number): boolean {
+  const behind = Math.abs(positionOn(unit, roadLength) - column.frontier);
+  const range = statsOf(unit).range;
+  return statsOf(unit).ranged ? gap + behind <= range : gap <= range && behind <= range;
+}
+
+/** Все Юниты Дороги, до которых враг в досягаемости, — для Условий Правил. */
+export function inReach(units: readonly Unit[], roadLength: number): Set<UnitId> {
+  const result = new Set<UnitId>();
+  const forward = columnOf(units, roadLength, true);
+  const backward = columnOf(units, roadLength, false);
+  if (!forward || !backward) return result;
+
+  const gap = backward.frontier - forward.frontier;
+  for (const column of [forward, backward]) {
+    for (const unit of column.ordered) {
+      if (reaches(unit, column, gap, roadLength)) result.add(unit.id);
+    }
+  }
+  return result;
 }
 
 /**
@@ -83,15 +122,15 @@ function reaching(column: Column, gap: number, roadLength: number): readonly Uni
   const ranged: Unit[] = [];
 
   for (const unit of column.ordered) {
-    const behind = Math.abs(positionOn(unit, roadLength) - column.frontier);
-    const range = statsOf(unit).range;
+    // Драться хочет не каждый: Правило могло велеть только идти.
+    if (unit.intent !== 'attack-nearest') continue;
+    if (!reaches(unit, column, gap, roadLength)) continue;
 
     if (!statsOf(unit).ranged) {
-      if (gap <= range && behind <= range && melee.length < SKIRMISH.limit) melee.push(unit);
+      if (melee.length < SKIRMISH.limit) melee.push(unit);
       continue;
     }
-
-    if (gap + behind <= range) ranged.push(unit);
+    ranged.push(unit);
   }
 
   return [...melee, ...ranged];
@@ -102,6 +141,12 @@ function reaching(column: Column, gap: number, roadLength: number): readonly Uni
  * чужой Цитадели, остаётся на Дороге, его можно атаковать, и он сам
  * перекрывает путь защитникам. Без этого осада была бы необратимой,
  * а оборонять свою Цитадель — нечем.
+ */
+/**
+ * Отступающий входит в Колонну наравне со всеми: он остаётся на Дороге,
+ * и враг, дотянувшись, бьёт его в спину. Не бить и не держаться за своими —
+ * это его выбор; неуязвимости он не даёт. Скрытая неуязвимость была бы
+ * правилом, которого игрок не видит (ADR-0002).
  */
 function columnOf(units: readonly Unit[], roadLength: number, forward: boolean): Column | null {
   const own = units.filter((unit) => unit.forward === forward);
@@ -119,29 +164,38 @@ function columnOf(units: readonly Unit[], roadLength: number, forward: boolean):
   return { ordered, frontier: positionOn(leader, roadLength) };
 }
 
-/** Каждый боец бьёт своего противника; лишние распределяются по кругу. */
+/**
+ * Каждый боец бьёт ближайшего к себе врага — так и велит Действие
+ * «атаковать ближайшего». При равном расстоянии — вышедшего раньше.
+ */
 function strike(
   attackers: readonly Unit[],
   defenders: readonly Unit[],
+  roadLength: number,
   states: Map<UnitId, UnitState>,
   damage: Map<UnitId, Incoming>,
 ): void {
   if (defenders.length === 0) return;
 
-  attackers.forEach((attacker, index) => {
+  for (const attacker of attackers) {
     states.set(attacker.id, 'fighting');
-    const target = defenders[index % defenders.length];
-    if (!target) return;
+    const here = positionOn(attacker, roadLength);
+    const target = [...defenders].sort(
+      (left, right) =>
+        Math.abs(positionOn(left, roadLength) - here) -
+          Math.abs(positionOn(right, roadLength) - here) || left.id - right.id,
+    )[0];
+    if (!target) continue;
 
     const blow = statsOf(attacker).damagePerTick;
     const incoming = damage.get(target.id);
     if (incoming) {
       incoming.damage += blow;
       incoming.lastAttacker = attacker.id;
-      return;
+      continue;
     }
     damage.set(target.id, { damage: blow, lastAttacker: attacker.id });
-  });
+  }
 }
 
 /**
@@ -160,6 +214,8 @@ function queueUp(
     if (!unit || !ahead) continue;
     if (states.get(unit.id) === 'fighting') continue;
     if (states.get(ahead.id) === 'moving') continue;
+
+    if (unit.intent === 'retreat') continue;
 
     const gap = Math.abs(positionOn(unit, roadLength) - positionOn(ahead, roadLength));
     if (gap <= SKIRMISH.spacing) states.set(unit.id, 'waiting');

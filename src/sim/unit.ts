@@ -1,4 +1,5 @@
 import { UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
+import type { Action } from './rules.js';
 import type { RoadMetrics } from './geometry.js';
 import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 
@@ -22,7 +23,14 @@ export interface Unit {
   travelled: number;
   /** Выводится заново каждый Тик из расстановки на Дороге. */
   state: UnitState;
-  /** Дошёл ли Юнит до конца своей Дороги. Обратно не меняется. */
+  /**
+   * Что Юнит решил делать в этот Тик по своим Правилам. Решение
+   * принимается заново каждый Тик, до Стычки и движения.
+   */
+  intent: Action['kind'];
+  /**
+   * Стоит ли Юнит у чужой Цитадели. Сбрасывается, если он отступил от стен.
+   */
   arrived: boolean;
   /**
    * Тик, на котором Юнит встал у чужой Цитадели. Стены бьют пришедшего
@@ -53,6 +61,7 @@ export function createUnit(
     forward,
     travelled: 0,
     state: 'moving',
+    intent: 'advance',
     arrived: false,
     arrivedAt: null,
     hp: stats.maxHp,
@@ -60,10 +69,15 @@ export function createUnit(
   };
 }
 
-/** Двигает Юнита на один Тик. Возвращает true, если он дошёл до конца Дороги. */
-export function moveUnit(unit: Unit, road: RoadMetrics): boolean {
-  unit.travelled = Math.min(road.length, unit.travelled + statsOf(unit).speedPerTick);
-  return unit.travelled >= road.length;
+/** Двигает Юнита на один Тик вперёд. Возвращает true, если он дошёл до конца Дороги. */
+export function moveUnit(unit: Unit, roadLength: number): boolean {
+  unit.travelled = Math.min(roadLength, unit.travelled + statsOf(unit).speedPerTick);
+  return unit.travelled >= roadLength;
+}
+
+/** Отводит Юнита на один Тик назад, к своей Цитадели, но не дальше неё. */
+export function withdrawUnit(unit: Unit): void {
+  unit.travelled = Math.max(0, unit.travelled - statsOf(unit).speedPerTick);
 }
 
 export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { MatchEvent, ScheduledAction } from '@sim/index';
+import type { MatchEvent, ScheduledRelease } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
-const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledAction => ({
+const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledRelease => ({
   tick,
   side,
   kind: 'deploy',
@@ -12,8 +12,8 @@ const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledA
   unit: 'scout',
 });
 
-function run(actions: readonly ScheduledAction[], maxTicks = 1000) {
-  return runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
+function run(actions: readonly ScheduledRelease[], maxTicks = 1000) {
+  return runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
 }
 
 const arrivals = (events: readonly MatchEvent[]) =>

@@ -2,6 +2,14 @@
 export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export {
+  DEFAULT_BEHAVIOUR,
+  parseBehaviour,
+  type Action,
+  type Behaviour,
+  type Condition,
+  type Rule,
+} from './rules.js';
+export {
   CITADEL_STATS,
   ECONOMY,
   MELEE_RANGE,
@@ -13,7 +21,7 @@ export type { UnitKind, UnitStats } from './balance.js';
 export type {
   CitadelSnapshot,
   CitadelSpec,
-  DeployAction,
+  Release,
   EtherSnapshot,
   EndReason,
   GameMap,
@@ -24,11 +32,11 @@ export type {
   MapSize,
   MatchStats,
   Point,
-  UnscheduledAction,
+  UnscheduledRelease,
   RefusalReason,
   ResourcePointSpec,
   RoadSpec,
-  ScheduledAction,
+  ScheduledRelease,
   Seed,
   SideId,
   SideSetup,

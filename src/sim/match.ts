@@ -1,8 +1,9 @@
-import { validateAction, validateActions, validateMap } from './map-validation.js';
+import { validateRelease, validateReleases, validateMap } from './map-validation.js';
 import { createRng } from './rng.js';
+import { parseBehaviour } from './rules.js';
 import type {
   EndReason,
-  UnscheduledAction,
+  UnscheduledRelease,
   MatchEvent,
   MatchResult,
   MatchSetup,
@@ -33,7 +34,7 @@ export interface LiveMatch {
    * Негодное действие отвергается здесь же: бросок из середины Тика
    * навсегда остановил бы цикл кадров в браузере.
    */
-  deploy(action: UnscheduledAction): void;
+  deploy(action: UnscheduledRelease): void;
   readonly finished: boolean;
   /** Победитель, когда матч окончен; иначе null. */
   readonly winner: SideId | null;
@@ -43,7 +44,12 @@ export interface LiveMatch {
 
 export function createMatch(setup: MatchSetup): LiveMatch {
   validateMap(setup.map);
-  validateActions(setup);
+  validateReleases(setup);
+  // Поведение проверяется на входе, как карта и расписание: заданное
+  // в коде проходит ту же проверку, что и прочитанное из файла.
+  for (const side of setup.sides) {
+    if (side.behaviour) parseBehaviour(side.behaviour);
+  }
 
   const rng = createRng(setup.seed);
   const world: World = createWorld(setup);
@@ -81,10 +87,10 @@ export function createMatch(setup: MatchSetup): LiveMatch {
 
     snapshot: () => snapshot(world),
 
-    deploy(action: UnscheduledAction): void {
+    deploy(action: UnscheduledRelease): void {
       if (ended) return;
       const scheduled = { ...action, tick: world.tick + 1 };
-      validateAction(scheduled, setup.map, setup.maxTicks);
+      validateRelease(scheduled, setup.map, setup.maxTicks);
       schedule(world, scheduled);
     },
 

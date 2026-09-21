@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
+import type { MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
 
@@ -9,17 +9,17 @@ const deploy = (
   side: SideId,
   roadId = 'short',
   unit: UnitKind = 'scout',
-): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
+): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
-const run = (actions: readonly ScheduledAction[], maxTicks = 20_000): MatchResult =>
-  runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
+const run = (actions: readonly ScheduledRelease[], maxTicks = 20_000): MatchResult =>
+  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
 
 /**
  * Осада по средствам: первых пятерых покрывает стартовый запас Эфира,
  * дальше приходится ждать, пока накопится на следующего.
  */
 const AFFORDABLE_GAP = 80;
-const siege = (count: number, side: SideId = 'A'): ScheduledAction[] =>
+const siege = (count: number, side: SideId = 'A'): ScheduledRelease[] =>
   Array.from({ length: count }, (_, index) =>
     deploy(1 + (index < 5 ? index * 3 : 15 + (index - 4) * AFFORDABLE_GAP), side),
   );

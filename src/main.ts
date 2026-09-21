@@ -6,10 +6,11 @@
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
  */
-import { createMatch, TICKS_PER_SECOND, UNIT_KINDS } from '@sim/index';
+import { createMatch, DEFAULT_BEHAVIOUR, parseBehaviour, TICKS_PER_SECOND, UNIT_KINDS } from '@sim/index';
 import type {
+  Behaviour,
   MatchSetup,
-  ScheduledAction,
+  ScheduledRelease,
   SideId,
   UnitId,
   UnitKind,
@@ -19,6 +20,7 @@ import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
 import { bindUnitChoice } from './app/unit-choice.js';
+import playerRules from './behaviours/player.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
@@ -44,9 +46,9 @@ function seedFromLocation(): number {
  * поведением станет набор Правил (ADR-0003). Пока он шлёт волны по
  * очереди на каждую Дорогу, насколько хватает Эфира.
  */
-function opponentSchedule(): ScheduledAction[] {
+function opponentSchedule(): ScheduledRelease[] {
   const roads = arena.roads.map((road) => road.id);
-  const actions: ScheduledAction[] = [];
+  const actions: ScheduledRelease[] = [];
 
   for (let wave = 0; wave < DEMO_WAVES; wave += 1) {
     const roadId = roads[wave % roads.length] ?? 'short';
@@ -69,12 +71,30 @@ function opponentSchedule(): ScheduledAction[] {
 /** За кого играет человек. Выбор Стороны появится вместе с меню матча. */
 const PLAYER_SIDE: SideId = 'A';
 
+/**
+ * Поведение игрока из файла src/behaviours/player.json. Файл правит
+ * человек, поэтому опечатка в нём — обычное дело: вместо молча стоящих
+ * Юнитов игрок видит, где именно ошибся, а матч идёт с Поведением
+ * по умолчанию.
+ */
+function loadPlayerBehaviour(): { behaviour: Behaviour; problem: string | null } {
+  try {
+    return { behaviour: parseBehaviour(playerRules), problem: null };
+  } catch (error) {
+    return {
+      behaviour: DEFAULT_BEHAVIOUR,
+      problem: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 const seed = seedFromLocation();
+const player = loadPlayerBehaviour();
 const setup: MatchSetup = {
   seed,
   map: arena,
-  sides: [{ id: 'A' }, { id: 'B' }],
-  playerActions: opponentSchedule(),
+  sides: [{ id: 'A', behaviour: player.behaviour }, { id: 'B' }],
+  releases: opponentSchedule(),
   // Запас нужен, чтобы матч успел дойти до разрушения Цитадели,
   // а не упёрся в предел Тиков.
   maxTicks: DEMO_WAVES * DEPLOY_PERIOD + 6000,
@@ -85,6 +105,7 @@ if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud();
+if (player.problem) hud.warn(`Файл Поведения отвергнут — ${player.problem}`);
 const pacer = createPacer(TICKS_PER_SECOND);
 const match = createMatch(setup);
 /** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */

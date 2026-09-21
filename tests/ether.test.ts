@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMatch, runMatch, TICKS_PER_SECOND } from '@sim/index';
-import type { MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
+import type { MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
@@ -9,10 +9,10 @@ const deploy = (
   side: SideId = 'A',
   roadId = 'short',
   unit: UnitKind = 'scout',
-): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
+): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
-const run = (actions: readonly ScheduledAction[], maxTicks = 400): MatchResult =>
-  runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
+const run = (actions: readonly ScheduledRelease[], maxTicks = 400): MatchResult =>
+  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
 
 const etherOf = (result: MatchResult, side: SideId = 'A') =>
   result.finalState.ether.find((purse) => purse.side === side)?.amount ?? 0;
