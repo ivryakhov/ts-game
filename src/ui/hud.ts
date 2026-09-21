@@ -1,5 +1,6 @@
 import { TICKS_PER_SECOND, UNIT_KINDS, UNIT_STATS } from '@sim/index';
 import type { SideId, UnitKind } from '@sim/index';
+import { UNIT_TITLES } from './rule-text.js';
 import type { Speed } from '../app/pacer.js';
 
 /**
@@ -49,17 +50,10 @@ export function createHud(): Hud {
   const kinds = element('hud-kinds');
   const warning = element('hud-warning');
 
-  /** Названия типов по-русски — словарь из CONTEXT.md. */
-  const titles: Readonly<Record<UnitKind, string>> = {
-    scout: 'Разведчик',
-    tank: 'Танк',
-    ranger: 'Стрелок',
-  };
-
   const slots = UNIT_KINDS.map((kind, index) => {
     const slot = document.createElement('span');
     slot.className = 'hud__kind';
-    slot.textContent = `${index + 1} ${titles[kind]} ${UNIT_STATS[kind].cost}`;
+    slot.textContent = `${index + 1} ${UNIT_TITLES[kind]} ${UNIT_STATS[kind].cost}`;
     kinds.append(slot);
     return { kind, slot };
   });

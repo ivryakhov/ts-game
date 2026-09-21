@@ -6,10 +6,18 @@ import type {
   SideId,
   UnitSnapshot,
 } from '@sim/index';
-import { CITADEL_STATS, measureRoad, roadPolyline } from '@sim/index';
-import { ALARM, BACKGROUND, PICK_RADIUS, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
+import { measureRoad, roadPolyline } from '@sim/index';
+import {
+  BACKGROUND,
+  PICK_RADIUS,
+  ROAD,
+  SIDE_COLORS,
+  UNIT_VISUAL,
+  withAlpha,
+} from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
 import { drawCitadel } from './citadels.js';
+import { createOverlays } from './overlays.js';
 import { createFading } from './fading.js';
 import { drawUnit, hindsight } from './units.js';
 
@@ -39,8 +47,8 @@ export function createCanvasRenderer(
     map.roads.map((road) => [road.id, measureRoad(road)]),
   );
   const fading = createFading();
-  /** Когда по часам в последний раз досталось Цитадели игрока. */
-  let alarmedAtMs = Number.NEGATIVE_INFINITY;
+  /** Где нарисован каждый Юнит в последнем кадре — чтобы найти его по клику. */
+  let lastPlaces: ReadonlyMap<number, Point> = new Map();
   let cssWidth = 0;
   let cssHeight = 0;
 
@@ -52,6 +60,15 @@ export function createCanvasRenderer(
   const toMap = (x: number, y: number): Point => ({
     x: (x - view.offsetX) / view.scale,
     y: (y - view.offsetY) / view.scale,
+  });
+
+  const overlays = createOverlays({
+    context,
+    map,
+    playerSide,
+    roadMetrics,
+    toScreen,
+    scaled,
   });
 
   /** Форма Дороги приходит из ядра ломаной: здесь не знают про Безье. */
@@ -153,71 +170,6 @@ export function createCanvasRenderer(
     return toScreen(road.pointAtDistance(progress * road.length));
   }
 
-  /**
-   * Где начинается огонь со стен. Радиус меряется вдоль Дороги, а не по
-   * прямой, поэтому это засечки на самих Дорогах, а не круг вокруг
-   * Цитадели: круг соврал бы на изгибах.
-   */
-  function drawWallReach(): void {
-    for (const road of map.roads) {
-      const metrics = roadMetrics.get(road.id);
-      if (!metrics || metrics.length <= CITADEL_STATS.range * 2) continue;
-
-      for (const [side, distance] of [
-        [road.from, CITADEL_STATS.range],
-        [road.to, metrics.length - CITADEL_STATS.range],
-      ] as const) {
-        const mark = toScreen(metrics.pointAtDistance(distance));
-        context.save();
-        context.fillStyle = withAlpha(SIDE_COLORS[side], 0.55);
-        context.beginPath();
-        context.arc(mark.x, mark.y, scaled(ROAD.reachMarkRadius), 0, Math.PI * 2);
-        context.fill();
-        context.restore();
-      }
-    }
-  }
-
-  /**
-   * Луч от Цитадели к той, кого она бьёт. Правило «стены бьют ближайшего,
-   * а из стоящих вплотную — пришедшего первым» должно читаться с экрана:
-   * игрок на него опирается, выпуская Танка вперёд (ADR-0002).
-   */
-  function drawWallFire(frame: Frame, places: ReadonlyMap<number, Point>): void {
-    for (const health of frame.current.citadels) {
-      if (health.target === null || health.hp <= 0) continue;
-      const spec = map.citadels.find((citadel) => citadel.side === health.side);
-      const target = places.get(health.target);
-      if (!spec || !target) continue;
-
-      const from = toScreen(spec.at);
-      context.save();
-      context.strokeStyle = withAlpha(SIDE_COLORS[health.side], 0.75);
-      context.lineWidth = scaled(ROAD.wallFireWidth);
-      context.setLineDash([scaled(6), scaled(5)]);
-      context.lineDashOffset = -scaled(frame.matchMs / 12);
-      context.beginPath();
-      context.moveTo(from.x, from.y);
-      context.lineTo(target.x, target.y);
-      context.stroke();
-      context.restore();
-    }
-  }
-
-  /**
-   * Слой тревоги поверх поля, когда бьют Цитадель игрока: заметить угрозу
-   * можно, даже глядя в другой угол карты.
-   */
-  function drawAlarm(frame: Frame): void {
-    if (frame.citadelHits.has(playerSide)) alarmedAtMs = frame.realMs;
-
-    const age = frame.realMs - alarmedAtMs;
-    if (age < 0 || age > ALARM.fadeMs) return;
-
-    context.fillStyle = withAlpha(SIDE_COLORS[playerSide], ALARM.maxAlpha * (1 - age / ALARM.fadeMs));
-    context.fillRect(0, 0, cssWidth, cssHeight);
-  }
-
   return {
     resize(width: number, height: number): void {
       const ratio = window.devicePixelRatio || 1;
@@ -232,6 +184,19 @@ export function createCanvasRenderer(
       view.scale = Math.min(width / map.size.width, height / map.size.height);
       view.offsetX = (width - map.size.width * view.scale) / 2;
       view.offsetY = (height - map.size.height * view.scale) / 2;
+    },
+
+    unitAt(x: number, y: number): number | null {
+      let nearest: { id: number; distance: number } | null = null;
+      const reach = Math.max(scaled(UNIT_VISUAL.pickRadius), 10);
+
+      for (const [id, place] of lastPlaces) {
+        const distance = Math.hypot(place.x - x, place.y - y);
+        if (distance > reach) continue;
+        if (!nearest || distance < nearest.distance) nearest = { id, distance };
+      }
+
+      return nearest?.id ?? null;
     },
 
     roadAt(x: number, y: number): string | null {
@@ -254,7 +219,7 @@ export function createCanvasRenderer(
       for (const road of map.roads) {
         drawRoad(road, frame.matchMs, road.id === frame.highlightedRoad);
       }
-      drawWallReach();
+      overlays.wallReach();
       for (const citadel of map.citadels) {
         drawCitadel(
           context,
@@ -280,10 +245,12 @@ export function createCanvasRenderer(
         places.set(unit.id, place);
         drawUnit(context, unit, place, view.scale, { flash: seen.flashOf(unit, frame.alpha) });
       }
+      lastPlaces = places;
 
-      drawWallFire(frame, places);
+      overlays.wallFire(frame, places);
+      overlays.selection(frame, places);
 
-      drawAlarm(frame);
+      overlays.alarm(frame, cssWidth, cssHeight);
     },
   };
 }

@@ -24,6 +24,7 @@ import playerRules from './behaviours/player.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
+import { createInspector } from './ui/inspector.js';
 
 /** Сколько Тиков между волнами. */
 const DEPLOY_PERIOD = 90;
@@ -111,8 +112,22 @@ const match = createMatch(setup);
 /** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */
 let chosenKind: UnitKind = 'scout';
 
-const pointer = bindPointer(canvas, renderer, (roadId) => {
-  match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
+/** Юнит, чьё Поведение игрок разбирает. */
+let selectedUnit: UnitId | null = null;
+
+/** Поведение Стороны — то самое, что передано в матч, а не вторая копия. */
+const behaviourOf = (side: SideId): Behaviour =>
+  setup.sides.find((entry) => entry.id === side)?.behaviour ?? DEFAULT_BEHAVIOUR;
+const inspector = createInspector(behaviourOf);
+
+const pointer = bindPointer(canvas, renderer, {
+  onRelease(roadId) {
+    match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
+  },
+  onSelect(unit) {
+    selectedUnit = unit;
+  },
+  selected: () => selectedUnit,
 });
 
 let previous: WorldSnapshot = match.snapshot();
@@ -169,7 +184,13 @@ function frame(nowMs: number): void {
     matchMs,
     realMs: nowMs,
     highlightedRoad: pointer.hovered,
+    selectedUnit,
   });
+
+  // Выделенный погиб или дошёл до конца — выделение снимается само.
+  const selected = current.units.find((unit) => unit.id === selectedUnit) ?? null;
+  if (!selected) selectedUnit = null;
+  inspector.show(selected, current);
   const purse = current.ether.find((entry) => entry.side === PLAYER_SIDE);
   hud.update({
     tick: current.tick,

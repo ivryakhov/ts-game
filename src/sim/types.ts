@@ -182,6 +182,10 @@ export interface UnitSnapshot {
    * может и драться у своих ворот, и лечиться одновременно.
    */
   readonly healing: boolean;
+  /** Номер Правила его Поведения, исполняемого в этот Тик, считая с нуля. */
+  readonly rule: number;
+  /** Кого он бьёт в этот Тик; null — никого. */
+  readonly target: UnitId | null;
   readonly hp: number;
   readonly maxHp: number;
 }

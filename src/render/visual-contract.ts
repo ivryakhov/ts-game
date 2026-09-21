@@ -66,6 +66,11 @@ export const UNIT_VISUAL = {
   /** Кольцо вокруг Юнита, которого лечит своя Цитадель. */
   recoveryColor: '#4ade80',
   recoveryRing: 1.7,
+  /** Выделенный игроком Юнит и линия к его цели. */
+  selectionColor: '#fde047',
+  selectionRing: 2.2,
+  /** Насколько близко к Юниту должен быть курсор, чтобы его выделить. */
+  pickRadius: 18,
 } as const;
 
 /**

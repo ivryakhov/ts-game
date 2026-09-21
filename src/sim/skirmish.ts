@@ -26,6 +26,8 @@ export interface Incoming {
 export interface SkirmishPlan {
   readonly states: ReadonlyMap<UnitId, UnitState>;
   readonly damage: ReadonlyMap<UnitId, Incoming>;
+  /** Кого бьёт каждый атакующий — для показа игроку. */
+  readonly targets: ReadonlyMap<UnitId, UnitId>;
 }
 
 /** Положение Юнита вдоль Дороги, считая от её начала. */
@@ -46,17 +48,19 @@ interface Column {
 export function planSkirmish(units: readonly Unit[], roadLength: number): SkirmishPlan {
   const states = new Map<UnitId, UnitState>(units.map((unit) => [unit.id, 'moving']));
   const damage = new Map<UnitId, Incoming>();
+  const targets = new Map<UnitId, UnitId>();
+  const plan = { states, damage, targets };
 
   const forward = columnOf(units, roadLength, true);
   const backward = columnOf(units, roadLength, false);
-  if (!forward || !backward) return { states, damage };
+  if (!forward || !backward) return plan;
 
   const gap = backward.frontier - forward.frontier;
   const reach = Math.max(...units.map((unit) => statsOf(unit).range));
-  if (gap > reach) return { states, damage };
+  if (gap > reach) return plan;
 
-  strike(reaching(forward, gap, roadLength), forward.frontier, backward, roadLength, states, damage);
-  strike(reaching(backward, gap, roadLength), backward.frontier, forward, roadLength, states, damage);
+  strike(reaching(forward, gap, roadLength), forward.frontier, backward, roadLength, plan);
+  strike(reaching(backward, gap, roadLength), backward.frontier, forward, roadLength, plan);
 
   // Сошлись вплотную — сквозь врага не пройти, даже тому, кто драться
   // не собирается. Он встаёт и ждёт, а не проходит насквозь.
@@ -72,7 +76,7 @@ export function planSkirmish(units: readonly Unit[], roadLength: number): Skirmi
   queueUp(forward.ordered, roadLength, states);
   queueUp(backward.ordered, roadLength, states);
 
-  return { states, damage };
+  return plan;
 }
 
 /**
@@ -221,15 +225,20 @@ function strike(
   ownFrontier: number,
   enemies: Column,
   roadLength: number,
-  states: Map<UnitId, UnitState>,
-  damage: Map<UnitId, Incoming>,
+  plan: {
+    states: Map<UnitId, UnitState>;
+    damage: Map<UnitId, Incoming>;
+    targets: Map<UnitId, UnitId>;
+  },
 ): void {
+  const { states, damage, targets } = plan;
   for (const attacker of attackers) {
     const candidates = withinReach(attacker, ownFrontier, enemies, roadLength);
     const target = pickTarget(attacker, candidates, roadLength);
     // Некого достать — нечего и бить: Юнит не встаёт в Стычку впустую.
     if (!target) continue;
     states.set(attacker.id, 'fighting');
+    targets.set(attacker.id, target.id);
 
     const blow = statsOf(attacker).damagePerTick;
     const incoming = damage.get(target.id);

@@ -52,13 +52,21 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
 }
 
 /**
- * Действие первого Правила, чьё Условие истинно. Разбор Поведения требует,
- * чтобы последнее Правило было «always», поэтому что-то сработает всегда —
- * скрытого запасного действия нет.
+ * Первое Правило, чьё Условие истинно: его Действие и номер. Разбор
+ * Поведения требует, чтобы последнее Правило было «always», поэтому что-то
+ * сработает всегда — скрытого запасного действия нет.
+ *
+ * Номер нужен игроку: по нему видно, какое именно Правило движет Юнитом.
  */
-export function choose(behaviour: Behaviour, unit: Unit, around: Surroundings): Action {
-  for (const rule of behaviour[unit.kind]) {
-    if (holds(rule.when, unit, around)) return rule.do;
+export function choose(
+  behaviour: Behaviour,
+  unit: Unit,
+  around: Surroundings,
+): { action: Action; rule: number } {
+  const rules = behaviour[unit.kind];
+  for (let index = 0; index < rules.length; index += 1) {
+    const rule = rules[index];
+    if (rule && holds(rule.when, unit, around)) return { action: rule.do, rule: index };
   }
   throw new Error(`Поведение ${unit.kind}: не сработало ни одно Правило — разбор пропустил дыру`);
 }

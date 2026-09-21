@@ -28,6 +28,10 @@ export interface Unit {
    * принимается заново каждый Тик, до Стычки и движения.
    */
   intent: Action;
+  /** Номер Правила, давшего это Действие, — для показа игроку. */
+  rule: number;
+  /** Кого он бьёт в этот Тик; выставляется Стычкой. */
+  target: UnitId | null;
   /**
    * Стоит ли Юнит у чужой Цитадели. Сбрасывается, если он отступил от стен.
    */
@@ -78,6 +82,8 @@ export function createUnit(
     travelled: 0,
     state: 'moving',
     intent: { kind: 'advance' },
+    rule: 0,
+    target: null,
     arrived: false,
     arrivedAt: null,
     hp: stats.maxHp,
@@ -110,6 +116,8 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     progress: unit.forward ? covered : 1 - covered,
     state: unit.state,
     healing: unit.healing,
+    rule: unit.rule,
+    target: unit.target,
     hp: unit.hp,
     maxHp: unit.maxHp,
   };

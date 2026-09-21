@@ -21,6 +21,8 @@ export interface Renderer {
    * проходит Дорога.
    */
   roadAt(x: number, y: number): string | null;
+  /** Какой Юнит нарисован под точкой экрана в последнем кадре. */
+  unitAt(x: number, y: number): UnitId | null;
 }
 
 export interface Frame {
@@ -50,4 +52,6 @@ export interface Frame {
   readonly citadelHits: ReadonlySet<SideId>;
   /** Дорога под курсором — её подсвечивают как выбранную. */
   readonly highlightedRoad: string | null;
+  /** Юнит, которого игрок выделил, чтобы разобрать его Поведение. */
+  readonly selectedUnit: UnitId | null;
 }

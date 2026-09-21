@@ -139,7 +139,10 @@ function decide(world: World): void {
     for (const unit of onRoad) {
       const behaviour = world.behaviours.get(unit.side) ?? DEFAULT_BEHAVIOUR;
       const surroundings = around.get(unit.id);
-      if (surroundings) unit.intent = choose(behaviour, unit, surroundings);
+      if (!surroundings) continue;
+      const decision = choose(behaviour, unit, surroundings);
+      unit.intent = decision.action;
+      unit.rule = decision.rule;
     }
   }
 }
@@ -242,10 +245,16 @@ function applyRelease(world: World, action: ScheduledRelease, events: MatchEvent
 }
 
 export function snapshot(world: World): WorldSnapshot {
+  const alive = new Set(world.units.map((unit) => unit.id));
   return {
     tick: world.tick,
     sides: [...world.sides],
-    units: world.units.map((unit) => unitSnapshot(unit, roadOf(world, unit.roadId).metrics)),
+    // Цель, погибшая в этом же Тике — от удара в Стычке или со стен, —
+    // из снимка убирается: ссылаться на Юнита, которого уже нет, незачем.
+    units: world.units.map((unit) => {
+      const shown = unitSnapshot(unit, roadOf(world, unit.roadId).metrics);
+      return shown.target !== null && !alive.has(shown.target) ? { ...shown, target: null } : shown;
+    }),
     citadels: citadelSnapshots(world.citadels),
     ether: etherSnapshots(world.purses),
   };
