@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
 import type { MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
 
 const deploy = (
   tick: number,
@@ -55,7 +55,9 @@ describe('Юниты у чужой Цитадели', () => {
     // в первом он осаждает Цитадель, во втором дерётся в Стычке. Сравнение
     // с живым уроном, а не с записанной в тест цифрой, — иначе правка
     // баланса тихо разъедется с проверкой.
-    const ticksOfHitting = 50;
+    // Короче, чем живёт одинокий Разведчик у стен: иначе замер урона
+    // по Цитадели оборвётся его смертью раньше конца окна.
+    const ticksOfHitting = 30;
 
     const arrival = (
       run(siege(1)).events.find((event) => event.kind === 'unit-arrived') as { tick: number }
@@ -115,20 +117,20 @@ describe('оборона своей Цитадели', () => {
 
 describe('исход матча', () => {
   it('разрушение Цитадели завершает матч победой другой Стороны', () => {
-    const result = run(siege(12));
+    const result = run(wave(STORMING_PARTY));
 
     expect(result.endReason).toBe('citadel-destroyed');
     expect(result.winner).toBe('A');
   });
 
   it('матч кончается раньше лимита Тиков', () => {
-    const result = run(siege(12));
+    const result = run(wave(STORMING_PARTY));
 
     expect(result.ticks).toBeLessThan(20_000);
   });
 
   it('сообщает, когда именно рухнула Цитадель', () => {
-    const result = run(siege(12));
+    const result = run(wave(STORMING_PARTY));
     const fall = result.events.find((event) => event.kind === 'citadel-destroyed');
 
     expect(fall && 'side' in fall ? fall.side : null).toBe('B');
@@ -143,6 +145,6 @@ describe('исход матча', () => {
   });
 
   it('два прогона осады совпадают полностью', () => {
-    expect(run(siege(12))).toEqual(run(siege(12)));
+    expect(run(wave(STORMING_PARTY))).toEqual(run(wave(STORMING_PARTY)));
   });
 });

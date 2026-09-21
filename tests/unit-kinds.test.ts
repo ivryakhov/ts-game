@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { ECONOMY, MELEE_RANGE, runMatch, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
+import { MELEE_RANGE, runMatch, UNIT_STATS } from '@sim/index';
 import type { MatchEvent, MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
 
 const deploy = (
   tick: number,
@@ -107,13 +107,6 @@ describe('Стрелок и ближняя свалка', () => {
 });
 
 describe('против отвечающей Цитадели одним типом не обойтись', () => {
-  /** Копим на всю армию и выпускаем волной, Танки первыми. */
-  const wave = (kinds: readonly UnitKind[]): ScheduledAction[] => {
-    const cost = kinds.reduce((sum, kind) => sum + UNIT_STATS[kind].cost, 0);
-    const perTick = ECONOMY.incomePerSecond / TICKS_PER_SECOND;
-    const start = Math.max(1, Math.ceil((cost - ECONOMY.startingEther) / perTick) + 1);
-    return kinds.map((kind, index) => deploy(start + index, 'A', kind));
-  };
   const lostOf = (result: MatchResult) =>
     result.events.filter((event) => event.kind === 'unit-died').length;
 
@@ -129,28 +122,37 @@ describe('против отвечающей Цитадели одним типо
     expect(result.endReason).not.toBe('citadel-destroyed');
   });
 
-  it('Танки впереди, Стрелки за спиной — берут, почти без потерь', () => {
-    const result = run(wave(['tank', 'tank', 'ranger', 'ranger']), 60_000);
+  it('Танки впереди, Стрелки за спиной — берут, потеряв меньше половины', () => {
+    const result = run(wave(STORMING_PARTY), 60_000);
 
     expect(result.endReason).toBe('citadel-destroyed');
-    expect(lostOf(result)).toBeLessThanOrEqual(1);
+    expect(lostOf(result)).toBeLessThan(STORMING_PARTY.length / 2 + 1);
   });
 
   it('каждая волна действительно оплачена — иначе проверки выше пусты', () => {
-    for (const kinds of [
+    const armies: readonly (readonly UnitKind[])[] = [
       ['ranger', 'ranger', 'ranger', 'ranger'],
       ['tank', 'tank', 'tank'],
-      ['tank', 'tank', 'ranger', 'ranger'],
-    ] as const) {
+      STORMING_PARTY,
+      Array.from({ length: 9 }, (): UnitKind => 'scout'),
+    ];
+    for (const kinds of armies) {
       const result = run(wave(kinds), 60_000);
       expect(result.events.filter((event) => event.kind === 'deploy-refused')).toEqual([]);
     }
   });
 
-  it('Разведчики берут, но ценой почти всей армии', () => {
-    const result = run(wave(Array.from({ length: 9 }, () => 'scout' as const)), 60_000);
+  it('Разведчики на те же деньги не берут: гибнут все', () => {
+    // Критерий тикета 08: армия из одного типа не берёт Цитадель быстрее
+    // смешанной той же цены. Девять Разведчиков стоят столько же, сколько
+    // штурмовая связка, — и не берут вовсе.
+    const scouts = Array.from({ length: 9 }, () => 'scout' as const);
+    const priceOf = (kinds: readonly UnitKind[]) =>
+      kinds.reduce((sum, kind) => sum + UNIT_STATS[kind].cost, 0);
+    const result = run(wave(scouts), 60_000);
 
-    expect(result.endReason).toBe('citadel-destroyed');
-    expect(lostOf(result)).toBeGreaterThan(9 / 2);
+    expect(priceOf(scouts)).toBe(priceOf(STORMING_PARTY));
+    expect(result.endReason).not.toBe('citadel-destroyed');
+    expect(lostOf(result)).toBe(scouts.length);
   });
 });
