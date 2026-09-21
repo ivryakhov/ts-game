@@ -1,4 +1,3 @@
-import { UNIT_STATS } from './balance.js';
 import type { SkirmishPlan } from './skirmish.js';
 import type { MatchEvent, UnitId } from './types.js';
 import type { Unit } from './unit.js';
@@ -23,7 +22,7 @@ export function applyPlan(
     const incoming = plan.damage.get(unit.id);
     if (!incoming) continue;
 
-    unit.hp -= UNIT_STATS.damagePerTick * incoming.hits;
+    unit.hp -= incoming.damage;
     if (unit.hp > 0) continue;
 
     fallen.add(unit.id);

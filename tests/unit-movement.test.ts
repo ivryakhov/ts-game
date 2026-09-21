@@ -9,6 +9,7 @@ const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledA
   side,
   kind: 'deploy',
   roadId,
+  unit: 'scout',
 });
 
 function run(actions: readonly ScheduledAction[], maxTicks = 1000) {
@@ -40,7 +41,7 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('виден в мире, пока идёт', () => {
-    const result = run([deploy(1, 'short')], 60);
+    const result = run([deploy(1, 'short')], 40);
 
     expect(result.finalState.units).toHaveLength(1);
     const unit = result.finalState.units[0];
@@ -53,11 +54,12 @@ describe('Юнит идёт по Дороге', () => {
 
   it('доходит за заранее известное число Тиков', () => {
     // Якорь, а не пропорция: короткая Дорога длиной 905 условных единиц
-    // при скорости 6 единиц за Тик проходится за 151 Тик, обходная
-    // длиной 1304 — за 218. Числа завязаны на скорость из balance.ts;
-    // если она изменится, тест обязан упасть и заставить пересмотреть темп.
-    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(151);
-    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(218);
+    // Разведчик при скорости 9 единиц за Тик проходит за 101 Тик,
+    // обходную длиной 1304 — за 145. Числа завязаны на характеристики
+    // из balance.ts; если они изменятся, тест обязан упасть и заставить
+    // пересмотреть темп.
+    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(101);
+    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(145);
   });
 
   it('проходит обходную Дорогу заметно дольше короткой', () => {
@@ -86,8 +88,8 @@ describe('Юнит идёт по Дороге', () => {
   it('Сторона B выходит из своей Цитадели и движется к чужой', () => {
     // progress отсчитывается от начала Дороги, то есть от Цитадели A,
     // поэтому Юнит Стороны B стартует у единицы и идёт к нулю.
-    const early = run([deploy(1, 'short', 'B')], 20).finalState.units[0];
-    const later = run([deploy(1, 'short', 'B')], 120).finalState.units[0];
+    const early = run([deploy(1, 'short', 'B')], 15).finalState.units[0];
+    const later = run([deploy(1, 'short', 'B')], 80).finalState.units[0];
 
     expect(early?.side).toBe('B');
     expect(early?.progress).toBeGreaterThan(0.8);
@@ -95,7 +97,7 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('Юниты разных Сторон на одной Дороге идут навстречу друг другу', () => {
-    const result = run([deploy(1, 'short', 'A'), deploy(1, 'short', 'B')], 60);
+    const result = run([deploy(1, 'short', 'A'), deploy(1, 'short', 'B')], 40);
     const [first, second] = result.finalState.units;
 
     const fromA = first?.side === 'A' ? first : second;
@@ -112,7 +114,7 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('не перелетает конец Дороги: последний шаг укорачивается', () => {
-    const result = run([deploy(1, 'short')], 150);
+    const result = run([deploy(1, 'short')], 100);
     const unit = result.finalState.units[0];
 
     expect(unit?.progress).toBeLessThanOrEqual(1);

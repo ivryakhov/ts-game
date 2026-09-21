@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { createMatch, runMatch, TICKS_PER_SECOND } from '@sim/index';
-import type { MatchResult, ScheduledAction, SideId } from '@sim/index';
+import type { MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
-const deploy = (tick: number, side: SideId = 'A', roadId = 'short'): ScheduledAction => ({
-  tick,
-  side,
-  kind: 'deploy',
-  roadId,
-});
+const deploy = (
+  tick: number,
+  side: SideId = 'A',
+  roadId = 'short',
+  unit: UnitKind = 'scout',
+): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
 
 const run = (actions: readonly ScheduledAction[], maxTicks = 400): MatchResult =>
   runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
@@ -119,7 +119,7 @@ describe('выпуск Юнита по ходу матча', () => {
   it('исполняется на следующем Тике, а не в тот же миг', () => {
     const match = createMatch(matchSetup({ map: arena, maxTicks: 50 }));
     match.step();
-    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short' });
+    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short', unit: 'scout' });
 
     expect(match.snapshot().units).toHaveLength(0);
     match.step();
@@ -128,8 +128,8 @@ describe('выпуск Юнита по ходу матча', () => {
 
   it('выбор, сделанный на паузе, срабатывает при первом же Тике', () => {
     const match = createMatch(matchSetup({ map: arena, maxTicks: 50 }));
-    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short' });
-    match.deploy({ side: 'A', kind: 'deploy', roadId: 'north' });
+    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short', unit: 'scout' });
+    match.deploy({ side: 'A', kind: 'deploy', roadId: 'north', unit: 'scout' });
 
     match.step();
 
@@ -139,7 +139,7 @@ describe('выпуск Юнита по ходу матча', () => {
   it('отвергает несуществующую Дорогу сразу, а не посреди Тика', () => {
     const match = createMatch(matchSetup({ map: arena, maxTicks: 50 }));
 
-    expect(() => match.deploy({ side: 'A', kind: 'deploy', roadId: 'tunnel' })).toThrow(
+    expect(() => match.deploy({ side: 'A', kind: 'deploy', roadId: 'tunnel', unit: 'scout' })).toThrow(
       /Дороги tunnel нет на карте/,
     );
   });
@@ -147,7 +147,7 @@ describe('выпуск Юнита по ходу матча', () => {
   it('попадает в журнал с номером Тика — матч остаётся воспроизводимым', () => {
     const match = createMatch(matchSetup({ map: arena, maxTicks: 50 }));
     match.step();
-    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short' });
+    match.deploy({ side: 'A', kind: 'deploy', roadId: 'short', unit: 'scout' });
     const events = match.step();
 
     const order = events.find((event) => event.kind === 'unit-deployed');

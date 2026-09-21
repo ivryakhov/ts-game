@@ -1,4 +1,4 @@
-import { ECONOMY, TICKS_PER_SECOND, UNIT_STATS } from './balance.js';
+import { ECONOMY, TICKS_PER_SECOND, UNIT_STATS, type UnitKind } from './balance.js';
 import type { EtherSnapshot, SideId } from './types.js';
 
 /**
@@ -27,9 +27,10 @@ export function collectIncome(purses: ReadonlyMap<SideId, Purse>): void {
  * Пытается оплатить Юнита. Возвращает false, если Эфира не хватает, —
  * и тогда со счёта не снимается ничего.
  */
-export function payForUnit(purse: Purse | undefined): boolean {
-  if (!purse || purse.amount < UNIT_STATS.cost) return false;
-  purse.amount -= UNIT_STATS.cost;
+export function payForUnit(purse: Purse | undefined, kind: UnitKind): boolean {
+  const cost = UNIT_STATS[kind].cost;
+  if (!purse || purse.amount < cost) return false;
+  purse.amount -= cost;
   return true;
 }
 

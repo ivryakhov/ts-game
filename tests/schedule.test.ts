@@ -14,25 +14,25 @@ const withActions = (actions: readonly ScheduledAction[]) => () =>
 
 describe('матч отвергает негодное расписание на входе', () => {
   it('когда Дороги нет на карте', () => {
-    expect(withActions([{ tick: 1, side: 'A', kind: 'deploy', roadId: 'tunnel' }])).toThrow(
+    expect(withActions([{ tick: 1, side: 'A', kind: 'deploy', roadId: 'tunnel', unit: 'scout' }])).toThrow(
       /Дороги tunnel нет на карте/,
     );
   });
 
   it('когда действие назначено за пределами матча', () => {
-    expect(withActions([{ tick: 500, side: 'A', kind: 'deploy', roadId: 'short' }])).toThrow(
+    expect(withActions([{ tick: 500, side: 'A', kind: 'deploy', roadId: 'short', unit: 'scout' }])).toThrow(
       /вне отрезка матча/,
     );
   });
 
   it('когда действие назначено на нулевой Тик, которого не бывает', () => {
-    expect(withActions([{ tick: 0, side: 'A', kind: 'deploy', roadId: 'short' }])).toThrow(
+    expect(withActions([{ tick: 0, side: 'A', kind: 'deploy', roadId: 'short', unit: 'scout' }])).toThrow(
       /вне отрезка матча/,
     );
   });
 
   it('и падает до первого Тика, а не в середине матча', () => {
-    expect(withActions([{ tick: 1, side: 'A', kind: 'deploy', roadId: 'tunnel' }])).toThrow(
+    expect(withActions([{ tick: 1, side: 'A', kind: 'deploy', roadId: 'tunnel', unit: 'scout' }])).toThrow(
       /Действие на Тике 1/,
     );
   });

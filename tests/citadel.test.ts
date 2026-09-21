@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { MatchResult, ScheduledAction, SideId } from '@sim/index';
+import type { MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
-const deploy = (tick: number, side: SideId, roadId = 'short'): ScheduledAction => ({
-  tick,
-  side,
-  kind: 'deploy',
-  roadId,
-});
+const deploy = (
+  tick: number,
+  side: SideId,
+  roadId = 'short',
+  unit: UnitKind = 'scout',
+): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
 
 const run = (actions: readonly ScheduledAction[], maxTicks = 20_000): MatchResult =>
   runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
@@ -63,11 +63,12 @@ describe('Юниты у чужой Цитадели', () => {
     const target = citadelOf(besieged, 'B');
     const toCitadel = (target?.maxHp ?? 0) - (target?.hp ?? 0);
 
-    // Оба замера берутся уже после того, как Стычка завязалась (около 75-го
-    // Тика), иначе в интервал попадает время подхода и сравнивать нечего.
+    // Оба замера берутся после того, как Стычка завязалась (около 49-го
+    // Тика), и до первой смерти (около 116-го): иначе в интервал попадает
+    // либо время подхода, либо пустота после Стычки.
     const clash = (until: number) =>
       run([deploy(1, 'A'), deploy(1, 'B')], until).finalState.units[0]?.hp ?? 0;
-    const toUnit = clash(80) - clash(80 + ticksOfHitting);
+    const toUnit = clash(60) - clash(60 + ticksOfHitting);
 
     expect(toCitadel).toBeGreaterThan(0);
     expect(toUnit).toBeGreaterThan(0);

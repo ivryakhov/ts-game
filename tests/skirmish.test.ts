@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
-import type { MatchEvent, MatchResult, ScheduledAction, SideId } from '@sim/index';
+import type { MatchEvent, MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
 
-const deploy = (tick: number, side: SideId, roadId = 'short'): ScheduledAction => ({
-  tick,
-  side,
-  kind: 'deploy',
-  roadId,
-});
+const deploy = (
+  tick: number,
+  side: SideId,
+  roadId = 'short',
+  unit: UnitKind = 'scout',
+): ScheduledAction => ({ tick, side, kind: 'deploy', roadId, unit });
 
 const run = (actions: readonly ScheduledAction[], maxTicks = 3000): MatchResult =>
   runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
@@ -19,29 +19,29 @@ const arrivals = (events: readonly MatchEvent[]) => events.filter((e) => e.kind 
 
 describe('встреча на Дороге', () => {
   it('сводит Юнитов разных Сторон в Стычку', () => {
-    const result = run([deploy(1, 'A'), deploy(1, 'B')], 100);
+    const result = run([deploy(1, 'A'), deploy(1, 'B')], 70);
 
     expect(result.finalState.units).toHaveLength(2);
     expect(result.finalState.units.every((unit) => unit.state === 'fighting')).toBe(true);
   });
 
   it('останавливает участников: в Стычке они не продвигаются', () => {
-    const during = run([deploy(1, 'A'), deploy(1, 'B')], 100).finalState.units;
-    const later = run([deploy(1, 'A'), deploy(1, 'B')], 130).finalState.units;
+    const during = run([deploy(1, 'A'), deploy(1, 'B')], 70).finalState.units;
+    const later = run([deploy(1, 'A'), deploy(1, 'B')], 90).finalState.units;
 
     expect(during).toHaveLength(2);
     expect(later[0]?.progress).toBe(during[0]?.progress);
   });
 
   it('вредит обеим Сторонам: HP убывает у всех участников', () => {
-    const units = run([deploy(1, 'A'), deploy(1, 'B')], 100).finalState.units;
+    const units = run([deploy(1, 'A'), deploy(1, 'B')], 70).finalState.units;
 
     expect(units).toHaveLength(2);
     expect(units.every((unit) => unit.hp < unit.maxHp)).toBe(true);
   });
 
   it('не трогает Юнитов на разных Дорогах', () => {
-    const units = run([deploy(1, 'A', 'short'), deploy(1, 'B', 'north')], 100).finalState.units;
+    const units = run([deploy(1, 'A', 'short'), deploy(1, 'B', 'north')], 70).finalState.units;
 
     expect(units).toHaveLength(2);
     expect(units.every((unit) => unit.state !== 'fighting')).toBe(true);
@@ -76,7 +76,7 @@ describe('исход Стычки', () => {
   });
 
   it('отпускает победителей дальше по Дороге, до чужой Цитадели', () => {
-    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 400);
+    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 300);
 
     expect(arrivals(result.events)).toHaveLength(3);
     expect(result.finalState.units.every((unit) => unit.state === 'sieging')).toBe(true);
@@ -94,7 +94,7 @@ describe('лимит Стычки', () => {
   it('одновременно дерётся не больше положенного с каждой Стороны', () => {
     const wave = (side: SideId): ScheduledAction[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
-    const result = run([...wave('A'), ...wave('B')], 100);
+    const result = run([...wave('A'), ...wave('B')], 70);
 
     const fightingOf = (side: SideId) =>
       result.finalState.units.filter((unit) => unit.side === side && unit.state === 'fighting');
@@ -106,7 +106,7 @@ describe('лимит Стычки', () => {
   it('остальные ждут очереди, а не идут сквозь Стычку', () => {
     const wave = (side: SideId): ScheduledAction[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
-    const units = run([...wave('A'), ...wave('B')], 100).finalState.units;
+    const units = run([...wave('A'), ...wave('B')], 70).finalState.units;
 
     expect(units.some((unit) => unit.state === 'waiting')).toBe(true);
   });
@@ -143,8 +143,8 @@ describe('кто именно дерётся', () => {
   });
 
   it('в Стычку вступают передовые, а не отставшие', () => {
-    // Тик 85: встреча уже произошла (около 75-го), но Сторона B ещё жива.
-    const units = run(massAttack(5), 85).finalState.units.filter((unit) => unit.side === 'A');
+    // Тик 60: встреча уже произошла (около 49-го), но Сторона B ещё жива.
+    const units = run(massAttack(5), 60).finalState.units.filter((unit) => unit.side === 'A');
     const fighting = units.filter((unit) => unit.state === 'fighting');
     const waiting = units.filter((unit) => unit.state === 'waiting');
 
@@ -159,7 +159,7 @@ describe('кто именно дерётся', () => {
   it('дерутся только дотянувшиеся: отставший на полкарты не бьёт издали', () => {
     // Первый выходит сразу, второй — сильно позже: в лимит он попадает
     // вторым номером колонны, а в дальность удара — нет.
-    const units = run([deploy(1, 'A'), deploy(90, 'A'), deploy(1, 'B')], 100).finalState.units;
+    const units = run([deploy(1, 'A'), deploy(55, 'A'), deploy(1, 'B')], 70).finalState.units;
     const ourSide = units.filter((unit) => unit.side === 'A');
     const laggard = ourSide.reduce(
       (rearmost, unit) => (unit.progress < (rearmost?.progress ?? 1) ? unit : rearmost),
@@ -172,24 +172,29 @@ describe('кто именно дерётся', () => {
   });
 });
 
-describe('очередь при равном положении', () => {
-  it('вперёд идёт вышедший раньше, а ждёт вышедший последним', () => {
-    // Четверо выходят одним Тиком и стоят ровно в одной точке, поэтому
-    // порядок решает только время выхода: номера раздаются по порядку.
+describe('очередь по старшинству', () => {
+  it('дерутся вышедшие раньше, ждут вышедшие позже', () => {
+    // Выпущенные одним Тиком не стоят в одной точке: Колонна разводит их
+    // по глубине, и ближний удар достаёт только передних.
     const wave = Array.from({ length: 4 }, () => deploy(1, 'A'));
-    const units = run([...wave, deploy(1, 'B')], 85).finalState.units;
+    const units = run([...wave, deploy(1, 'B')], 60).finalState.units;
     const ourSide = units.filter((unit) => unit.side === 'A');
+    const fighting = ourSide.filter((unit) => unit.state === 'fighting');
     const waiting = ourSide.filter((unit) => unit.state === 'waiting');
 
     expect(ourSide).toHaveLength(4);
-    expect(waiting).toHaveLength(1);
-    expect(waiting[0]?.id).toBe(Math.max(...ourSide.map((unit) => unit.id)));
+    expect(fighting).not.toHaveLength(0);
+    expect(waiting).not.toHaveLength(0);
+    // Номера раздаются по порядку выхода, поэтому ждать должны старшие.
+    expect(Math.max(...fighting.map((unit) => unit.id))).toBeLessThan(
+      Math.min(...waiting.map((unit) => unit.id)),
+    );
   });
 });
 
 describe('дистанция Стычки', () => {
   it('противники встают на расстоянии удара, а не сходятся вплотную', () => {
-    const units = run([deploy(1, 'A'), deploy(1, 'B')], 100).finalState.units;
+    const units = run([deploy(1, 'A'), deploy(1, 'B')], 70).finalState.units;
     const [first, second] = units;
 
     expect(units).toHaveLength(2);

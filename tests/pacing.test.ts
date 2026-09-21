@@ -26,8 +26,20 @@ const setup = (): MatchSetup =>
     seed: 4242,
     maxTicks: 100_000,
     playerActions: ['short', 'north', 'south'].flatMap((roadId, index) => [
-      { tick: 1 + index * 17, side: 'A' as const, kind: 'deploy' as const, roadId },
-      { tick: 1 + index * 17, side: 'B' as const, kind: 'deploy' as const, roadId },
+      {
+        tick: 1 + index * 17,
+        side: 'A' as const,
+        kind: 'deploy' as const,
+        roadId,
+        unit: 'scout' as const,
+      },
+      {
+        tick: 1 + index * 17,
+        side: 'B' as const,
+        kind: 'deploy' as const,
+        roadId,
+        unit: 'scout' as const,
+      },
     ]),
   });
 

@@ -12,17 +12,63 @@ const BASE_SPEED_PER_SECOND = 120;
 /** Урона в секунду. */
 const BASE_DAMAGE_PER_SECOND = 15;
 
-/** Цена Юнита. Вынесена отдельно, потому что её показывает панель. */
-export const UNIT_COST = 20;
+/** Типы Юнитов. Поддержка вырезана из v1 — см. docs/v1-plan.md. */
+export type UnitKind = 'scout' | 'tank' | 'ranger';
 
-export const UNIT_STATS = {
-  maxHp: 50,
-  cost: UNIT_COST,
+export const UNIT_KINDS: readonly UnitKind[] = ['scout', 'tank', 'ranger'];
+
+export interface UnitStats {
+  readonly maxHp: number;
+  readonly cost: number;
+  /**
+   * Бьёт ли Юнит издали. Дальний не лезет в свалку и не занимает в ней
+   * место — это его свойство, а не следствие того, что число дальности
+   * вышло больше ближнего порога.
+   */
+  readonly ranged: boolean;
   /** Условных единиц карты за один Тик. */
-  speedPerTick: BASE_SPEED_PER_SECOND / TICKS_PER_SECOND,
+  readonly speedPerTick: number;
   /** Урона за один Тик. */
-  damagePerTick: BASE_DAMAGE_PER_SECOND / TICKS_PER_SECOND,
-} as const;
+  readonly damagePerTick: number;
+  /**
+   * На каком расстоянии вдоль Дороги Юнит достаёт врага. У ближних она
+   * равна дальности сближения, у Стрелка заметно больше — он и бьёт
+   * из-за спин.
+   */
+  readonly range: number;
+}
+
+const perTick = (perSecond: number): number => perSecond / TICKS_PER_SECOND;
+
+/** Дальность ближнего удара: на ней враги замечают друг друга и встают. */
+export const MELEE_RANGE = 26;
+
+export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
+  scout: {
+    maxHp: 50,
+    cost: 20,
+    ranged: false,
+    speedPerTick: perTick(BASE_SPEED_PER_SECOND * 1.5),
+    damagePerTick: perTick(BASE_DAMAGE_PER_SECOND),
+    range: MELEE_RANGE,
+  },
+  tank: {
+    maxHp: 200,
+    cost: 50,
+    ranged: false,
+    speedPerTick: perTick(BASE_SPEED_PER_SECOND * 0.7),
+    damagePerTick: perTick(BASE_DAMAGE_PER_SECOND * 1.33),
+    range: MELEE_RANGE,
+  },
+  ranger: {
+    maxHp: 70,
+    cost: 40,
+    ranged: true,
+    speedPerTick: perTick(BASE_SPEED_PER_SECOND),
+    damagePerTick: perTick(BASE_DAMAGE_PER_SECOND * 2),
+    range: 95,
+  },
+};
 
 /** Экономика Стороны. */
 export const ECONOMY = {
@@ -42,15 +88,21 @@ export const CITADEL_STATS = {
   damageShare: 0.5,
 } as const;
 
+/**
+ * Сколько Юнитов с каждой Стороны бьётся в Стычке одновременно.
+ * Концепт говорит о восьми; взято три, чтобы очередь была видна на глаз
+ * и проверяема. Число уточнится на плейтестах.
+ */
+const SKIRMISH_LIMIT = 3;
+
 export const SKIRMISH = {
-  /** На каком расстоянии вдоль Дороги враги замечают друг друга и встают. */
-  engageRange: 26,
+  limit: SKIRMISH_LIMIT,
   /**
-   * Сколько Юнитов с каждой Стороны бьётся одновременно. Концепт говорит
-   * о восьми; пока тип Юнита один, взято три — чтобы очередь была видна
-   * на глаз и проверяема. Число уточнится на плейтестах.
+   * Насколько плотно Юниты встают друг за другом.
+   *
+   * Связано с лимитом жёстко: последний из троих обязан дотянуться
+   * до врага, иначе лимит недостижим и в Стычке всегда дерётся меньше
+   * заявленного. Отсюда spacing × (limit − 1) ≤ MELEE_RANGE.
    */
-  limit: 3,
-  /** Насколько плотно Юниты встают в очередь за теми, кто уже в Стычке. */
-  spacing: 20,
+  spacing: Math.floor(MELEE_RANGE / (SKIRMISH_LIMIT - 1)),
 } as const;

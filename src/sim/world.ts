@@ -10,6 +10,7 @@ import type {
 import type { Rng } from './rng.js';
 import { bombard, citadelSnapshots, createCitadels, type Citadel } from './citadel.js';
 import { applyPlan } from './combat.js';
+import { SKIRMISH } from './balance.js';
 import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } from './ether.js';
 import { planSkirmish } from './skirmish.js';
 import { createUnit, moveUnit, unitSnapshot, type Unit } from './unit.js';
@@ -137,18 +138,25 @@ function roadOf(world: World, roadId: string): RoadRuntime {
 function applyAction(world: World, action: ScheduledAction, events: MatchEvent[]): void {
   const road = roadOf(world, action.roadId);
 
-  if (!payForUnit(world.purses.get(action.side))) {
+  if (!payForUnit(world.purses.get(action.side), action.unit)) {
     events.push({
       kind: 'deploy-refused',
       tick: world.tick,
       side: action.side,
       roadId: action.roadId,
+      unit: action.unit,
       reason: 'not-enough-ether',
     });
     return;
   }
 
-  const unit = createUnit(world.nextUnitId, action.side, action.roadId, action.side === road.from);
+  const unit = createUnit(
+    world.nextUnitId,
+    action.side,
+    action.unit,
+    action.roadId,
+    action.side === road.from,
+  );
   world.nextUnitId += 1;
   world.units.push(unit);
 
@@ -158,6 +166,7 @@ function applyAction(world: World, action: ScheduledAction, events: MatchEvent[]
     unitId: unit.id,
     side: unit.side,
     roadId: unit.roadId,
+    unit: unit.kind,
   });
 }
 
@@ -194,6 +203,39 @@ function moveUnits(world: World, events: MatchEvent[]): void {
   }
 
   world.units = surviving;
+  keepFormation(world);
+}
+
+/**
+ * Юнит не обгоняет своих по Дороге: догнав идущего впереди, он держится
+ * за его спиной.
+ *
+ * Без этого Стрелок, который быстрее Танка, всегда оказывался бы впереди
+ * него — и стрелять из-за спин, ради чего он и заведён, было бы негде.
+ */
+function keepFormation(world: World): void {
+  const columns = new Map<string, Unit[]>();
+
+  for (const unit of world.units) {
+    if (unit.arrived) continue;
+    const key = `${unit.roadId}:${unit.side}`;
+    const column = columns.get(key);
+    if (column) column.push(unit);
+    else columns.set(key, [unit]);
+  }
+
+  for (const column of columns.values()) {
+    column.sort((left, right) => right.travelled - left.travelled || left.id - right.id);
+
+    for (let index = 1; index < column.length; index += 1) {
+      const unit = column[index];
+      const ahead = column[index - 1];
+      if (!unit || !ahead) continue;
+      // Ниже нуля не опускаем: иначе Юнит, зажатый Колонной у самой
+      // Цитадели, уезжает за начало Дороги.
+      unit.travelled = Math.max(0, Math.min(unit.travelled, ahead.travelled - SKIRMISH.spacing));
+    }
+  }
 }
 
 export function snapshot(world: World): WorldSnapshot {

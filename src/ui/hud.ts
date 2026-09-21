@@ -1,5 +1,5 @@
-import { TICKS_PER_SECOND } from '@sim/index';
-import type { SideId } from '@sim/index';
+import { TICKS_PER_SECOND, UNIT_KINDS, UNIT_STATS } from '@sim/index';
+import type { SideId, UnitKind } from '@sim/index';
 import type { Speed } from '../app/pacer.js';
 
 /**
@@ -16,7 +16,7 @@ export interface Hud {
     seed: number;
     ether: number;
     incomePerSecond: number;
-    unitCost: number;
+    chosenKind: UnitKind;
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
@@ -44,6 +44,22 @@ export function createHud(): Hud {
   const seed = element('hud-seed');
   const outcome = element('hud-outcome');
   const ether = element('hud-ether');
+  const kinds = element('hud-kinds');
+
+  /** Названия типов по-русски — словарь из CONTEXT.md. */
+  const titles: Readonly<Record<UnitKind, string>> = {
+    scout: 'Разведчик',
+    tank: 'Танк',
+    ranger: 'Стрелок',
+  };
+
+  const slots = UNIT_KINDS.map((kind, index) => {
+    const slot = document.createElement('span');
+    slot.className = 'hud__kind';
+    slot.textContent = `${index + 1} ${titles[kind]} ${UNIT_STATS[kind].cost}`;
+    kinds.append(slot);
+    return { kind, slot };
+  });
 
   return {
     update(state): void {
@@ -51,8 +67,12 @@ export function createHud(): Hud {
       speed.textContent = state.paused ? `×${state.speed} пауза` : `×${state.speed}`;
       speed.classList.toggle('hud__paused', state.paused);
       seed.textContent = String(state.seed);
-      ether.textContent =
-        `${Math.floor(state.ether)} (+${state.incomePerSecond}/с) · Юнит ${state.unitCost}`;
+      ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond}/с)`;
+
+      for (const { kind, slot } of slots) {
+        slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);
+        slot.classList.toggle('hud__kind--broke', state.ether < UNIT_STATS[kind].cost);
+      }
     },
 
     refuse(): void {

@@ -1,6 +1,6 @@
-import { CITADEL_STATS, UNIT_STATS } from './balance.js';
+import { CITADEL_STATS } from './balance.js';
 import type { CitadelSnapshot, MatchEvent, SideId } from './types.js';
-import type { Unit } from './unit.js';
+import { statsOf, type Unit } from './unit.js';
 
 /**
  * Цитадель — главное строение Стороны. Её разрушение означает поражение,
@@ -36,13 +36,12 @@ export function bombard(
   events: MatchEvent[],
 ): Set<SideId> {
   const fallen = new Set<SideId>();
-  const blow = UNIT_STATS.damagePerTick * CITADEL_STATS.damageShare;
 
   for (const { unit, target } of besiegers) {
     const citadel = citadels.get(target);
     if (!citadel || citadel.hp <= 0 || citadel.side === unit.side) continue;
 
-    citadel.hp -= blow;
+    citadel.hp -= statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
     if (citadel.hp > 0) continue;
 
     citadel.hp = 0;

@@ -74,9 +74,10 @@ describe('слои не перепутаны', () => {
       ),
     );
 
-    // Клавиши живут в src/app и по необходимости знают про window;
+    // Клавиши и мышь живут в src/app и по необходимости знают про window;
     // всё остальное здесь обязано оставаться чистым.
-    expect(offenders.filter((file) => !file.endsWith('controls.ts'))).toEqual([]);
+    const input = ['controls.ts', 'unit-choice.ts', 'pointer.ts'];
+    expect(offenders.filter((file) => !input.some((name) => file.endsWith(name)))).toEqual([]);
   });
 });
 

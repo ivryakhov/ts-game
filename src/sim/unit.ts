@@ -1,4 +1,4 @@
-import { UNIT_STATS } from './balance.js';
+import { UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
 import type { RoadMetrics } from './geometry.js';
 import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 
@@ -10,6 +10,7 @@ import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 export interface Unit {
   readonly id: UnitId;
   readonly side: SideId;
+  readonly kind: UnitKind;
   readonly roadId: string;
   /**
    * Идёт ли Юнит по Дороге от её начала к концу. Дорога описана один раз
@@ -27,23 +28,35 @@ export interface Unit {
   readonly maxHp: number;
 }
 
-export function createUnit(id: UnitId, side: SideId, roadId: string, forward: boolean): Unit {
+export function statsOf(unit: Unit): UnitStats {
+  return UNIT_STATS[unit.kind];
+}
+
+export function createUnit(
+  id: UnitId,
+  side: SideId,
+  kind: UnitKind,
+  roadId: string,
+  forward: boolean,
+): Unit {
+  const stats = UNIT_STATS[kind];
   return {
     id,
     side,
+    kind,
     roadId,
     forward,
     travelled: 0,
     state: 'moving',
     arrived: false,
-    hp: UNIT_STATS.maxHp,
-    maxHp: UNIT_STATS.maxHp,
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
   };
 }
 
 /** Двигает Юнита на один Тик. Возвращает true, если он дошёл до конца Дороги. */
 export function moveUnit(unit: Unit, road: RoadMetrics): boolean {
-  unit.travelled = Math.min(road.length, unit.travelled + UNIT_STATS.speedPerTick);
+  unit.travelled = Math.min(road.length, unit.travelled + statsOf(unit).speedPerTick);
   return unit.travelled >= road.length;
 }
 
@@ -53,6 +66,7 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
   return {
     id: unit.id,
     side: unit.side,
+    kind: unit.kind,
     roadId: unit.roadId,
     // Доля отсчитывается от начала Дороги, а не от своей Цитадели,
     // чтобы рендеру не приходилось знать о направлениях.

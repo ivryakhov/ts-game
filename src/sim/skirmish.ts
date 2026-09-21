@@ -1,6 +1,6 @@
 import { SKIRMISH } from './balance.js';
 import type { UnitId, UnitState } from './types.js';
-import type { Unit } from './unit.js';
+import { statsOf, type Unit } from './unit.js';
 
 /**
  * Стычка — столкновение Юнитов разных Сторон на одной Дороге.
@@ -15,9 +15,9 @@ import type { Unit } from './unit.js';
  * Разбор Стычки должен быть проверяем сам по себе, без прогона матча.
  */
 
-/** Сколько ударов получил Юнит за Тик и кто ударил последним. */
+/** Сколько урона получил Юнит за Тик и кто ударил последним. */
 export interface Incoming {
-  hits: number;
+  damage: number;
   lastAttacker: UnitId;
 }
 
@@ -50,18 +50,51 @@ export function planSkirmish(units: readonly Unit[], roadLength: number): Skirmi
   const backward = columnOf(units, roadLength, false);
   if (!forward || !backward) return { states, damage };
 
-  if (forward.frontier + SKIRMISH.engageRange < backward.frontier) return { states, damage };
+  const gap = backward.frontier - forward.frontier;
+  const reach = Math.max(...units.map((unit) => statsOf(unit).range));
+  if (gap > reach) return { states, damage };
 
-  const attackers = engaged(forward, roadLength);
-  const defenders = engaged(backward, roadLength);
+  const frontOf = (column: Column): readonly Unit[] => column.ordered.slice(0, SKIRMISH.limit);
 
-  strike(attackers, defenders, states, damage);
-  strike(defenders, attackers, states, damage);
+  strike(reaching(forward, gap, roadLength), frontOf(backward), states, damage);
+  strike(reaching(backward, gap, roadLength), frontOf(forward), states, damage);
 
   queueUp(forward.ordered, roadLength, states);
   queueUp(backward.ordered, roadLength, states);
 
   return { states, damage };
+}
+
+/**
+ * Кто из Колонны достаёт врага.
+ *
+ * Ближние ввязываются в свалку, если и до врага, и до переднего края
+ * своей Колонны им не дальше собственной дальности удара; больше лимита
+ * их всё равно не войдёт. Стычка — это куча мала, а не шеренга, поэтому
+ * второй ряд протискивается вперёд.
+ *
+ * Стрелку протискиваться незачем — он бьёт поверх своих, и ему нужно,
+ * чтобы дальности хватило и на разрыв между Колоннами, и на глубину,
+ * с которой он стреляет. Места в Стычке он не занимает и в лимит
+ * не входит: в этом весь его смысл.
+ */
+function reaching(column: Column, gap: number, roadLength: number): readonly Unit[] {
+  const melee: Unit[] = [];
+  const ranged: Unit[] = [];
+
+  for (const unit of column.ordered) {
+    const behind = Math.abs(positionOn(unit, roadLength) - column.frontier);
+    const range = statsOf(unit).range;
+
+    if (!statsOf(unit).ranged) {
+      if (gap <= range && behind <= range && melee.length < SKIRMISH.limit) melee.push(unit);
+      continue;
+    }
+
+    if (gap + behind <= range) ranged.push(unit);
+  }
+
+  return [...melee, ...ranged];
 }
 
 /**
@@ -86,21 +119,6 @@ function columnOf(units: readonly Unit[], roadLength: number, forward: boolean):
   return { ordered, frontier: positionOn(leader, roadLength) };
 }
 
-/**
- * Бьются только те, кто дотянулся: первые по счёту с переднего края
- * и не дальше дальности атаки от него. Без проверки расстояния третий
- * в колонне бил бы врага, стоя от него за сотню единиц карты, — скрытая
- * математика, которую игрок не может ни увидеть, ни предусмотреть
- * (ADR-0002).
- */
-function engaged(column: Column, roadLength: number): readonly Unit[] {
-  return column.ordered
-    .slice(0, SKIRMISH.limit)
-    .filter(
-      (unit) => Math.abs(positionOn(unit, roadLength) - column.frontier) <= SKIRMISH.engageRange,
-    );
-}
-
 /** Каждый боец бьёт своего противника; лишние распределяются по кругу. */
 function strike(
   attackers: readonly Unit[],
@@ -115,13 +133,14 @@ function strike(
     const target = defenders[index % defenders.length];
     if (!target) return;
 
+    const blow = statsOf(attacker).damagePerTick;
     const incoming = damage.get(target.id);
     if (incoming) {
-      incoming.hits += 1;
+      incoming.damage += blow;
       incoming.lastAttacker = attacker.id;
       return;
     }
-    damage.set(target.id, { hits: 1, lastAttacker: attacker.id });
+    damage.set(target.id, { damage: blow, lastAttacker: attacker.id });
   });
 }
 

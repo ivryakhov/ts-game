@@ -6,11 +6,19 @@
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
  */
-import { createMatch, TICKS_PER_SECOND, UNIT_COST } from '@sim/index';
-import type { MatchSetup, ScheduledAction, SideId, UnitId, WorldSnapshot } from '@sim/index';
+import { createMatch, TICKS_PER_SECOND, UNIT_KINDS } from '@sim/index';
+import type {
+  MatchSetup,
+  ScheduledAction,
+  SideId,
+  UnitId,
+  UnitKind,
+  WorldSnapshot,
+} from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
+import { bindUnitChoice } from './app/unit-choice.js';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
@@ -45,7 +53,13 @@ function opponentSchedule(): ScheduledAction[] {
     const start = 10 + wave * DEPLOY_PERIOD;
 
     for (let index = 0; index < WAVE_SIZE; index += 1) {
-      actions.push({ tick: start + index * WAVE_GAP, side: 'B', kind: 'deploy', roadId });
+      actions.push({
+        tick: start + index * WAVE_GAP,
+        side: 'B',
+        kind: 'deploy',
+        roadId,
+        unit: UNIT_KINDS[(wave + index) % UNIT_KINDS.length] ?? 'scout',
+      });
     }
   }
 
@@ -73,8 +87,11 @@ const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud();
 const pacer = createPacer(TICKS_PER_SECOND);
 const match = createMatch(setup);
+/** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */
+let chosenKind: UnitKind = 'scout';
+
 const pointer = bindPointer(canvas, renderer, (roadId) => {
-  match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId });
+  match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
 });
 
 let previous: WorldSnapshot = match.snapshot();
@@ -140,7 +157,7 @@ function frame(nowMs: number): void {
     seed,
     ether: purse?.amount ?? 0,
     incomePerSecond: purse?.incomePerSecond ?? 0,
-    unitCost: UNIT_COST,
+    chosenKind,
   });
   hud.announce(match.finished ? { winner: match.winner, tick: current.tick } : null);
   window.requestAnimationFrame(frame);
@@ -148,5 +165,8 @@ function frame(nowMs: number): void {
 
 fit();
 bindTimeControls(pacer);
+bindUnitChoice((kind) => {
+  chosenKind = kind;
+});
 window.addEventListener('resize', fit);
 window.requestAnimationFrame(frame);

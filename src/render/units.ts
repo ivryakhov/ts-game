@@ -1,4 +1,4 @@
-import type { Point, UnitSnapshot, WorldSnapshot } from '@sim/index';
+import type { Point, UnitKind, UnitSnapshot, WorldSnapshot } from '@sim/index';
 import { SIDE_COLORS, UNIT_VISUAL, withAlpha } from './visual-contract.js';
 
 /**
@@ -45,6 +45,41 @@ export function hindsight(previous: WorldSnapshot): Hindsight {
   };
 }
 
+/**
+ * Своя фигура у каждого типа: Разведчик — круг, Танк — квадрат,
+ * Стрелок — треугольник. Форма важнее цвета: цветом уже размечены
+ * Стороны, и различать типы им было бы нечем.
+ */
+function traceShape(
+  context: CanvasRenderingContext2D,
+  kind: UnitKind,
+  center: Point,
+  radius: number,
+): void {
+  context.beginPath();
+
+  if (kind === 'scout') {
+    context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    return;
+  }
+
+  if (kind === 'tank') {
+    const side = radius * 1.7;
+    context.rect(center.x - side / 2, center.y - side / 2, side, side);
+    return;
+  }
+
+  const reach = radius * 1.25;
+  for (let corner = 0; corner < 3; corner += 1) {
+    const angle = (corner / 3) * Math.PI * 2 - Math.PI / 2;
+    const x = center.x + Math.cos(angle) * reach;
+    const y = center.y + Math.sin(angle) * reach;
+    if (corner === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  context.closePath();
+}
+
 export function drawUnit(
   context: CanvasRenderingContext2D,
   unit: UnitSnapshot,
@@ -67,8 +102,7 @@ export function drawUnit(
   context.fillStyle = glow;
   context.fillRect(center.x - glowRadius, center.y - glowRadius, glowRadius * 2, glowRadius * 2);
 
-  context.beginPath();
-  context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+  traceShape(context, unit.kind, center, radius);
   context.fillStyle = withAlpha(color, 0.9);
   context.fill();
   context.strokeStyle = '#ffffff';

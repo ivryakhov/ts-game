@@ -5,6 +5,10 @@
  * ядро обязано запускаться в Node без окружения DOM (ADR-0001).
  */
 
+import type { UnitKind } from './balance.js';
+
+export type { UnitKind };
+
 /** Число, полностью определяющее случайность матча. */
 export type Seed = number;
 
@@ -67,6 +71,7 @@ export interface DeployAction {
   readonly side: SideId;
   readonly kind: 'deploy';
   readonly roadId: string;
+  readonly unit: UnitKind;
 }
 
 /**
@@ -100,6 +105,7 @@ export type MatchEvent =
       readonly unitId: UnitId;
       readonly side: SideId;
       readonly roadId: string;
+      readonly unit: UnitKind;
     }
   | {
       readonly kind: 'unit-arrived';
@@ -113,6 +119,7 @@ export type MatchEvent =
       readonly tick: number;
       readonly side: SideId;
       readonly roadId: string;
+      readonly unit: UnitKind;
       readonly reason: RefusalReason;
     }
   | {
@@ -151,6 +158,7 @@ export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging';
 export interface UnitSnapshot {
   readonly id: UnitId;
   readonly side: SideId;
+  readonly kind: UnitKind;
   readonly roadId: string;
   /** Доля пройденного пути от 0 до 1. */
   readonly progress: number;
