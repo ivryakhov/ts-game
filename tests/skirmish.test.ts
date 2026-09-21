@@ -50,7 +50,8 @@ describe('встреча на Дороге', () => {
 
 describe('исход Стычки', () => {
   it('троих против одного выигрывают трое', () => {
-    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')]);
+    // До чужих стен победители ещё не дошли: смотрим исход самой Стычки.
+    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 95);
     const died = deaths(result.events);
 
     expect(died).toHaveLength(1);
@@ -76,7 +77,7 @@ describe('исход Стычки', () => {
   });
 
   it('отпускает победителей дальше по Дороге, до чужой Цитадели', () => {
-    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 300);
+    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 140);
 
     expect(arrivals(result.events)).toHaveLength(3);
     expect(result.finalState.units.every((unit) => unit.state === 'sieging')).toBe(true);

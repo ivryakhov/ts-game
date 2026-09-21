@@ -6,7 +6,7 @@ import type {
   SideId,
   UnitSnapshot,
 } from '@sim/index';
-import { measureRoad, roadPolyline } from '@sim/index';
+import { CITADEL_STATS, measureRoad, roadPolyline } from '@sim/index';
 import { ALARM, BACKGROUND, PICK_RADIUS, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
 import { drawCitadel } from './citadels.js';
@@ -35,7 +35,7 @@ export function createCanvasRenderer(
 
   const view: Viewport = { scale: 1, offsetX: 0, offsetY: 0 };
   const shapes = new Map<string, readonly Point[]>();
-  const metrics = new Map<string, RoadMetrics>(
+  const roadMetrics = new Map<string, RoadMetrics>(
     map.roads.map((road) => [road.id, measureRoad(road)]),
   );
   const fading = createFading();
@@ -148,9 +148,60 @@ export function createCanvasRenderer(
   }
 
   function placeOf(unit: UnitSnapshot, progress: number): Point | null {
-    const road = metrics.get(unit.roadId);
+    const road = roadMetrics.get(unit.roadId);
     if (!road) return null;
     return toScreen(road.pointAtDistance(progress * road.length));
+  }
+
+  /**
+   * Где начинается огонь со стен. Радиус меряется вдоль Дороги, а не по
+   * прямой, поэтому это засечки на самих Дорогах, а не круг вокруг
+   * Цитадели: круг соврал бы на изгибах.
+   */
+  function drawWallReach(): void {
+    for (const road of map.roads) {
+      const metrics = roadMetrics.get(road.id);
+      if (!metrics || metrics.length <= CITADEL_STATS.range * 2) continue;
+
+      for (const [side, distance] of [
+        [road.from, CITADEL_STATS.range],
+        [road.to, metrics.length - CITADEL_STATS.range],
+      ] as const) {
+        const mark = toScreen(metrics.pointAtDistance(distance));
+        context.save();
+        context.fillStyle = withAlpha(SIDE_COLORS[side], 0.55);
+        context.beginPath();
+        context.arc(mark.x, mark.y, scaled(ROAD.reachMarkRadius), 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+      }
+    }
+  }
+
+  /**
+   * Луч от Цитадели к той, кого она бьёт. Правило «стены бьют ближайшего,
+   * а из стоящих вплотную — пришедшего первым» должно читаться с экрана:
+   * игрок на него опирается, выпуская Танка вперёд (ADR-0002).
+   */
+  function drawWallFire(frame: Frame, places: ReadonlyMap<number, Point>): void {
+    for (const health of frame.current.citadels) {
+      if (health.target === null || health.hp <= 0) continue;
+      const spec = map.citadels.find((citadel) => citadel.side === health.side);
+      const target = places.get(health.target);
+      if (!spec || !target) continue;
+
+      const from = toScreen(spec.at);
+      context.save();
+      context.strokeStyle = withAlpha(SIDE_COLORS[health.side], 0.75);
+      context.lineWidth = scaled(ROAD.wallFireWidth);
+      context.setLineDash([scaled(6), scaled(5)]);
+      context.lineDashOffset = -scaled(frame.matchMs / 12);
+      context.beginPath();
+      context.moveTo(from.x, from.y);
+      context.lineTo(target.x, target.y);
+      context.stroke();
+      context.restore();
+    }
   }
 
   /**
@@ -203,6 +254,7 @@ export function createCanvasRenderer(
       for (const road of map.roads) {
         drawRoad(road, frame.matchMs, road.id === frame.highlightedRoad);
       }
+      drawWallReach();
       for (const citadel of map.citadels) {
         drawCitadel(
           context,
@@ -221,11 +273,15 @@ export function createCanvasRenderer(
         if (place) drawUnit(context, dead.unit, place, view.scale, { fade: dead.fade });
       }
 
+      const places = new Map<number, Point>();
       for (const unit of frame.current.units) {
         const place = placeOf(unit, seen.progressOf(unit, frame.alpha));
         if (!place) continue;
+        places.set(unit.id, place);
         drawUnit(context, unit, place, view.scale, { flash: seen.flashOf(unit, frame.alpha) });
       }
+
+      drawWallFire(frame, places);
 
       drawAlarm(frame);
     },

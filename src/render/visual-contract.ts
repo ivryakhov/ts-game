@@ -45,6 +45,10 @@ export const ROAD = {
   dashSpeed: 55,
   /** Во сколько раз шире светится Дорога под курсором. */
   highlightScale: 1.8,
+  /** Толщина луча, которым Цитадель бьёт со стен. */
+  wallFireWidth: 3,
+  /** Засечка на Дороге там, где начинается огонь со стен. */
+  reachMarkRadius: 5,
 } as const;
 
 export const UNIT_VISUAL = {

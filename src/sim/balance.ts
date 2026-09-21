@@ -12,6 +12,8 @@ const BASE_SPEED_PER_SECOND = 120;
 /** Урона в секунду. */
 const BASE_DAMAGE_PER_SECOND = 15;
 
+const perTick = (perSecond: number): number => perSecond / TICKS_PER_SECOND;
+
 /** Типы Юнитов. Поддержка вырезана из v1 — см. docs/v1-plan.md. */
 export type UnitKind = 'scout' | 'tank' | 'ranger';
 
@@ -37,8 +39,6 @@ export interface UnitStats {
    */
   readonly range: number;
 }
-
-const perTick = (perSecond: number): number => perSecond / TICKS_PER_SECOND;
 
 /** Дальность ближнего удара: на ней враги замечают друг друга и встают. */
 export const MELEE_RANGE = 26;
@@ -80,6 +80,18 @@ export const ECONOMY = {
 
 export const CITADEL_STATS = {
   maxHp: 1000,
+  /**
+   * Цитадель отвечает ударом (концепт, раздел 5). Без этого против неё
+   * выигрывает наибольший урон за Эфир, а живучесть Танка не значит ничего:
+   * армия из одних Стрелков оказывалась и дешевле, и быстрее любой смеси.
+   */
+  damagePerTick: perTick(BASE_DAMAGE_PER_SECOND),
+  /**
+   * Дальность ответного удара, вдоль Дороги от Цитадели. Стены достают
+   * не только осаждающих, но и тех, кто ещё подходит: подход к Цитадели
+   * стоит здоровья, а не только осада.
+   */
+  range: 110,
   /**
    * Какая доля урона Юнита доходит до Цитадели. Меньше единицы намеренно:
    * иначе всё решает одна волна, добежавшая мимо Стычек, и удерживать

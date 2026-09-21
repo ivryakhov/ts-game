@@ -28,14 +28,15 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('дойдя до конца Дороги, принимается за чужую Цитадель', () => {
-    const result = run([deploy(1, 'short')], 200);
+    // Смотрим сразу после прибытия (101-й Тик): у стен Юнит долго не живёт.
+    const result = run([deploy(1, 'short')], 110);
 
     expect(result.finalState.units).toHaveLength(1);
     expect(result.finalState.units[0]?.state).toBe('sieging');
   });
 
   it('сообщает о прибытии один раз, а не каждый Тик осады', () => {
-    const result = run([deploy(1, 'short')], 400);
+    const result = run([deploy(1, 'short')], 150);
 
     expect(arrivals(result.events)).toHaveLength(1);
   });

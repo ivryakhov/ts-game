@@ -29,21 +29,22 @@ const citadelOf = (result: MatchResult, side: SideId) =>
 
 describe('Юниты у чужой Цитадели', () => {
   it('дойдя, принимаются за Цитадель, а не исчезают', () => {
-    const result = run(siege(1), 400);
+    // Сразу после прибытия: у стен одиночку быстро добивают.
+    const result = run(siege(1), 110);
 
     expect(result.finalState.units).toHaveLength(1);
     expect(result.finalState.units[0]?.state).toBe('sieging');
   });
 
   it('снимают с Цитадели здоровье', () => {
-    const result = run(siege(1), 400);
+    const result = run(siege(1), 130);
 
     const target = citadelOf(result, 'B');
     expect(target?.hp).toBeLessThan(target?.maxHp ?? 0);
   });
 
   it('не трогают свою Цитадель', () => {
-    const result = run(siege(1), 400);
+    const result = run(siege(1), 130);
 
     const own = citadelOf(result, 'A');
     expect(own?.hp).toBe(own?.maxHp);
@@ -75,13 +76,10 @@ describe('Юниты у чужой Цитадели', () => {
     expect(toCitadel / toUnit).toBeCloseTo(0.5, 1);
   });
 
-  it('вдесятером справляются быстрее, чем в одиночку', () => {
+  it('в одиночку не справиться: стены добивают одинокого осаждающего', () => {
     const one = run(siege(1));
-    const ten = run(siege(10));
 
-    expect(one.endReason).toBe('citadel-destroyed');
-    expect(ten.endReason).toBe('citadel-destroyed');
-    expect(ten.ticks).toBeLessThan(one.ticks / 2);
+    expect(one.endReason).not.toBe('citadel-destroyed');
   });
 });
 

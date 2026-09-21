@@ -133,8 +133,13 @@ export type MatchEvent =
       readonly unitId: UnitId;
       readonly side: SideId;
       readonly roadId: string;
-      readonly killedBy: UnitId;
+      readonly killer: Killer;
     };
+
+/** Кто нанёс последний удар: Юнит в Стычке или Цитадель со стен. */
+export type Killer =
+  | { readonly kind: 'unit'; readonly unitId: UnitId }
+  | { readonly kind: 'citadel'; readonly side: SideId };
 
 export type EndReason = 'tick-limit' | 'citadel-destroyed';
 
@@ -179,6 +184,8 @@ export interface CitadelSnapshot {
   readonly side: SideId;
   readonly hp: number;
   readonly maxHp: number;
+  /** Кого Цитадель бьёт прямо сейчас; null — никого нет в радиусе. */
+  readonly target: UnitId | null;
 }
 
 export interface WorldSnapshot {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MELEE_RANGE, runMatch } from '@sim/index';
+import { ECONOMY, MELEE_RANGE, runMatch, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
 import type { MatchEvent, MatchResult, ScheduledAction, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
@@ -103,5 +103,54 @@ describe('Стрелок и ближняя свалка', () => {
     );
 
     expect(fighting).toHaveLength(3);
+  });
+});
+
+describe('против отвечающей Цитадели одним типом не обойтись', () => {
+  /** Копим на всю армию и выпускаем волной, Танки первыми. */
+  const wave = (kinds: readonly UnitKind[]): ScheduledAction[] => {
+    const cost = kinds.reduce((sum, kind) => sum + UNIT_STATS[kind].cost, 0);
+    const perTick = ECONOMY.incomePerSecond / TICKS_PER_SECOND;
+    const start = Math.max(1, Math.ceil((cost - ECONOMY.startingEther) / perTick) + 1);
+    return kinds.map((kind, index) => deploy(start + index, 'A', kind));
+  };
+  const lostOf = (result: MatchResult) =>
+    result.events.filter((event) => event.kind === 'unit-died').length;
+
+  it('одни Стрелки Цитадель не берут: стены выбивают их по одному', () => {
+    const result = run(wave(['ranger', 'ranger', 'ranger', 'ranger']), 60_000);
+
+    expect(result.endReason).not.toBe('citadel-destroyed');
+  });
+
+  it('одни Танки Цитадель не берут: живучи, но урона мало', () => {
+    const result = run(wave(['tank', 'tank', 'tank']), 60_000);
+
+    expect(result.endReason).not.toBe('citadel-destroyed');
+  });
+
+  it('Танки впереди, Стрелки за спиной — берут, почти без потерь', () => {
+    const result = run(wave(['tank', 'tank', 'ranger', 'ranger']), 60_000);
+
+    expect(result.endReason).toBe('citadel-destroyed');
+    expect(lostOf(result)).toBeLessThanOrEqual(1);
+  });
+
+  it('каждая волна действительно оплачена — иначе проверки выше пусты', () => {
+    for (const kinds of [
+      ['ranger', 'ranger', 'ranger', 'ranger'],
+      ['tank', 'tank', 'tank'],
+      ['tank', 'tank', 'ranger', 'ranger'],
+    ] as const) {
+      const result = run(wave(kinds), 60_000);
+      expect(result.events.filter((event) => event.kind === 'deploy-refused')).toEqual([]);
+    }
+  });
+
+  it('Разведчики берут, но ценой почти всей армии', () => {
+    const result = run(wave(Array.from({ length: 9 }, () => 'scout' as const)), 60_000);
+
+    expect(result.endReason).toBe('citadel-destroyed');
+    expect(lostOf(result)).toBeGreaterThan(9 / 2);
   });
 });

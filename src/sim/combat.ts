@@ -32,7 +32,7 @@ export function applyPlan(
       unitId: unit.id,
       side: unit.side,
       roadId: unit.roadId,
-      killedBy: incoming.lastAttacker,
+      killer: { kind: 'unit', unitId: incoming.lastAttacker },
     });
   }
 

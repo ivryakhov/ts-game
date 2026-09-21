@@ -24,6 +24,11 @@ export interface Unit {
   state: UnitState;
   /** Дошёл ли Юнит до конца своей Дороги. Обратно не меняется. */
   arrived: boolean;
+  /**
+   * Тик, на котором Юнит встал у чужой Цитадели. Стены бьют пришедшего
+   * первым — а это не всегда вышедший первым: обходная Дорога длиннее.
+   */
+  arrivedAt: number | null;
   hp: number;
   readonly maxHp: number;
 }
@@ -49,6 +54,7 @@ export function createUnit(
     travelled: 0,
     state: 'moving',
     arrived: false,
+    arrivedAt: null,
     hp: stats.maxHp,
     maxHp: stats.maxHp,
   };
