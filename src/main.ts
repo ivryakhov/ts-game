@@ -5,12 +5,12 @@
  * Симуляция идёт фиксированным Тиком, экран обновляется чаще и сглаживает
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
- * Покупка Юнитов появится в тикете 07; пока они выходят по расписанию.
  */
-import { createMatch, TICKS_PER_SECOND } from '@sim/index';
+import { createMatch, TICKS_PER_SECOND, UNIT_COST } from '@sim/index';
 import type { MatchSetup, ScheduledAction, SideId, UnitId, WorldSnapshot } from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
+import { bindPointer } from './app/pointer.js';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
@@ -29,27 +29,23 @@ function seedFromLocation(): number {
 }
 
 /**
- * Демонстрационное расписание: обе Стороны шлют волны навстречу друг другу.
- * Волна больше лимита Стычки, поэтому видно и саму Стычку, и очередь
- * за спинами.
+ * Расписание противника. Сторона игрока никакого расписания не имеет —
+ * её Юнитов заказывает человек кликом по Дороге.
  *
- * Сторона B пропускает каждую третью волну: при полной симметрии Стороны
- * истребляют друг друга ровно посередине, до Цитаделей никто не доходит
- * и матч всегда кончается по времени. Настоящие волны появятся с покупкой
- * в тикете 07.
+ * Это заглушка: настоящий противник появится в тикете 12, когда его
+ * поведением станет набор Правил (ADR-0003). Пока он шлёт волны по
+ * очереди на каждую Дорогу, насколько хватает Эфира.
  */
-function demoSchedule(): ScheduledAction[] {
+function opponentSchedule(): ScheduledAction[] {
   const roads = arena.roads.map((road) => road.id);
   const actions: ScheduledAction[] = [];
 
   for (let wave = 0; wave < DEMO_WAVES; wave += 1) {
     const roadId = roads[wave % roads.length] ?? 'short';
     const start = 10 + wave * DEPLOY_PERIOD;
-    const sides: SideId[] = wave % 3 === 2 ? ['A'] : ['A', 'B'];
 
     for (let index = 0; index < WAVE_SIZE; index += 1) {
-      const tick = start + index * WAVE_GAP;
-      for (const side of sides) actions.push({ tick, side, kind: 'deploy', roadId });
+      actions.push({ tick: start + index * WAVE_GAP, side: 'B', kind: 'deploy', roadId });
     }
   }
 
@@ -64,7 +60,7 @@ const setup: MatchSetup = {
   seed,
   map: arena,
   sides: [{ id: 'A' }, { id: 'B' }],
-  playerActions: demoSchedule(),
+  playerActions: opponentSchedule(),
   // Запас нужен, чтобы матч успел дойти до разрушения Цитадели,
   // а не упёрся в предел Тиков.
   maxTicks: DEMO_WAVES * DEPLOY_PERIOD + 6000,
@@ -77,6 +73,9 @@ const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud();
 const pacer = createPacer(TICKS_PER_SECOND);
 const match = createMatch(setup);
+const pointer = bindPointer(canvas, renderer, (roadId) => {
+  match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId });
+});
 
 let previous: WorldSnapshot = match.snapshot();
 let current: WorldSnapshot = match.snapshot();
@@ -96,9 +95,14 @@ function frame(nowMs: number): void {
   const citadelHits = new Set<SideId>();
   for (let tick = 0; tick < due && !match.finished; tick += 1) {
     previous = current;
-    for (const event of match.step()) {
+    const lastEvents = match.step();
+    for (const event of lastEvents) {
       if (event.kind === 'unit-died') deaths.add(event.unitId);
     }
+    for (const event of lastEvents) {
+      if (event.kind === 'deploy-refused' && event.side === PLAYER_SIDE) hud.refuse();
+    }
+
     const next = match.snapshot();
     for (const citadel of current.citadels) {
       const after = next.citadels.find((candidate) => candidate.side === citadel.side);
@@ -118,8 +122,26 @@ function frame(nowMs: number): void {
   // на Дорогах продолжало бы бежать на паузе и не ускорялось бы вместе
   // с симуляцией.
   const matchMs = ((current.tick + alpha) * 1000) / TICKS_PER_SECOND;
-  renderer.draw({ previous, current, deaths, citadelHits, alpha, matchMs, realMs: nowMs });
-  hud.update({ tick: current.tick, speed: pacer.speed, paused: pacer.paused, seed });
+  renderer.draw({
+    previous,
+    current,
+    deaths,
+    citadelHits,
+    alpha,
+    matchMs,
+    realMs: nowMs,
+    highlightedRoad: pointer.hovered,
+  });
+  const purse = current.ether.find((entry) => entry.side === PLAYER_SIDE);
+  hud.update({
+    tick: current.tick,
+    speed: pacer.speed,
+    paused: pacer.paused,
+    seed,
+    ether: purse?.amount ?? 0,
+    incomePerSecond: purse?.incomePerSecond ?? 0,
+    unitCost: UNIT_COST,
+  });
   hud.announce(match.finished ? { winner: match.winner, tick: current.tick } : null);
   window.requestAnimationFrame(frame);
 }

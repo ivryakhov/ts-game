@@ -9,7 +9,17 @@ import type { Speed } from '../app/pacer.js';
  * ничего не решает и ни на что не влияет, он лишь показывает состояние.
  */
 export interface Hud {
-  update(state: { tick: number; speed: Speed; paused: boolean; seed: number }): void;
+  update(state: {
+    tick: number;
+    speed: Speed;
+    paused: boolean;
+    seed: number;
+    ether: number;
+    incomePerSecond: number;
+    unitCost: number;
+  }): void;
+  /** Показать, что Эфира не хватило: отказ должен быть заметен. */
+  refuse(): void;
   /** Объявить исход. Победитель null означает, что время вышло вничью. */
   announce(outcome: { winner: SideId | null; tick: number } | null): void;
 }
@@ -33,6 +43,7 @@ export function createHud(): Hud {
   const speed = element('hud-speed');
   const seed = element('hud-seed');
   const outcome = element('hud-outcome');
+  const ether = element('hud-ether');
 
   return {
     update(state): void {
@@ -40,6 +51,16 @@ export function createHud(): Hud {
       speed.textContent = state.paused ? `×${state.speed} пауза` : `×${state.speed}`;
       speed.classList.toggle('hud__paused', state.paused);
       seed.textContent = String(state.seed);
+      ether.textContent =
+        `${Math.floor(state.ether)} (+${state.incomePerSecond}/с) · Юнит ${state.unitCost}`;
+    },
+
+    refuse(): void {
+      ether.classList.remove('hud__refused');
+      // Перезапуск анимации: без чтения свойства браузер не заметит,
+      // что класс вернули, и второй отказ подряд пройдёт незаметно.
+      void ether.offsetWidth;
+      ether.classList.add('hud__refused');
     },
 
     announce(result): void {

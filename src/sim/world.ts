@@ -10,6 +10,7 @@ import type {
 import type { Rng } from './rng.js';
 import { bombard, citadelSnapshots, createCitadels, type Citadel } from './citadel.js';
 import { applyPlan } from './combat.js';
+import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } from './ether.js';
 import { planSkirmish } from './skirmish.js';
 import { createUnit, moveUnit, unitSnapshot, type Unit } from './unit.js';
 
@@ -27,10 +28,11 @@ export interface World {
   units: Unit[];
   readonly roads: ReadonlyMap<string, RoadRuntime>;
   readonly citadels: ReadonlyMap<SideId, Citadel>;
+  readonly purses: ReadonlyMap<SideId, Purse>;
   /** Сторона, чья Цитадель пала. Пока никто не пал — null. */
   defeated: SideId | null;
   /** Действия игрока, разложенные по Тикам, на которые они назначены. */
-  readonly schedule: ReadonlyMap<number, readonly ScheduledAction[]>;
+  readonly schedule: Map<number, ScheduledAction[]>;
   nextUnitId: number;
 }
 
@@ -41,21 +43,22 @@ export interface RoadRuntime {
   readonly metrics: RoadMetrics;
 }
 
-export function createWorld(setup: MatchSetup): World {
-  const schedule = new Map<number, ScheduledAction[]>();
-  for (const action of setup.playerActions) {
-    const atTick = schedule.get(action.tick) ?? [];
-    atTick.push(action);
-    schedule.set(action.tick, atTick);
-  }
+/** Ставит действие игрока в очередь на указанный Тик. */
+export function schedule(world: World, action: ScheduledAction): void {
+  const atTick = world.schedule.get(action.tick) ?? [];
+  atTick.push(action);
+  world.schedule.set(action.tick, atTick);
+}
 
+export function createWorld(setup: MatchSetup): World {
   const sides = setup.sides.map((side) => side.id);
 
-  return {
+  const world: World = {
     tick: 0,
     sides,
     units: [],
     citadels: createCitadels(sides),
+    purses: createPurses(sides),
     defeated: null,
     roads: new Map(
       setup.map.roads.map((road) => [
@@ -63,9 +66,12 @@ export function createWorld(setup: MatchSetup): World {
         { from: road.from, to: road.to, metrics: measureRoad(road) },
       ]),
     ),
-    schedule,
+    schedule: new Map(),
     nextUnitId: 1,
   };
+
+  for (const action of setup.playerActions) schedule(world, action);
+  return world;
 }
 
 /**
@@ -80,6 +86,7 @@ export function createWorld(setup: MatchSetup): World {
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
 
+  collectIncome(world.purses);
   for (const action of world.schedule.get(world.tick) ?? []) applyAction(world, action, events);
 
   fight(world, events);
@@ -129,6 +136,17 @@ function roadOf(world: World, roadId: string): RoadRuntime {
 
 function applyAction(world: World, action: ScheduledAction, events: MatchEvent[]): void {
   const road = roadOf(world, action.roadId);
+
+  if (!payForUnit(world.purses.get(action.side))) {
+    events.push({
+      kind: 'deploy-refused',
+      tick: world.tick,
+      side: action.side,
+      roadId: action.roadId,
+      reason: 'not-enough-ether',
+    });
+    return;
+  }
 
   const unit = createUnit(world.nextUnitId, action.side, action.roadId, action.side === road.from);
   world.nextUnitId += 1;
@@ -184,5 +202,6 @@ export function snapshot(world: World): WorldSnapshot {
     sides: [...world.sides],
     units: world.units.map((unit) => unitSnapshot(unit, roadOf(world, unit.roadId).metrics)),
     citadels: citadelSnapshots(world.citadels),
+    ether: etherSnapshots(world.purses),
   };
 }

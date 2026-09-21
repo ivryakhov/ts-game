@@ -43,9 +43,12 @@ function play(frameMs: number, speed: Speed, modelSeconds: number): MatchResult 
   }
 
   const result = match.result();
-  // Если прогон упёрся в конец матча, сравнивать нечего: все исходы
-  // сойдутся в одну заглушку и тест станет пустым.
+  // Если прогон упёрся в конец матча или в нём вообще ничего не произошло,
+  // сравнивать нечего: исходы сойдутся в одну заглушку и тест станет пустым.
   if (match.finished) throw new Error('матч кончился сам — темп проверить нечем');
+  if (!result.events.some((event) => event.kind === 'unit-deployed')) {
+    throw new Error('в прогоне не появилось ни одного Юнита — сравнивать нечего');
+  }
   return result;
 }
 

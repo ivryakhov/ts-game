@@ -12,12 +12,24 @@ const BASE_SPEED_PER_SECOND = 120;
 /** Урона в секунду. */
 const BASE_DAMAGE_PER_SECOND = 15;
 
+/** Цена Юнита. Вынесена отдельно, потому что её показывает панель. */
+export const UNIT_COST = 20;
+
 export const UNIT_STATS = {
   maxHp: 50,
+  cost: UNIT_COST,
   /** Условных единиц карты за один Тик. */
   speedPerTick: BASE_SPEED_PER_SECOND / TICKS_PER_SECOND,
   /** Урона за один Тик. */
   damagePerTick: BASE_DAMAGE_PER_SECOND / TICKS_PER_SECOND,
+} as const;
+
+/** Экономика Стороны. */
+export const ECONOMY = {
+  /** С чего начинается матч. */
+  startingEther: 100,
+  /** Пассивный доход в секунду. */
+  incomePerSecond: 5,
 } as const;
 
 export const CITADEL_STATS = {

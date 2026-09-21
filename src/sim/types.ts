@@ -70,6 +70,13 @@ export interface DeployAction {
 }
 
 /**
+ * Действие игрока, ещё не привязанное к Тику. Номер назначает сам матч —
+ * ближайший не сыгранный, — поэтому воспроизводимость сохраняется
+ * и на паузе, и при ускорении.
+ */
+export type UnscheduledAction = Omit<DeployAction, 'tick'>;
+
+/**
  * Действие игрока, привязанное к номеру Тика, а не к реальному времени:
  * иначе при ускорении воспроизведения действие «уезжает» и матч перестаёт
  * быть воспроизводимым. Словарь закрыт и растёт вместе со спекой.
@@ -102,6 +109,13 @@ export type MatchEvent =
       readonly roadId: string;
     }
   | {
+      readonly kind: 'deploy-refused';
+      readonly tick: number;
+      readonly side: SideId;
+      readonly roadId: string;
+      readonly reason: RefusalReason;
+    }
+  | {
       readonly kind: 'citadel-destroyed';
       readonly tick: number;
       readonly side: SideId;
@@ -116,6 +130,9 @@ export type MatchEvent =
     };
 
 export type EndReason = 'tick-limit' | 'citadel-destroyed';
+
+/** Почему действие игрока не исполнилось. */
+export type RefusalReason = 'not-enough-ether';
 
 export type UnitId = number;
 
@@ -142,6 +159,13 @@ export interface UnitSnapshot {
   readonly maxHp: number;
 }
 
+/** Запас Эфира Стороны глазами рендера. */
+export interface EtherSnapshot {
+  readonly side: SideId;
+  readonly amount: number;
+  readonly incomePerSecond: number;
+}
+
 /** Цитадель глазами рендера. */
 export interface CitadelSnapshot {
   readonly side: SideId;
@@ -154,6 +178,7 @@ export interface WorldSnapshot {
   readonly sides: readonly SideId[];
   readonly units: readonly UnitSnapshot[];
   readonly citadels: readonly CitadelSnapshot[];
+  readonly ether: readonly EtherSnapshot[];
 }
 
 export interface MatchStats {

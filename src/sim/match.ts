@@ -1,14 +1,15 @@
-import { validateActions, validateMap } from './map-validation.js';
+import { validateAction, validateActions, validateMap } from './map-validation.js';
 import { createRng } from './rng.js';
 import type {
   EndReason,
+  UnscheduledAction,
   MatchEvent,
   MatchResult,
   MatchSetup,
   SideId,
   WorldSnapshot,
 } from './types.js';
-import { advance, createWorld, snapshot, type World } from './world.js';
+import { advance, createWorld, schedule, snapshot, type World } from './world.js';
 
 /**
  * Матч, идущий по одному Тику за раз. Интерактивная игра крутит его
@@ -24,6 +25,15 @@ export interface LiveMatch {
    */
   step(): readonly MatchEvent[];
   snapshot(): WorldSnapshot;
+  /**
+   * Выпустить Юнита по ходу матча. Действие исполнится на ближайшем ещё
+   * не сыгранном Тике, поэтому выбор, сделанный на паузе, не теряется,
+   * а ускорение не сдвигает его во времени.
+   *
+   * Негодное действие отвергается здесь же: бросок из середины Тика
+   * навсегда остановил бы цикл кадров в браузере.
+   */
+  deploy(action: UnscheduledAction): void;
   readonly finished: boolean;
   /** Победитель, когда матч окончен; иначе null. */
   readonly winner: SideId | null;
@@ -70,6 +80,13 @@ export function createMatch(setup: MatchSetup): LiveMatch {
     },
 
     snapshot: () => snapshot(world),
+
+    deploy(action: UnscheduledAction): void {
+      if (ended) return;
+      const scheduled = { ...action, tick: world.tick + 1 };
+      validateAction(scheduled, setup.map, setup.maxTicks);
+      schedule(world, scheduled);
+    },
 
     get finished(): boolean {
       return ended;

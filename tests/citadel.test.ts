@@ -14,8 +14,15 @@ const deploy = (tick: number, side: SideId, roadId = 'short'): ScheduledAction =
 const run = (actions: readonly ScheduledAction[], maxTicks = 20_000): MatchResult =>
   runMatch(matchSetup({ map: arena, playerActions: actions, maxTicks }));
 
+/**
+ * Осада по средствам: первых пятерых покрывает стартовый запас Эфира,
+ * дальше приходится ждать, пока накопится на следующего.
+ */
+const AFFORDABLE_GAP = 80;
 const siege = (count: number, side: SideId = 'A'): ScheduledAction[] =>
-  Array.from({ length: count }, (_, index) => deploy(1 + index * 3, side));
+  Array.from({ length: count }, (_, index) =>
+    deploy(1 + (index < 5 ? index * 3 : 15 + (index - 4) * AFFORDABLE_GAP), side),
+  );
 
 const citadelOf = (result: MatchResult, side: SideId) =>
   result.finalState.citadels.find((citadel) => citadel.side === side);
@@ -72,7 +79,8 @@ describe('Юниты у чужой Цитадели', () => {
     const ten = run(siege(10));
 
     expect(one.endReason).toBe('citadel-destroyed');
-    expect(ten.ticks).toBeLessThan(one.ticks / 5);
+    expect(ten.endReason).toBe('citadel-destroyed');
+    expect(ten.ticks).toBeLessThan(one.ticks / 2);
   });
 });
 
@@ -82,7 +90,7 @@ describe('оборона своей Цитадели', () => {
     // по той же Дороге. Если осаждающие неуязвимы, оборонять
     // Цитадель нечем и матч вырождается в гонку без Стычек.
     const attackers = siege(6, 'A');
-    const defenders = Array.from({ length: 8 }, (_, index) => deploy(200 + index * 3, 'B'));
+    const defenders = Array.from({ length: 5 }, (_, index) => deploy(200 + index * 3, 'B'));
     const result = run([...attackers, ...defenders], 1500);
 
     const lost = result.events.filter(

@@ -50,6 +50,12 @@
       .hud__keys { margin-top: 8px; color: var(--ink-dim); font-size: 12px; }
       .hud__paused { color: #fbbf24; }
 
+      .hud__refused { animation: refused 500ms ease; }
+      @keyframes refused {
+        0%, 100% { color: var(--ink); }
+        30% { color: #f87171; }
+      }
+
       .hud__outcome {
         position: absolute;
         top: 50%;
@@ -76,9 +82,10 @@
       <div class="hud__clock" id="hud-clock">00:00</div>
       <div class="hud__outcome" id="hud-outcome"></div>
       <div class="hud__panel">
+        <div class="hud__row"><span class="hud__label">эфир</span><span id="hud-ether">—</span></div>
         <div class="hud__row"><span class="hud__label">темп</span><span id="hud-speed">×1</span></div>
         <div class="hud__row"><span class="hud__label">Сид</span><span id="hud-seed">—</span></div>
-        <div class="hud__keys">пробел — пауза · − = — темп · ?seed=число в адресе</div>
+        <div class="hud__keys">клик по Дороге — отправить Юнита · пробел — пауза · − = — темп</div>
       </div>
     </div>
 

@@ -1,4 +1,4 @@
-import type { GameMap, MatchSetup, RoadSpec } from './types.js';
+import type { GameMap, MatchSetup, RoadSpec, ScheduledAction } from './types.js';
 
 /**
  * Проверка целостности карты. Выполняется при запуске матча, поэтому
@@ -57,20 +57,25 @@ function validateRoad(road: RoadSpec, map: GameMap): void {
  * Ошибка в расписании должна обнаруживаться на входе, а не на сотом Тике.
  */
 export function validateActions(setup: MatchSetup): void {
-  const roads = new Map(setup.map.roads.map((road) => [road.id, road]));
+  for (const action of setup.playerActions) validateAction(action, setup.map, setup.maxTicks);
+}
 
-  for (const action of setup.playerActions) {
-    if (action.tick < 1 || action.tick > setup.maxTicks) {
-      throw new Error(`Действие на Тике ${action.tick}: вне отрезка матча`);
-    }
+/**
+ * Проверка одного действия. Нужна и тем, что заданы заранее, и тем, что
+ * игрок совершает по ходу матча: негодное действие обязано отвергаться
+ * на входе, а не ронять симуляцию посреди Тика.
+ */
+export function validateAction(action: ScheduledAction, map: GameMap, maxTicks: number): void {
+  if (action.tick < 1 || action.tick > maxTicks) {
+    throw new Error(`Действие на Тике ${action.tick}: вне отрезка матча`);
+  }
 
-    const road = roads.get(action.roadId);
-    if (!road) throw new Error(`Действие на Тике ${action.tick}: Дороги ${action.roadId} нет на карте`);
+  const road = map.roads.find((candidate) => candidate.id === action.roadId);
+  if (!road) throw new Error(`Действие на Тике ${action.tick}: Дороги ${action.roadId} нет на карте`);
 
-    if (action.side !== road.from && action.side !== road.to) {
-      throw new Error(
-        `Действие на Тике ${action.tick}: Дорога ${action.roadId} не ведёт от Цитадели ${action.side}`,
-      );
-    }
+  if (action.side !== road.from && action.side !== road.to) {
+    throw new Error(
+      `Действие на Тике ${action.tick}: Дорога ${action.roadId} не ведёт от Цитадели ${action.side}`,
+    );
   }
 }

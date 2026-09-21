@@ -43,6 +43,8 @@ export const ROAD = {
   dash: [16, 30],
   /** Условных единиц в секунду — скорость бега пунктира. */
   dashSpeed: 55,
+  /** Во сколько раз шире светится Дорога под курсором. */
+  highlightScale: 1.8,
 } as const;
 
 export const UNIT_VISUAL = {
@@ -58,6 +60,12 @@ export const UNIT_VISUAL = {
   /** Сколько миллисекунд матча Юнит схлопывается после смерти. */
   fadeMs: 260,
 } as const;
+
+/**
+ * Насколько близко к Дороге должен быть курсор, чтобы её выбрать.
+ * В единицах карты, как и ширина самой Дороги.
+ */
+export const PICK_RADIUS = 34;
 
 export function withAlpha(hex: string, alpha: number): string {
   const value = hex.replace('#', '');

@@ -1,6 +1,4 @@
 import type {
-  CitadelSnapshot,
-  CitadelSpec,
   GameMap,
   Point,
   RoadMetrics,
@@ -9,13 +7,11 @@ import type {
   UnitSnapshot,
 } from '@sim/index';
 import { measureRoad, roadPolyline } from '@sim/index';
-import { ALARM, BACKGROUND, CITADEL, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
+import { ALARM, BACKGROUND, PICK_RADIUS, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
+import { drawCitadel } from './citadels.js';
 import { createFading } from './fading.js';
 import { drawUnit, hindsight } from './units.js';
-
-/** Во сколько граней рисуется Цитадель. */
-const CITADEL_FACETS = 6;
 
 interface Viewport {
   scale: number;
@@ -53,6 +49,10 @@ export function createCanvasRenderer(
     y: view.offsetY + point.y * view.scale,
   });
   const scaled = (length: number): number => length * view.scale;
+  const toMap = (x: number, y: number): Point => ({
+    x: (x - view.offsetX) / view.scale,
+    y: (y - view.offsetY) / view.scale,
+  });
 
   /** Форма Дороги приходит из ядра ломаной: здесь не знают про Безье. */
   const shapeOf = (road: RoadSpec): readonly Point[] => {
@@ -93,14 +93,41 @@ export function createCanvasRenderer(
     return gradient;
   }
 
-  function drawRoad(road: RoadSpec, matchMs: number): void {
+  /**
+   * Расстояние от точки до ломаной Дороги — в единицах карты, а не экрана.
+   * Ширина Дороги задана в тех же единицах, поэтому зона клика остаётся
+   * соразмерной нарисованному при любом размере окна.
+   */
+  function distanceToRoad(road: RoadSpec, at: Point): number {
+    const shape = shapeOf(road);
+    let closest = Number.POSITIVE_INFINITY;
+
+    for (let index = 1; index < shape.length; index += 1) {
+      const a = shape[index - 1];
+      const b = shape[index];
+      if (!a || !b) continue;
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const t =
+        lengthSquared === 0
+          ? 0
+          : Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / lengthSquared));
+      closest = Math.min(closest, Math.hypot(at.x - (a.x + dx * t), at.y - (a.y + dy * t)));
+    }
+
+    return closest;
+  }
+
+  function drawRoad(road: RoadSpec, matchMs: number, highlighted: boolean): void {
     context.save();
     context.lineCap = 'round';
     context.lineJoin = 'round';
 
     tracePath(road);
     context.strokeStyle = faintGradient(road);
-    context.lineWidth = scaled(ROAD.glowWidth);
+    context.lineWidth = scaled(ROAD.glowWidth) * (highlighted ? ROAD.highlightScale : 1);
     context.stroke();
 
     tracePath(road);
@@ -124,69 +151,6 @@ export function createCanvasRenderer(
     const road = metrics.get(unit.roadId);
     if (!road) return null;
     return toScreen(road.pointAtDistance(progress * road.length));
-  }
-
-  /** Кольцо здоровья: сколько Цитадели осталось, видно с одного взгляда. */
-  function drawCitadelHealth(center: Point, color: string, share: number): void {
-    const radius = scaled(CITADEL.healthRadius);
-    context.lineWidth = scaled(CITADEL.healthWidth);
-    context.lineCap = 'butt';
-
-    context.beginPath();
-    context.arc(center.x, center.y, radius, 0, Math.PI * 2);
-    context.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    context.stroke();
-
-    if (share <= 0) return;
-    context.beginPath();
-    context.arc(center.x, center.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * share);
-    context.strokeStyle = color;
-    context.stroke();
-  }
-
-  function drawCitadel(citadel: CitadelSpec, health: CitadelSnapshot | undefined): void {
-    context.save();
-    const center = toScreen(citadel.at);
-    const color = SIDE_COLORS[citadel.side];
-    const glowRadius = scaled(CITADEL.glowRadius);
-    // Разрушенная Цитадель гаснет: победа должна читаться с экрана,
-    // а не только из надписи.
-    if (health && health.hp <= 0) context.globalAlpha = CITADEL.ruinAlpha;
-
-    const glow = context.createRadialGradient(center.x, center.y, 0, center.x, center.y, glowRadius);
-    glow.addColorStop(0, withAlpha(color, 0.5));
-    glow.addColorStop(1, withAlpha(color, 0));
-    context.fillStyle = glow;
-    context.fillRect(center.x - glowRadius, center.y - glowRadius, glowRadius * 2, glowRadius * 2);
-
-    const radius = scaled(CITADEL.radius);
-    context.beginPath();
-    for (let facet = 0; facet < CITADEL_FACETS; facet += 1) {
-      const angle = (facet / CITADEL_FACETS) * Math.PI * 2 - Math.PI / 2;
-      const x = center.x + Math.cos(angle) * radius;
-      const y = center.y + Math.sin(angle) * radius;
-      if (facet === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.closePath();
-    context.fillStyle = withAlpha(color, 0.18);
-    context.fill();
-    context.strokeStyle = color;
-    context.lineWidth = scaled(CITADEL.ringWidth);
-    context.stroke();
-
-    const coreRadius = scaled(CITADEL.coreRadius);
-    const core = context.createRadialGradient(center.x, center.y, 0, center.x, center.y, coreRadius);
-    core.addColorStop(0, '#ffffff');
-    core.addColorStop(0.4, color);
-    core.addColorStop(1, withAlpha(color, 0));
-    context.fillStyle = core;
-    context.beginPath();
-    context.arc(center.x, center.y, coreRadius, 0, Math.PI * 2);
-    context.fill();
-
-    if (health) drawCitadelHealth(center, color, health.maxHp === 0 ? 0 : health.hp / health.maxHp);
-    context.restore();
   }
 
   /**
@@ -219,14 +183,32 @@ export function createCanvasRenderer(
       view.offsetY = (height - map.size.height * view.scale) / 2;
     },
 
+    roadAt(x: number, y: number): string | null {
+      const at = toMap(x, y);
+      let nearest: { id: string; distance: number } | null = null;
+
+      for (const road of map.roads) {
+        const distance = distanceToRoad(road, at);
+        if (distance > PICK_RADIUS) continue;
+        if (!nearest || distance < nearest.distance) nearest = { id: road.id, distance };
+      }
+
+      return nearest?.id ?? null;
+    },
+
     draw(frame: Frame): void {
       context.fillStyle = BACKGROUND;
       context.fillRect(0, 0, cssWidth, cssHeight);
 
-      for (const road of map.roads) drawRoad(road, frame.matchMs);
+      for (const road of map.roads) {
+        drawRoad(road, frame.matchMs, road.id === frame.highlightedRoad);
+      }
       for (const citadel of map.citadels) {
         drawCitadel(
-          citadel,
+          context,
+          citadel.side,
+          toScreen(citadel.at),
+          view.scale,
           frame.current.citadels.find((health) => health.side === citadel.side),
         );
       }

@@ -15,6 +15,12 @@ export interface Renderer {
   /** Новый размер области в css-пикселях. */
   resize(width: number, height: number): void;
   draw(frame: Frame): void;
+  /**
+   * Какая Дорога лежит под точкой экрана. Обратное преобразование живёт
+   * здесь же, где прямое: иначе ввод и отрисовка разъедутся в том, где
+   * проходит Дорога.
+   */
+  roadAt(x: number, y: number): string | null;
 }
 
 export interface Frame {
@@ -42,4 +48,6 @@ export interface Frame {
   readonly realMs: number;
   /** Чьи Цитадели получили урон с прошлого кадра. */
   readonly citadelHits: ReadonlySet<SideId>;
+  /** Дорога под курсором — её подсвечивают как выбранную. */
+  readonly highlightedRoad: string | null;
 }
