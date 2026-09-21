@@ -110,6 +110,16 @@ export function drawUnit(
   context.lineWidth = Math.max(1, 1.5 * scale);
   context.stroke();
 
+  // Лечащегося видно сразу, чем бы он ни был занят: иначе Юнит у своей
+  // Цитадели неотличим от струсившего, а защитник у ворот — от обречённого.
+  if (unit.healing) {
+    context.beginPath();
+    context.arc(center.x, center.y, radius * UNIT_VISUAL.recoveryRing, 0, Math.PI * 2);
+    context.strokeStyle = UNIT_VISUAL.recoveryColor;
+    context.lineWidth = Math.max(1, 2 * scale);
+    context.stroke();
+  }
+
   const flash = options.flash ?? 0;
   if (flash > 0) {
     context.beginPath();

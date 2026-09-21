@@ -152,8 +152,8 @@ export type RefusalReason = 'not-enough-ether';
 export type UnitId = number;
 
 /**
- * Чем Юнит занят прямо сейчас. Состояние выводится заново каждый Тик
- * из расстановки на Дороге, а не хранится: так не бывает Юнита, который
+ * Чем Юнит занят прямо сейчас. Выводится заново каждый Тик из его Действия
+ * и расстановки на Дороге, а не хранится: так не бывает Юнита, который
  * помнит, что дерётся, когда драться уже не с кем.
  */
 export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging' | 'retreating';
@@ -171,6 +171,11 @@ export interface UnitSnapshot {
   /** Доля пройденного пути от 0 до 1. */
   readonly progress: number;
   readonly state: UnitState;
+  /**
+   * Лечит ли его своя Цитадель в этот Тик. Отдельно от состояния: Юнит
+   * может и драться у своих ворот, и лечиться одновременно.
+   */
+  readonly healing: boolean;
   readonly hp: number;
   readonly maxHp: number;
 }

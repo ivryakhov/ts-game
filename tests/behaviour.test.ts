@@ -35,6 +35,7 @@ describe('матч принимает корректное Поведение', 
       scout: [
         { when: { kind: 'hp-below', percent: 30 }, do: { kind: 'retreat' } },
         { when: { kind: 'enemy-in-range' }, do: { kind: 'attack-nearest' } },
+        { when: { kind: 'recovering', until: 100 }, do: { kind: 'retreat' } },
         ALWAYS_ADVANCE,
       ],
     };
@@ -63,6 +64,22 @@ describe('матч отвергает негодное Поведение и г�
       scout: [{ when: { kind: 'hp-below', percent: 140 }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
     };
     expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.percent/);
+  });
+
+  it('порог «долечиваюсь» вне отрезка от 0 до 100', () => {
+    const broken = {
+      ...valid,
+      ranger: [{ when: { kind: 'recovering', until: 150 }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/ranger\[0\]\.when\.until/);
+  });
+
+  it('«долечиваюсь» без порога — иначе Правило молча не работало бы', () => {
+    const broken = {
+      ...valid,
+      scout: [{ when: { kind: 'recovering' }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.until/);
   });
 
   it('лишний ключ — почти всегда опечатка', () => {

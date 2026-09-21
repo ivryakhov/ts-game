@@ -1,4 +1,4 @@
-import { UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
+import { CITADEL_STATS, UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
 import type { Action } from './rules.js';
 import type { RoadMetrics } from './geometry.js';
 import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
@@ -39,6 +39,22 @@ export interface Unit {
   arrivedAt: number | null;
   hp: number;
   readonly maxHp: number;
+  /** Лечила ли его своя Цитадель в этот Тик. */
+  healing: boolean;
+}
+
+/**
+ * Стоит ли Юнит у своей Цитадели — там, где она его лечит. Пройденное
+ * расстояние отсчитывается от своей Цитадели, поэтому достаточно
+ * посмотреть, далеко ли он от неё ушёл.
+ */
+export function isAtHome(unit: Unit): boolean {
+  return unit.travelled <= CITADEL_STATS.healRadius;
+}
+
+/** Доля оставшегося здоровья в процентах — мерка Условий Правил. */
+export function healthPercent(unit: Unit): number {
+  return (unit.hp / unit.maxHp) * 100;
 }
 
 export function statsOf(unit: Unit): UnitStats {
@@ -66,6 +82,7 @@ export function createUnit(
     arrivedAt: null,
     hp: stats.maxHp,
     maxHp: stats.maxHp,
+    healing: false,
   };
 }
 
@@ -92,6 +109,7 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     // чтобы рендеру не приходилось знать о направлениях.
     progress: unit.forward ? covered : 1 - covered,
     state: unit.state,
+    healing: unit.healing,
     hp: unit.hp,
     maxHp: unit.maxHp,
   };

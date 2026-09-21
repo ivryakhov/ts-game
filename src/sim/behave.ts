@@ -1,6 +1,6 @@
 import type { Action, Behaviour, Condition } from './rules.js';
 import { inReach } from './skirmish.js';
-import type { Unit } from './unit.js';
+import { healthPercent, isAtHome, type Unit } from './unit.js';
 
 /**
  * Исполнение Правил: каждый Тик каждый Юнит перебирает Правила своего типа
@@ -15,6 +15,8 @@ import type { Unit } from './unit.js';
 export interface Surroundings {
   /** Дотягивается ли Юнит до врага — сам или в свалке своей Колонны. */
   readonly enemyInReach: boolean;
+  /** Стоит ли Юнит у своей Цитадели — там, где она его лечит. */
+  readonly atHome: boolean;
 }
 
 export function holds(condition: Condition, unit: Unit, around: Surroundings): boolean {
@@ -22,9 +24,11 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
     case 'always':
       return true;
     case 'hp-below':
-      return (unit.hp / unit.maxHp) * 100 < condition.percent;
+      return healthPercent(unit) < condition.percent;
     case 'enemy-in-range':
       return around.enemyInReach;
+    case 'recovering':
+      return around.atHome && healthPercent(unit) < condition.until;
   }
 }
 
@@ -49,5 +53,11 @@ export function surroundingsOn(
   roadLength: number,
 ): Map<number, Surroundings> {
   const reachable = inReach(units, roadLength);
-  return new Map(units.map((unit) => [unit.id, { enemyInReach: reachable.has(unit.id) }]));
+  return new Map(
+    units.map((unit) => [
+      unit.id,
+      { enemyInReach: reachable.has(unit.id), atHome: isAtHome(unit) },
+    ]),
+  );
 }
+

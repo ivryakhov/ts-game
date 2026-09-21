@@ -12,7 +12,9 @@ import { UNIT_KINDS, type UnitKind } from './balance.js';
 export type Condition =
   | { readonly kind: 'always' }
   | { readonly kind: 'hp-below'; readonly percent: number }
-  | { readonly kind: 'enemy-in-range' };
+  | { readonly kind: 'enemy-in-range' }
+  /** Стою у своей Цитадели и здоровье ещё ниже until процентов. */
+  | { readonly kind: 'recovering'; readonly until: number };
 
 /** Что Юнит делает в этот Тик. */
 export type Action =
@@ -28,7 +30,7 @@ export interface Rule {
 /** Упорядоченный список Правил на каждый тип Юнита. */
 export type Behaviour = Readonly<Record<UnitKind, readonly Rule[]>>;
 
-const CONDITIONS = ['always', 'hp-below', 'enemy-in-range'] as const;
+const CONDITIONS = ['always', 'hp-below', 'enemy-in-range', 'recovering'] as const;
 const ACTIONS = ['advance', 'attack-nearest', 'retreat'] as const;
 
 /**
@@ -68,6 +70,13 @@ function onlyKeys(raw: Record<string, unknown>, allowed: readonly string[], wher
   }
 }
 
+function parsePercent(value: unknown, where: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    throw new BehaviourError(where, `ожидалось число от 0 до 100, а не ${String(value)}`);
+  }
+  return value;
+}
+
 function parseCondition(raw: unknown, where: string): Condition {
   if (!isRecord(raw)) throw new BehaviourError(where, 'ожидалось Условие-объект');
   const kind = raw['kind'];
@@ -77,14 +86,12 @@ function parseCondition(raw: unknown, where: string): Condition {
     case 'enemy-in-range':
       onlyKeys(raw, ['kind'], where);
       return { kind };
-    case 'hp-below': {
+    case 'hp-below':
       onlyKeys(raw, ['kind', 'percent'], where);
-      const percent = raw['percent'];
-      if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) {
-        throw new BehaviourError(`${where}.percent`, `ожидалось число от 0 до 100, а не ${String(percent)}`);
-      }
-      return { kind, percent };
-    }
+      return { kind, percent: parsePercent(raw['percent'], `${where}.percent`) };
+    case 'recovering':
+      onlyKeys(raw, ['kind', 'until'], where);
+      return { kind, until: parsePercent(raw['until'], `${where}.until`) };
     default:
       throw new BehaviourError(
         where,

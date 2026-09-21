@@ -63,6 +63,9 @@ export const UNIT_VISUAL = {
   barOffset: 26,
   /** Сколько миллисекунд матча Юнит схлопывается после смерти. */
   fadeMs: 260,
+  /** Кольцо вокруг Юнита, которого лечит своя Цитадель. */
+  recoveryColor: '#4ade80',
+  recoveryRing: 1.7,
 } as const;
 
 /**

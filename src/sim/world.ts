@@ -23,7 +23,7 @@ import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } f
 import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
-import { createUnit, unitSnapshot, type Unit } from './unit.js';
+import { createUnit, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
 /**
  * Изменяемое состояние мира. Живёт только внутри одного матча и наружу
@@ -99,7 +99,8 @@ export function createWorld(setup: MatchSetup): World {
  *    одновременно наносится урон и убираются погибшие;
  * 3. двигаются те, кому ничто не мешает, и Колонны выравниваются;
  * 4. осаждающие бьют чужие Цитадели;
- * 5. Цитадели отвечают ударом со стен.
+ * 5. Цитадели отвечают ударом со стен;
+ * 6. своя Цитадель лечит раненых рядом с собой.
  */
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
@@ -112,6 +113,22 @@ export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   moveUnits(world, events);
   siege(world, events);
   holdTheWalls(world, events);
+  mend(world);
+}
+
+/**
+ * Своя Цитадель лечит Юнитов рядом с собой — зеркально тому, как её стены
+ * бьют чужих. Лечит всех, кто рядом и ранен, чем бы они ни были заняты:
+ * защитник, дерущийся у ворот, тоже лечится, и игрок это видит.
+ *
+ * Идёт последним, после Стычки и ударов со стен, поэтому погибшего в этом
+ * Тике уже нет среди лечимых, а лечение не отменяет смерть задним числом.
+ */
+function mend(world: World): void {
+  for (const unit of world.units) {
+    unit.healing = isAtHome(unit) && unit.hp < unit.maxHp;
+    if (unit.healing) unit.hp = Math.min(unit.maxHp, unit.hp + CITADEL_STATS.healPerTick);
+  }
 }
 
 /** Каждый Юнит выбирает Действие по Правилам своей Стороны. */
