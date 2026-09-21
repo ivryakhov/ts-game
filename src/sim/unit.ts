@@ -27,7 +27,7 @@ export interface Unit {
    * Что Юнит решил делать в этот Тик по своим Правилам. Решение
    * принимается заново каждый Тик, до Стычки и движения.
    */
-  intent: Action['kind'];
+  intent: Action;
   /**
    * Стоит ли Юнит у чужой Цитадели. Сбрасывается, если он отступил от стен.
    */
@@ -77,7 +77,7 @@ export function createUnit(
     forward,
     travelled: 0,
     state: 'moving',
-    intent: 'advance',
+    intent: { kind: 'advance' },
     arrived: false,
     arrivedAt: null,
     hp: stats.maxHp,

@@ -91,7 +91,8 @@ export function drawUnit(
   const color = SIDE_COLORS[unit.side];
   const fade = options.fade ?? 1;
   // Ждущий очереди и отступающий оба вне Стычки — оба тусклее бьющихся.
-  const waiting = unit.state === 'waiting' || unit.state === 'retreating';
+  const waiting =
+    unit.state === 'waiting' || unit.state === 'retreating' || unit.state === 'holding';
   const shrink = (waiting ? UNIT_VISUAL.waitingScale : 1) * fade;
   context.globalAlpha = (waiting ? UNIT_VISUAL.waitingAlpha : 1) * fade;
   const radius = UNIT_VISUAL.radius * scale * shrink;

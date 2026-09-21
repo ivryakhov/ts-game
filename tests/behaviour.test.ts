@@ -44,7 +44,70 @@ describe('матч принимает корректное Поведение', 
   });
 });
 
+describe('матч принимает полный словарь', () => {
+  it('все Условия тикета 10', () => {
+    const conditions = [
+      { kind: 'allies-nearby', compare: 'fewer', count: 2 },
+      { kind: 'allies-nearby', compare: 'more', count: 3 },
+      { kind: 'enemies-in-skirmish', above: 2 },
+      { kind: 'enemy-ahead' },
+      { kind: 'enemy-citadel-in-range' },
+    ];
+    const rules = [
+      ...conditions.map((when) => ({ when, do: { kind: 'advance' } })),
+      ALWAYS_ADVANCE,
+    ];
+    expect(withBehaviour({ ...valid, scout: rules })).not.toThrow();
+  });
+
+  it('все Действия тикета 10', () => {
+    const actions = [
+      { kind: 'attack-weakest' },
+      { kind: 'attack-most-dangerous' },
+      { kind: 'attack-kind', unit: 'tank' },
+      { kind: 'hold' },
+    ];
+    const rules = [
+      ...actions.map((act) => ({ when: { kind: 'enemy-in-range' }, do: act })),
+      ALWAYS_ADVANCE,
+    ];
+    expect(withBehaviour({ ...valid, tank: rules })).not.toThrow();
+  });
+});
+
 describe('матч отвергает негодное Поведение и говорит где', () => {
+  it('сравнение союзников — только «fewer» или «more»', () => {
+    const broken = {
+      ...valid,
+      scout: [{ when: { kind: 'allies-nearby', compare: 'about', count: 2 }, do: { kind: 'hold' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.compare/);
+  });
+
+  it('число союзников — целое неотрицательное', () => {
+    const broken = {
+      ...valid,
+      scout: [{ when: { kind: 'allies-nearby', compare: 'fewer', count: 1.5 }, do: { kind: 'hold' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.count/);
+  });
+
+  it('порог врагов в Стычке — целое неотрицательное', () => {
+    const broken = {
+      ...valid,
+      tank: [{ when: { kind: 'enemies-in-skirmish', above: -1 }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/tank\[0\]\.when\.above/);
+  });
+
+  it('атаковать можно только существующий тип Юнита', () => {
+    const broken = {
+      ...valid,
+      ranger: [{ when: { kind: 'always' }, do: { kind: 'attack-kind', unit: 'wizard' } }, ALWAYS_ADVANCE],
+    };
+    expect(withBehaviour(broken)).toThrow(/ranger\[0\]\.do\.unit.*wizard/);
+  });
+
   it('неизвестное Условие', () => {
     const broken = { ...valid, tank: [{ when: { kind: 'sometimes' }, do: { kind: 'advance' } }] };
     expect(withBehaviour(broken)).toThrow(/tank\[0\]\.when.*sometimes/);

@@ -156,7 +156,13 @@ export type UnitId = number;
  * и расстановки на Дороге, а не хранится: так не бывает Юнита, который
  * помнит, что дерётся, когда драться уже не с кем.
  */
-export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging' | 'retreating';
+export type UnitState =
+  | 'moving'
+  | 'fighting'
+  | 'waiting'
+  | 'holding'
+  | 'sieging'
+  | 'retreating';
 
 /**
  * Юнит глазами рендера. Положение задано долей пройденной Дороги,

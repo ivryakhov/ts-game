@@ -1,5 +1,6 @@
 import { MELEE_RANGE, SKIRMISH } from './balance.js';
 import type { UnitId, UnitState } from './types.js';
+import { isAttack } from './rules.js';
 import { statsOf, type Unit } from './unit.js';
 
 /**
@@ -54,15 +55,15 @@ export function planSkirmish(units: readonly Unit[], roadLength: number): Skirmi
   const reach = Math.max(...units.map((unit) => statsOf(unit).range));
   if (gap > reach) return { states, damage };
 
-  strike(reaching(forward, gap, roadLength), backward.ordered, roadLength, states, damage);
-  strike(reaching(backward, gap, roadLength), forward.ordered, roadLength, states, damage);
+  strike(reaching(forward, gap, roadLength), forward.frontier, backward, roadLength, states, damage);
+  strike(reaching(backward, gap, roadLength), backward.frontier, forward, roadLength, states, damage);
 
   // Сошлись вплотную — сквозь врага не пройти, даже тому, кто драться
   // не собирается. Он встаёт и ждёт, а не проходит насквозь.
   if (gap <= MELEE_RANGE) {
     for (const column of [forward, backward]) {
       const leader = column.ordered[0];
-      if (leader && leader.intent !== 'retreat' && states.get(leader.id) === 'moving') {
+      if (leader && leader.intent.kind !== 'retreat' && states.get(leader.id) === 'moving') {
         states.set(leader.id, 'waiting');
       }
     }
@@ -122,8 +123,8 @@ function reaching(column: Column, gap: number, roadLength: number): readonly Uni
   const ranged: Unit[] = [];
 
   for (const unit of column.ordered) {
-    // Драться хочет не каждый: Правило могло велеть только идти.
-    if (unit.intent !== 'attack-nearest') continue;
+    // Драться хочет не каждый: Правило могло велеть идти, стоять или бежать.
+    if (!isAttack(unit.intent)) continue;
     if (!reaches(unit, column, gap, roadLength)) continue;
 
     if (!statsOf(unit).ranged) {
@@ -165,27 +166,70 @@ function columnOf(units: readonly Unit[], roadLength: number, forward: boolean):
 }
 
 /**
- * Каждый боец бьёт ближайшего к себе врага — так и велит Действие
- * «атаковать ближайшего». При равном расстоянии — вышедшего раньше.
+ * Кого атакующий вообще может достать — по его дальности удара, честно
+ * отмеренной от того места, откуда он бьёт.
+ *
+ * Ближний бьёт из свалки: он протискивается к переднему краю своей Колонны,
+ * поэтому расстояние меряется оттуда. Стрелок бьёт со своего места, поверх
+ * своих, — от него самого. Мерить от вражеского фронта нельзя: так Стрелок
+ * с дальностью 95 доставал бы врага в полутора сотнях единиц, и игрок
+ * не понял бы почему (ADR-0002).
  */
+function withinReach(
+  attacker: Unit,
+  ownFrontier: number,
+  enemies: Column,
+  roadLength: number,
+): readonly Unit[] {
+  const { range, ranged } = statsOf(attacker);
+  const from = ranged ? positionOn(attacker, roadLength) : ownFrontier;
+  return enemies.ordered.filter(
+    (enemy) => Math.abs(positionOn(enemy, roadLength) - from) <= range,
+  );
+}
+
+/**
+ * Цель по Действию атакующего. При равенстве главного признака — ближайший,
+ * при равном расстоянии — вышедший раньше: выбор всегда однозначен.
+ */
+function pickTarget(attacker: Unit, candidates: readonly Unit[], roadLength: number): Unit | undefined {
+  const here = positionOn(attacker, roadLength);
+  const distance = (unit: Unit) => Math.abs(positionOn(unit, roadLength) - here);
+  const nearestFirst = (left: Unit, right: Unit) => distance(left) - distance(right) || left.id - right.id;
+
+  const intent = attacker.intent;
+  switch (intent.kind) {
+    case 'attack-weakest':
+      return [...candidates].sort((left, right) => left.hp - right.hp || nearestFirst(left, right))[0];
+    case 'attack-most-dangerous':
+      return [...candidates].sort(
+        (left, right) =>
+          statsOf(right).damagePerTick - statsOf(left).damagePerTick || nearestFirst(left, right),
+      )[0];
+    case 'attack-kind': {
+      const ofKind = candidates.filter((unit) => unit.kind === intent.unit);
+      return [...(ofKind.length > 0 ? ofKind : candidates)].sort(nearestFirst)[0];
+    }
+    default:
+      return [...candidates].sort(nearestFirst)[0];
+  }
+}
+
+/** Каждый боец бьёт цель, выбранную его Действием. */
 function strike(
   attackers: readonly Unit[],
-  defenders: readonly Unit[],
+  ownFrontier: number,
+  enemies: Column,
   roadLength: number,
   states: Map<UnitId, UnitState>,
   damage: Map<UnitId, Incoming>,
 ): void {
-  if (defenders.length === 0) return;
-
   for (const attacker of attackers) {
-    states.set(attacker.id, 'fighting');
-    const here = positionOn(attacker, roadLength);
-    const target = [...defenders].sort(
-      (left, right) =>
-        Math.abs(positionOn(left, roadLength) - here) -
-          Math.abs(positionOn(right, roadLength) - here) || left.id - right.id,
-    )[0];
+    const candidates = withinReach(attacker, ownFrontier, enemies, roadLength);
+    const target = pickTarget(attacker, candidates, roadLength);
+    // Некого достать — нечего и бить: Юнит не встаёт в Стычку впустую.
     if (!target) continue;
+    states.set(attacker.id, 'fighting');
 
     const blow = statsOf(attacker).damagePerTick;
     const incoming = damage.get(target.id);
@@ -215,7 +259,7 @@ function queueUp(
     if (states.get(unit.id) === 'fighting') continue;
     if (states.get(ahead.id) === 'moving') continue;
 
-    if (unit.intent === 'retreat') continue;
+    if (unit.intent.kind === 'retreat') continue;
 
     const gap = Math.abs(positionOn(unit, roadLength) - positionOn(ahead, roadLength));
     if (gap <= SKIRMISH.spacing) states.set(unit.id, 'waiting');

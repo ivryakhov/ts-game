@@ -43,6 +43,13 @@ export interface UnitStats {
 /** Дальность ближнего удара: на ней враги замечают друг друга и встают. */
 export const MELEE_RANGE = 26;
 
+/**
+ * Что значит «союзник рядом» для Условия Правил: не дальше этого вдоль
+ * Дороги. Чуть больше трёх шагов Колонны — так в «рядом» попадают трое
+ * стоящих следом друг за другом.
+ */
+export const NEARBY_RANGE = 40;
+
 export const UNIT_STATS: Readonly<Record<UnitKind, UnitStats>> = {
   scout: {
     maxHp: 50,

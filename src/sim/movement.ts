@@ -23,7 +23,7 @@ export function moveUnits(world: World, events: MatchEvent[]): void {
 
   for (const unit of world.units) {
     // Отступающий уходит назад, к своей Цитадели, — и от чужих стен тоже.
-    if (unit.intent === 'retreat') {
+    if (unit.intent.kind === 'retreat') {
       withdrawUnit(unit);
       unit.arrived = false;
       unit.arrivedAt = null;
@@ -32,10 +32,20 @@ export function moveUnits(world: World, events: MatchEvent[]): void {
       continue;
     }
 
+    // Стоять по Правилу — не то же, что ждать очереди в Стычке: Юнит
+    // держит место сам, и идущие следом собираются за его спиной. Даже
+    // если враг до него дотянулся, он стоит по своей воле, а не в очереди.
+    if (unit.intent.kind === 'hold') {
+      unit.state = 'holding';
+      surviving.push(unit);
+      continue;
+    }
+
     if (unit.state !== 'moving') {
       surviving.push(unit);
       continue;
     }
+
 
     // Дошедший не исчезает и никуда больше не идёт: он принимается
     // за чужую Цитадель и стоит у неё, пока его не убьют.
@@ -81,7 +91,7 @@ function keepFormation(world: World): void {
   for (const unit of world.units) {
     // Осаждающие стоят у стен, отступающие уходят сквозь своих: Колонну
     // держат только те, кто идёт вперёд.
-    if (unit.arrived || unit.intent === 'retreat') continue;
+    if (unit.arrived || unit.intent.kind === 'retreat') continue;
     const key = `${unit.roadId}:${unit.side}`;
     const column = columns.get(key);
     if (column) column.push(unit);

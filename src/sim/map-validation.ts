@@ -67,15 +67,15 @@ export function validateReleases(setup: MatchSetup): void {
  */
 export function validateRelease(action: ScheduledRelease, map: GameMap, maxTicks: number): void {
   if (action.tick < 1 || action.tick > maxTicks) {
-    throw new Error(`Действие на Тике ${action.tick}: вне отрезка матча`);
+    throw new Error(`Выпуск на Тике ${action.tick}: вне отрезка матча`);
   }
 
   const road = map.roads.find((candidate) => candidate.id === action.roadId);
-  if (!road) throw new Error(`Действие на Тике ${action.tick}: Дороги ${action.roadId} нет на карте`);
+  if (!road) throw new Error(`Выпуск на Тике ${action.tick}: Дороги ${action.roadId} нет на карте`);
 
   if (action.side !== road.from && action.side !== road.to) {
     throw new Error(
-      `Действие на Тике ${action.tick}: Дорога ${action.roadId} не ведёт от Цитадели ${action.side}`,
+      `Выпуск на Тике ${action.tick}: Дорога ${action.roadId} не ведёт от Цитадели ${action.side}`,
     );
   }
 }

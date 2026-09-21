@@ -33,7 +33,7 @@ describe('матч отвергает негодное расписание на
 
   it('и падает до первого Тика, а не в середине матча', () => {
     expect(withActions([{ tick: 1, side: 'A', kind: 'deploy', roadId: 'tunnel', unit: 'scout' }])).toThrow(
-      /Действие на Тике 1/,
+      /Выпуск на Тике 1/,
     );
   });
 });
