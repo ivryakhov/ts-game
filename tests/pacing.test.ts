@@ -11,19 +11,24 @@ import { matchSetup } from './match-setup.js';
  * к одному и тому же исходу.
  */
 
-// Предел заведомо недостижим: иначе любой прогон упирается в него,
-// и сравнение исходов превращается в сравнение двух одинаковых заглушек —
-// тест перестаёт замечать, что ускорение вообще не работает.
+/**
+ * Матч, который заведомо не кончится сам: Стороны шлют друг другу равные
+ * встречные волны, взаимно истребляются в Стычках и до чужих Цитаделей
+ * не доходят. Предел Тиков тоже недостижим.
+ *
+ * И то и другое существенно: если любой прогон упирается в конец матча,
+ * сравнение исходов превращается в сравнение двух одинаковых заглушек,
+ * и тест перестаёт замечать, что ускорение вообще не работает.
+ */
 const setup = (): MatchSetup =>
   matchSetup({
     map: arena,
     seed: 4242,
     maxTicks: 100_000,
-    playerActions: [
-      { tick: 1, side: 'A', kind: 'deploy', roadId: 'short' },
-      { tick: 30, side: 'B', kind: 'deploy', roadId: 'north' },
-      { tick: 77, side: 'A', kind: 'deploy', roadId: 'south' },
-    ],
+    playerActions: ['short', 'north', 'south'].flatMap((roadId, index) => [
+      { tick: 1 + index * 17, side: 'A' as const, kind: 'deploy' as const, roadId },
+      { tick: 1 + index * 17, side: 'B' as const, kind: 'deploy' as const, roadId },
+    ]),
   });
 
 /** Прогоняет матч кадрами заданной длительности при заданной скорости. */
@@ -37,7 +42,11 @@ function play(frameMs: number, speed: Speed, modelSeconds: number): MatchResult 
     for (let tick = pacer.advance(frameMs); tick > 0; tick -= 1) match.step();
   }
 
-  return match.result();
+  const result = match.result();
+  // Если прогон упёрся в конец матча, сравнивать нечего: все исходы
+  // сойдутся в одну заглушку и тест станет пустым.
+  if (match.finished) throw new Error('матч кончился сам — темп проверить нечем');
+  return result;
 }
 
 describe('темп воспроизведения', () => {

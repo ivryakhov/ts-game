@@ -102,6 +102,11 @@ export type MatchEvent =
       readonly roadId: string;
     }
   | {
+      readonly kind: 'citadel-destroyed';
+      readonly tick: number;
+      readonly side: SideId;
+    }
+  | {
       readonly kind: 'unit-died';
       readonly tick: number;
       readonly unitId: UnitId;
@@ -110,8 +115,7 @@ export type MatchEvent =
       readonly killedBy: UnitId;
     };
 
-/** Разрушение Цитадели как причина окончания появится в тикете 06. */
-export type EndReason = 'tick-limit';
+export type EndReason = 'tick-limit' | 'citadel-destroyed';
 
 export type UnitId = number;
 
@@ -120,7 +124,7 @@ export type UnitId = number;
  * из расстановки на Дороге, а не хранится: так не бывает Юнита, который
  * помнит, что дерётся, когда драться уже не с кем.
  */
-export type UnitState = 'moving' | 'fighting' | 'waiting';
+export type UnitState = 'moving' | 'fighting' | 'waiting' | 'sieging';
 
 /**
  * Юнит глазами рендера. Положение задано долей пройденной Дороги,
@@ -138,10 +142,18 @@ export interface UnitSnapshot {
   readonly maxHp: number;
 }
 
+/** Цитадель глазами рендера. */
+export interface CitadelSnapshot {
+  readonly side: SideId;
+  readonly hp: number;
+  readonly maxHp: number;
+}
+
 export interface WorldSnapshot {
   readonly tick: number;
   readonly sides: readonly SideId[];
   readonly units: readonly UnitSnapshot[];
+  readonly citadels: readonly CitadelSnapshot[];
 }
 
 export interface MatchStats {

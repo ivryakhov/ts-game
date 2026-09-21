@@ -21,6 +21,8 @@ export interface Unit {
   travelled: number;
   /** Выводится заново каждый Тик из расстановки на Дороге. */
   state: UnitState;
+  /** Дошёл ли Юнит до конца своей Дороги. Обратно не меняется. */
+  arrived: boolean;
   hp: number;
   readonly maxHp: number;
 }
@@ -33,6 +35,7 @@ export function createUnit(id: UnitId, side: SideId, roadId: string, forward: bo
     forward,
     travelled: 0,
     state: 'moving',
+    arrived: false,
     hp: UNIT_STATS.maxHp,
     maxHp: UNIT_STATS.maxHp,
   };

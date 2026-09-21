@@ -8,6 +8,7 @@ import type {
   WorldSnapshot,
 } from './types.js';
 import type { Rng } from './rng.js';
+import { bombard, citadelSnapshots, createCitadels, type Citadel } from './citadel.js';
 import { applyPlan } from './combat.js';
 import { planSkirmish } from './skirmish.js';
 import { createUnit, moveUnit, unitSnapshot, type Unit } from './unit.js';
@@ -25,6 +26,9 @@ export interface World {
    *  как коллекция устроена внутри, поэтому обход воспроизводим. */
   units: Unit[];
   readonly roads: ReadonlyMap<string, RoadRuntime>;
+  readonly citadels: ReadonlyMap<SideId, Citadel>;
+  /** Сторона, чья Цитадель пала. Пока никто не пал — null. */
+  defeated: SideId | null;
   /** Действия игрока, разложенные по Тикам, на которые они назначены. */
   readonly schedule: ReadonlyMap<number, readonly ScheduledAction[]>;
   nextUnitId: number;
@@ -45,10 +49,14 @@ export function createWorld(setup: MatchSetup): World {
     schedule.set(action.tick, atTick);
   }
 
+  const sides = setup.sides.map((side) => side.id);
+
   return {
     tick: 0,
-    sides: setup.sides.map((side) => side.id),
+    sides,
     units: [],
+    citadels: createCitadels(sides),
+    defeated: null,
     roads: new Map(
       setup.map.roads.map((road) => [
         road.id,
@@ -76,6 +84,22 @@ export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
 
   fight(world, events);
   moveUnits(world, events);
+  siege(world, events);
+}
+
+/** Дошедшие до чужой Цитадели бьют её, пока она стоит. */
+function siege(world: World, events: MatchEvent[]): void {
+  const besiegers = world.units
+    .filter((unit) => unit.state === 'sieging')
+    .map((unit) => {
+      const road = roadOf(world, unit.roadId);
+      return { unit, target: unit.forward ? road.to : road.from };
+    });
+  if (besiegers.length === 0) return;
+
+  for (const side of bombard(besiegers, world.citadels, world.tick, events)) {
+    world.defeated = side;
+  }
 }
 
 function fight(world: World, events: MatchEvent[]): void {
@@ -128,7 +152,17 @@ function moveUnits(world: World, events: MatchEvent[]): void {
       continue;
     }
 
+    // Дошедший не исчезает и никуда больше не идёт: он принимается
+    // за чужую Цитадель и стоит у неё, пока его не убьют.
+    if (unit.arrived) {
+      unit.state = 'sieging';
+      surviving.push(unit);
+      continue;
+    }
+
     if (moveUnit(unit, roadOf(world, unit.roadId).metrics)) {
+      unit.arrived = true;
+      unit.state = 'sieging';
       events.push({
         kind: 'unit-arrived',
         tick: world.tick,
@@ -136,7 +170,6 @@ function moveUnits(world: World, events: MatchEvent[]): void {
         side: unit.side,
         roadId: unit.roadId,
       });
-      continue;
     }
 
     surviving.push(unit);
@@ -150,5 +183,6 @@ export function snapshot(world: World): WorldSnapshot {
     tick: world.tick,
     sides: [...world.sides],
     units: world.units.map((unit) => unitSnapshot(unit, roadOf(world, unit.roadId).metrics)),
+    citadels: citadelSnapshots(world.citadels),
   };
 }

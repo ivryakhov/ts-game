@@ -1,13 +1,15 @@
 import type {
+  CitadelSnapshot,
   CitadelSpec,
   GameMap,
   Point,
   RoadMetrics,
   RoadSpec,
+  SideId,
   UnitSnapshot,
 } from '@sim/index';
 import { measureRoad, roadPolyline } from '@sim/index';
-import { BACKGROUND, CITADEL, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
+import { ALARM, BACKGROUND, CITADEL, ROAD, SIDE_COLORS, withAlpha } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
 import { createFading } from './fading.js';
 import { drawUnit, hindsight } from './units.js';
@@ -26,7 +28,11 @@ interface Viewport {
  * а вид вписывает его в окно целиком, сохраняя пропорции: при любом
  * размере окна видна вся карта, просто крупнее или мельче.
  */
-export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): Renderer {
+export function createCanvasRenderer(
+  canvas: HTMLCanvasElement,
+  map: GameMap,
+  playerSide: SideId,
+): Renderer {
   const maybeContext = canvas.getContext('2d');
   if (!maybeContext) throw new Error('Браузер не дал контекст 2d');
   const context: CanvasRenderingContext2D = maybeContext;
@@ -37,6 +43,8 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     map.roads.map((road) => [road.id, measureRoad(road)]),
   );
   const fading = createFading();
+  /** Когда по часам в последний раз досталось Цитадели игрока. */
+  let alarmedAtMs = Number.NEGATIVE_INFINITY;
   let cssWidth = 0;
   let cssHeight = 0;
 
@@ -118,11 +126,32 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     return toScreen(road.pointAtDistance(progress * road.length));
   }
 
-  function drawCitadel(citadel: CitadelSpec): void {
+  /** Кольцо здоровья: сколько Цитадели осталось, видно с одного взгляда. */
+  function drawCitadelHealth(center: Point, color: string, share: number): void {
+    const radius = scaled(CITADEL.healthRadius);
+    context.lineWidth = scaled(CITADEL.healthWidth);
+    context.lineCap = 'butt';
+
+    context.beginPath();
+    context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    context.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    context.stroke();
+
+    if (share <= 0) return;
+    context.beginPath();
+    context.arc(center.x, center.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * share);
+    context.strokeStyle = color;
+    context.stroke();
+  }
+
+  function drawCitadel(citadel: CitadelSpec, health: CitadelSnapshot | undefined): void {
     context.save();
     const center = toScreen(citadel.at);
     const color = SIDE_COLORS[citadel.side];
     const glowRadius = scaled(CITADEL.glowRadius);
+    // Разрушенная Цитадель гаснет: победа должна читаться с экрана,
+    // а не только из надписи.
+    if (health && health.hp <= 0) context.globalAlpha = CITADEL.ruinAlpha;
 
     const glow = context.createRadialGradient(center.x, center.y, 0, center.x, center.y, glowRadius);
     glow.addColorStop(0, withAlpha(color, 0.5));
@@ -155,7 +184,23 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
     context.beginPath();
     context.arc(center.x, center.y, coreRadius, 0, Math.PI * 2);
     context.fill();
+
+    if (health) drawCitadelHealth(center, color, health.maxHp === 0 ? 0 : health.hp / health.maxHp);
     context.restore();
+  }
+
+  /**
+   * Слой тревоги поверх поля, когда бьют Цитадель игрока: заметить угрозу
+   * можно, даже глядя в другой угол карты.
+   */
+  function drawAlarm(frame: Frame): void {
+    if (frame.citadelHits.has(playerSide)) alarmedAtMs = frame.realMs;
+
+    const age = frame.realMs - alarmedAtMs;
+    if (age < 0 || age > ALARM.fadeMs) return;
+
+    context.fillStyle = withAlpha(SIDE_COLORS[playerSide], ALARM.maxAlpha * (1 - age / ALARM.fadeMs));
+    context.fillRect(0, 0, cssWidth, cssHeight);
   }
 
   return {
@@ -179,7 +224,12 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
       context.fillRect(0, 0, cssWidth, cssHeight);
 
       for (const road of map.roads) drawRoad(road, frame.matchMs);
-      for (const citadel of map.citadels) drawCitadel(citadel);
+      for (const citadel of map.citadels) {
+        drawCitadel(
+          citadel,
+          frame.current.citadels.find((health) => health.side === citadel.side),
+        );
+      }
 
       const seen = hindsight(frame.previous);
       fading.remember(frame.previous.units, frame.deaths, frame.matchMs);
@@ -194,6 +244,8 @@ export function createCanvasRenderer(canvas: HTMLCanvasElement, map: GameMap): R
         if (!place) continue;
         drawUnit(context, unit, place, view.scale, { flash: seen.flashOf(unit, frame.alpha) });
       }
+
+      drawAlarm(frame);
     },
   };
 }

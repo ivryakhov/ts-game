@@ -71,14 +71,16 @@ describe('исход Стычки', () => {
 
     expect(deployed).toBe(10);
     expect(resolved).toBe(deployed);
-    expect(result.finalState.units).toEqual([]);
+    // Никто не остался на Дороге: выжившие дошли и осаждают Цитадель.
+    expect(result.finalState.units.every((unit) => unit.state === 'sieging')).toBe(true);
   });
 
-  it('отпускает победителя дальше по Дороге', () => {
-    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')]);
+  it('отпускает победителей дальше по Дороге, до чужой Цитадели', () => {
+    const result = run([deploy(1, 'A'), deploy(2, 'A'), deploy(3, 'A'), deploy(1, 'B')], 400);
 
     expect(arrivals(result.events)).toHaveLength(3);
-    expect(result.finalState.units).toEqual([]);
+    expect(result.finalState.units.every((unit) => unit.state === 'sieging')).toBe(true);
+    expect(result.finalState.units).toHaveLength(3);
   });
 
   it('равная Стычка одного против одного кого-то да убивает', () => {

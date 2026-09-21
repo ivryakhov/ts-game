@@ -3,6 +3,7 @@ export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export { TICKS_PER_SECOND } from './balance.js';
 export type {
+  CitadelSnapshot,
   CitadelSpec,
   DeployAction,
   EndReason,

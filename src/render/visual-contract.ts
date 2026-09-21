@@ -21,6 +21,18 @@ export const CITADEL = {
   coreRadius: 15,
   glowRadius: 150,
   ringWidth: 3.5,
+  /** Кольцо здоровья вокруг Цитадели. */
+  healthRadius: 58,
+  healthWidth: 7,
+  /** Насколько тускнеет разрушенная Цитадель. */
+  ruinAlpha: 0.25,
+} as const;
+
+/** Вспышка экрана, когда бьют Цитадель игрока. */
+export const ALARM = {
+  maxAlpha: 0.16,
+  /** Миллисекунд матча, за которые вспышка гаснет. */
+  fadeMs: 320,
 } as const;
 
 export const ROAD = {

@@ -8,7 +8,7 @@
  * Покупка Юнитов появится в тикете 07; пока они выходят по расписанию.
  */
 import { createMatch, TICKS_PER_SECOND } from '@sim/index';
-import type { MatchSetup, ScheduledAction, UnitId, WorldSnapshot } from '@sim/index';
+import type { MatchSetup, ScheduledAction, SideId, UnitId, WorldSnapshot } from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { arena } from './maps/arena.js';
@@ -29,9 +29,14 @@ function seedFromLocation(): number {
 }
 
 /**
- * Демонстрационное расписание: обе Стороны шлют по волне Юнитов навстречу
- * друг другу. Волна больше лимита Стычки, поэтому видно и саму Стычку,
- * и очередь за спинами. Настоящие волны появятся с покупкой в тикете 07.
+ * Демонстрационное расписание: обе Стороны шлют волны навстречу друг другу.
+ * Волна больше лимита Стычки, поэтому видно и саму Стычку, и очередь
+ * за спинами.
+ *
+ * Сторона B пропускает каждую третью волну: при полной симметрии Стороны
+ * истребляют друг друга ровно посередине, до Цитаделей никто не доходит
+ * и матч всегда кончается по времени. Настоящие волны появятся с покупкой
+ * в тикете 07.
  */
 function demoSchedule(): ScheduledAction[] {
   const roads = arena.roads.map((road) => road.id);
@@ -40,16 +45,19 @@ function demoSchedule(): ScheduledAction[] {
   for (let wave = 0; wave < DEMO_WAVES; wave += 1) {
     const roadId = roads[wave % roads.length] ?? 'short';
     const start = 10 + wave * DEPLOY_PERIOD;
+    const sides: SideId[] = wave % 3 === 2 ? ['A'] : ['A', 'B'];
 
     for (let index = 0; index < WAVE_SIZE; index += 1) {
       const tick = start + index * WAVE_GAP;
-      actions.push({ tick, side: 'A', kind: 'deploy', roadId });
-      actions.push({ tick, side: 'B', kind: 'deploy', roadId });
+      for (const side of sides) actions.push({ tick, side, kind: 'deploy', roadId });
     }
   }
 
   return actions;
 }
+
+/** За кого играет человек. Выбор Стороны появится вместе с меню матча. */
+const PLAYER_SIDE: SideId = 'A';
 
 const seed = seedFromLocation();
 const setup: MatchSetup = {
@@ -57,13 +65,15 @@ const setup: MatchSetup = {
   map: arena,
   sides: [{ id: 'A' }, { id: 'B' }],
   playerActions: demoSchedule(),
-  maxTicks: DEMO_WAVES * DEPLOY_PERIOD + 400,
+  // Запас нужен, чтобы матч успел дойти до разрушения Цитадели,
+  // а не упёрся в предел Тиков.
+  maxTicks: DEMO_WAVES * DEPLOY_PERIOD + 6000,
 };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#stage');
 if (!canvas) throw new Error('Не найден холст #stage');
 
-const renderer = createCanvasRenderer(canvas, arena);
+const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud();
 const pacer = createPacer(TICKS_PER_SECOND);
 const match = createMatch(setup);
@@ -83,12 +93,18 @@ function frame(nowMs: number): void {
   // Смерти копятся за все Тики кадра: на восьмикратной скорости их
   // в одном кадре несколько, и ни одна не должна пропасть.
   const deaths = new Set<UnitId>();
+  const citadelHits = new Set<SideId>();
   for (let tick = 0; tick < due && !match.finished; tick += 1) {
     previous = current;
     for (const event of match.step()) {
       if (event.kind === 'unit-died') deaths.add(event.unitId);
     }
-    current = match.snapshot();
+    const next = match.snapshot();
+    for (const citadel of current.citadels) {
+      const after = next.citadels.find((candidate) => candidate.side === citadel.side);
+      if (after && after.hp < citadel.hp) citadelHits.add(citadel.side);
+    }
+    current = next;
   }
 
   // Когда матч кончился или стоит на паузе, сглаживать нечего: иначе доля
@@ -102,8 +118,9 @@ function frame(nowMs: number): void {
   // на Дорогах продолжало бы бежать на паузе и не ускорялось бы вместе
   // с симуляцией.
   const matchMs = ((current.tick + alpha) * 1000) / TICKS_PER_SECOND;
-  renderer.draw({ previous, current, deaths, alpha, matchMs });
+  renderer.draw({ previous, current, deaths, citadelHits, alpha, matchMs, realMs: nowMs });
   hud.update({ tick: current.tick, speed: pacer.speed, paused: pacer.paused, seed });
+  hud.announce(match.finished ? { winner: match.winner, tick: current.tick } : null);
   window.requestAnimationFrame(frame);
 }
 

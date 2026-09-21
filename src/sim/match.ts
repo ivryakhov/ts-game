@@ -1,6 +1,13 @@
 import { validateActions, validateMap } from './map-validation.js';
 import { createRng } from './rng.js';
-import type { MatchEvent, MatchResult, MatchSetup, WorldSnapshot } from './types.js';
+import type {
+  EndReason,
+  MatchEvent,
+  MatchResult,
+  MatchSetup,
+  SideId,
+  WorldSnapshot,
+} from './types.js';
 import { advance, createWorld, snapshot, type World } from './world.js';
 
 /**
@@ -18,6 +25,8 @@ export interface LiveMatch {
   step(): readonly MatchEvent[];
   snapshot(): WorldSnapshot;
   readonly finished: boolean;
+  /** Победитель, когда матч окончен; иначе null. */
+  readonly winner: SideId | null;
   /** Итог матча. До окончания показывает положение дел на текущий Тик. */
   result(): MatchResult;
 }
@@ -31,13 +40,17 @@ export function createMatch(setup: MatchSetup): LiveMatch {
   const events: MatchEvent[] = [{ kind: 'match-started', tick: 0, seed: setup.seed }];
   let ended = false;
 
-  const finish = (): void => {
+  let endReason: EndReason = 'tick-limit';
+  let winner: SideId | null = null;
+
+  const finish = (reason: EndReason): void => {
     if (ended) return;
     ended = true;
-    events.push({ kind: 'match-ended', tick: world.tick, reason: 'tick-limit' });
+    endReason = reason;
+    events.push({ kind: 'match-ended', tick: world.tick, reason });
   };
 
-  if (setup.maxTicks <= 0) finish();
+  if (setup.maxTicks <= 0) finish('tick-limit');
 
   return {
     step(): readonly MatchEvent[] {
@@ -45,7 +58,13 @@ export function createMatch(setup: MatchSetup): LiveMatch {
 
       const before = events.length;
       advance(world, rng, events);
-      if (world.tick >= setup.maxTicks) finish();
+
+      if (world.defeated) {
+        winner = world.sides.find((side) => side !== world.defeated) ?? null;
+        finish('citadel-destroyed');
+      } else if (world.tick >= setup.maxTicks) {
+        finish('tick-limit');
+      }
 
       return events.slice(before);
     },
@@ -56,11 +75,15 @@ export function createMatch(setup: MatchSetup): LiveMatch {
       return ended;
     },
 
+    get winner(): SideId | null {
+      return winner;
+    },
+
     result(): MatchResult {
       return {
-        winner: null,
+        winner,
         ticks: world.tick,
-        endReason: 'tick-limit',
+        endReason,
         events,
         finalState: snapshot(world),
         stats: { rngDraws: rng.draws },

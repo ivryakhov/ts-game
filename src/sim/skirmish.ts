@@ -64,6 +64,12 @@ export function planSkirmish(units: readonly Unit[], roadLength: number): Skirmi
   return { states, damage };
 }
 
+/**
+ * Осаждающие входят в Колонну наравне со всеми: Юнит, добравшийся до
+ * чужой Цитадели, остаётся на Дороге, его можно атаковать, и он сам
+ * перекрывает путь защитникам. Без этого осада была бы необратимой,
+ * а оборонять свою Цитадель — нечем.
+ */
 function columnOf(units: readonly Unit[], roadLength: number, forward: boolean): Column | null {
   const own = units.filter((unit) => unit.forward === forward);
   if (own.length === 0) return null;

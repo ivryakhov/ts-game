@@ -26,10 +26,17 @@ describe('Юнит идёт по Дороге', () => {
     expect(arrivals(result.events)).toHaveLength(1);
   });
 
-  it('исчезает, дойдя до конца Дороги', () => {
-    const result = run([deploy(1, 'short')]);
+  it('дойдя до конца Дороги, принимается за чужую Цитадель', () => {
+    const result = run([deploy(1, 'short')], 200);
 
-    expect(result.finalState.units).toEqual([]);
+    expect(result.finalState.units).toHaveLength(1);
+    expect(result.finalState.units[0]?.state).toBe('sieging');
+  });
+
+  it('сообщает о прибытии один раз, а не каждый Тик осады', () => {
+    const result = run([deploy(1, 'short')], 400);
+
+    expect(arrivals(result.events)).toHaveLength(1);
   });
 
   it('виден в мире, пока идёт', () => {

@@ -1,4 +1,5 @@
 import { TICKS_PER_SECOND } from '@sim/index';
+import type { SideId } from '@sim/index';
 import type { Speed } from '../app/pacer.js';
 
 /**
@@ -9,6 +10,8 @@ import type { Speed } from '../app/pacer.js';
  */
 export interface Hud {
   update(state: { tick: number; speed: Speed; paused: boolean; seed: number }): void;
+  /** Объявить исход. Победитель null означает, что время вышло вничью. */
+  announce(outcome: { winner: SideId | null; tick: number } | null): void;
 }
 
 function element(id: string): HTMLElement {
@@ -29,6 +32,7 @@ export function createHud(): Hud {
   const clock = element('hud-clock');
   const speed = element('hud-speed');
   const seed = element('hud-seed');
+  const outcome = element('hud-outcome');
 
   return {
     update(state): void {
@@ -36,6 +40,18 @@ export function createHud(): Hud {
       speed.textContent = state.paused ? `×${state.speed} пауза` : `×${state.speed}`;
       speed.classList.toggle('hud__paused', state.paused);
       seed.textContent = String(state.seed);
+    },
+
+    announce(result): void {
+      outcome.classList.toggle('hud__outcome--shown', result !== null);
+      if (!result) return;
+
+      const headline = result.winner ? `Победа Стороны ${result.winner}` : 'Время вышло';
+      outcome.innerHTML = '';
+      outcome.append(headline);
+      const detail = document.createElement('small');
+      detail.textContent = `матч длился ${formatMatchTime(result.tick)}`;
+      outcome.append(detail);
     },
   };
 }

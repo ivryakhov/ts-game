@@ -20,6 +20,16 @@ export const UNIT_STATS = {
   damagePerTick: BASE_DAMAGE_PER_SECOND / TICKS_PER_SECOND,
 } as const;
 
+export const CITADEL_STATS = {
+  maxHp: 1000,
+  /**
+   * Какая доля урона Юнита доходит до Цитадели. Меньше единицы намеренно:
+   * иначе всё решает одна волна, добежавшая мимо Стычек, и удерживать
+   * Дорогу оказывается бессмысленно.
+   */
+  damageShare: 0.5,
+} as const;
+
 export const SKIRMISH = {
   /** На каком расстоянии вдоль Дороги враги замечают друг друга и встают. */
   engageRange: 26,
