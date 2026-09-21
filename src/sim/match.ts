@@ -1,6 +1,6 @@
 import { validateRelease, validateReleases, validateMap } from './map-validation.js';
 import { createRng } from './rng.js';
-import { parseBehaviour } from './rules.js';
+import { validateSide } from './side-file.js';
 import type {
   EndReason,
   UnscheduledRelease,
@@ -45,11 +45,7 @@ export interface LiveMatch {
 export function createMatch(setup: MatchSetup): LiveMatch {
   validateMap(setup.map);
   validateReleases(setup);
-  // Поведение проверяется на входе, как карта и расписание: заданное
-  // в коде проходит ту же проверку, что и прочитанное из файла.
-  for (const side of setup.sides) {
-    if (side.behaviour) parseBehaviour(side.behaviour);
-  }
+  for (const side of setup.sides) validateSide(side, setup.map);
 
   const rng = createRng(setup.seed);
   const world: World = createWorld(setup);

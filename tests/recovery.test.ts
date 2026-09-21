@@ -151,3 +151,25 @@ describe('Поведение игрока из коробки', () => {
     expect(defender?.healing).toBe(true);
   });
 });
+
+describe('долечившийся возвращается в Колонну', () => {
+  it('встаёт за теми, кто ушёл вперёд, пока он лечился, а не отбрасывает их назад', () => {
+    // Разведчик отступил и лечится у Цитадели; тем временем выходит Танк.
+    // Вылечившись, Разведчик — вышедший раньше всех — снова идёт вперёд.
+    const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
+    const releases = [deploy(1, 'A'), deploy(1, 'B'), deploy(160, 'A', 'tank')];
+    const units = (maxTicks: number) => duel(cautious, releases, maxTicks).finalState.units;
+    const tankAt = (maxTicks: number) => units(maxTicks).find((unit) => unit.kind === 'tank');
+
+    const healing = units(200).find((unit) => unit.kind === 'scout');
+    const later = units(240);
+    const scout = later.find((unit) => unit.kind === 'scout');
+
+    // Разведчик ещё дома, когда Танк уже на Дороге, а к Тику 240 оба идут.
+    expect(healing?.progress).toBe(0);
+    expect(scout?.state).toBe('moving');
+    // Танк не отброшен назад: он продолжает путь и остаётся впереди.
+    expect(tankAt(240)?.progress ?? 0).toBeGreaterThan(tankAt(200)?.progress ?? 1);
+    expect(scout?.progress ?? 1).toBeLessThan(tankAt(240)?.progress ?? 0);
+  });
+});

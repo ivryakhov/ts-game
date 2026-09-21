@@ -19,6 +19,7 @@ function lengthOf(world: World, roadId: string): number {
 }
 
 export function moveUnits(world: World, events: MatchEvent[]): void {
+  const before = new Map(world.units.map((unit) => [unit.id, unit.travelled]));
   const surviving: Unit[] = [];
 
   for (const unit of world.units) {
@@ -46,7 +47,6 @@ export function moveUnits(world: World, events: MatchEvent[]): void {
       continue;
     }
 
-
     // Дошедший не исчезает и никуда больше не идёт: он принимается
     // за чужую Цитадель и стоит у неё, пока его не убьют.
     if (unit.arrived) {
@@ -72,20 +72,24 @@ export function moveUnits(world: World, events: MatchEvent[]): void {
   }
 
   world.units = surviving;
-  keepFormation(world);
+  keepFormation(world, before);
 }
 
 /**
- * Юнит не обгоняет своих по Дороге: догнав вышедшего раньше, он держится
+ * Юнит не обгоняет своих по Дороге: догнав идущего впереди, он держится
  * за его спиной.
  *
- * Порядок задаёт старшинство — кто раньше вышел, тот и впереди, — а не
- * пройденный путь. Упорядочивать по пути значит узаконить обгон: быстрый
- * Стрелок, успев за Тик пройти больше Танка, становился «передним»,
- * и зажимали уже Танка. Тогда стрелять из-за спин, ради чего Стрелок
- * и заведён, было бы негде, а к стенам первым приходил бы он.
+ * Порядок Колонны — по положению до этого шага, а при равном положении
+ * впереди вышедший раньше. Положение после шага не годится: оно узаконило
+ * бы обгон — быстрый Стрелок, успев за Тик пройти больше Танка, становился
+ * бы «передним», и зажимали бы уже Танка. Тогда стрелять из-за спин, ради
+ * чего Стрелок и заведён, было бы негде.
+ *
+ * Одно старшинство тоже не годится. Долечившийся у своей Цитадели Юнит
+ * вышел раньше всех, но стоит позади всех, и, встав в голову Колонны,
+ * он отбрасывал к Цитадели всех, кто ушёл вперёд, пока он лечился.
  */
-function keepFormation(world: World): void {
+function keepFormation(world: World, before: ReadonlyMap<number, number>): void {
   const columns = new Map<string, Unit[]>();
 
   for (const unit of world.units) {
@@ -99,7 +103,8 @@ function keepFormation(world: World): void {
   }
 
   for (const column of columns.values()) {
-    column.sort((left, right) => left.id - right.id);
+    const wasAt = (unit: Unit): number => before.get(unit.id) ?? unit.travelled;
+    column.sort((left, right) => wasAt(right) - wasAt(left) || left.id - right.id);
 
     for (let index = 1; index < column.length; index += 1) {
       const unit = column[index];

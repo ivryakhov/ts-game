@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
 import type { MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
-import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
+import { matchSetup, STORMING_PARTY, army } from './match-setup.js';
 
 const deploy = (
   tick: number,
@@ -117,20 +117,20 @@ describe('оборона своей Цитадели', () => {
 
 describe('исход матча', () => {
   it('разрушение Цитадели завершает матч победой другой Стороны', () => {
-    const result = run(wave(STORMING_PARTY));
+    const result = run(army(STORMING_PARTY));
 
     expect(result.endReason).toBe('citadel-destroyed');
     expect(result.winner).toBe('A');
   });
 
   it('матч кончается раньше лимита Тиков', () => {
-    const result = run(wave(STORMING_PARTY));
+    const result = run(army(STORMING_PARTY));
 
     expect(result.ticks).toBeLessThan(20_000);
   });
 
   it('сообщает, когда именно рухнула Цитадель', () => {
-    const result = run(wave(STORMING_PARTY));
+    const result = run(army(STORMING_PARTY));
     const fall = result.events.find((event) => event.kind === 'citadel-destroyed');
 
     expect(fall && 'side' in fall ? fall.side : null).toBe('B');
@@ -145,6 +145,6 @@ describe('исход матча', () => {
   });
 
   it('два прогона осады совпадают полностью', () => {
-    expect(run(wave(STORMING_PARTY))).toEqual(run(wave(STORMING_PARTY)));
+    expect(run(army(STORMING_PARTY))).toEqual(run(army(STORMING_PARTY)));
   });
 });

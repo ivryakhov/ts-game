@@ -93,9 +93,9 @@ describe('исход Стычки', () => {
 
 describe('лимит Стычки', () => {
   it('одновременно дерётся не больше положенного с каждой Стороны', () => {
-    const wave = (side: SideId): ScheduledRelease[] =>
+    const lineUp = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
-    const result = run([...wave('A'), ...wave('B')], 70);
+    const result = run([...lineUp('A'), ...lineUp('B')], 70);
 
     const fightingOf = (side: SideId) =>
       result.finalState.units.filter((unit) => unit.side === side && unit.state === 'fighting');
@@ -105,17 +105,17 @@ describe('лимит Стычки', () => {
   });
 
   it('остальные ждут очереди, а не идут сквозь Стычку', () => {
-    const wave = (side: SideId): ScheduledRelease[] =>
+    const lineUp = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 6 }, (_, index) => deploy(1 + index, side));
-    const units = run([...wave('A'), ...wave('B')], 70).finalState.units;
+    const units = run([...lineUp('A'), ...lineUp('B')], 70).finalState.units;
 
     expect(units.some((unit) => unit.state === 'waiting')).toBe(true);
   });
 
   it('место выбывшего занимает следующий, и Стычка идёт до конца', () => {
-    const wave = (side: SideId): ScheduledRelease[] =>
+    const lineUp = (side: SideId): ScheduledRelease[] =>
       Array.from({ length: 5 }, (_, index) => deploy(1 + index, side));
-    const result = run([...wave('A'), ...wave('B')], 8000);
+    const result = run([...lineUp('A'), ...lineUp('B')], 8000);
 
     expect(result.finalState.units.every((unit) => unit.state !== 'fighting')).toBe(true);
     expect(deaths(result.events).length).toBeGreaterThan(1);
@@ -177,8 +177,8 @@ describe('очередь по старшинству', () => {
   it('дерутся вышедшие раньше, ждут вышедшие позже', () => {
     // Выпущенные одним Тиком не стоят в одной точке: Колонна разводит их
     // по глубине, и ближний удар достаёт только передних.
-    const wave = Array.from({ length: 4 }, () => deploy(1, 'A'));
-    const units = run([...wave, deploy(1, 'B')], 60).finalState.units;
+    const four = Array.from({ length: 4 }, () => deploy(1, 'A'));
+    const units = run([...four, deploy(1, 'B')], 60).finalState.units;
     const ourSide = units.filter((unit) => unit.side === 'A');
     const fighting = ourSide.filter((unit) => unit.state === 'fighting');
     const waiting = ourSide.filter((unit) => unit.state === 'waiting');

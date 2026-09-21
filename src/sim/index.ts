@@ -1,6 +1,8 @@
 /** Публичная граница ядра симуляции — сейм, на котором живут все тесты. */
 export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
+export { sideFromFile } from './side-file.js';
+export type { Wave } from './waves.js';
 export {
   DEFAULT_BEHAVIOUR,
   parseBehaviour,

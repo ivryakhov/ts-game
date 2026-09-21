@@ -1,4 +1,5 @@
 import { UNIT_KINDS, type UnitKind } from './balance.js';
+import { filePart, isRecord } from './parse.js';
 
 /**
  * Поведение и Правила — язык, на котором игрок программирует Юнитов
@@ -92,44 +93,24 @@ export const DEFAULT_BEHAVIOUR: Behaviour = {
   ranger: FIGHT_THEN_ADVANCE,
 };
 
-class BehaviourError extends Error {
-  constructor(where: string, what: string) {
-    super(`Поведение, ${where}: ${what}`);
-    this.name = 'BehaviourError';
-  }
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-/**
- * Лишний ключ — почти всегда опечатка: «percnt» вместо «percent». Молча его
- * пропустить значит оставить игрока гадать, почему Правило не работает.
- */
-function onlyKeys(raw: Record<string, unknown>, allowed: readonly string[], where: string): void {
-  for (const key of Object.keys(raw)) {
-    if (!allowed.includes(key)) {
-      throw new BehaviourError(where, `лишний ключ «${key}»; допустимы: ${allowed.join(', ')}`);
-    }
-  }
-}
+const { fail, onlyKeys } = filePart('Поведение');
 
 function parsePercent(value: unknown, where: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
-    throw new BehaviourError(where, `ожидалось число от 0 до 100, а не ${String(value)}`);
+    throw fail(where, `ожидалось число от 0 до 100, а не ${String(value)}`);
   }
   return value;
 }
 
 function parseCount(value: unknown, where: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new BehaviourError(where, `ожидалось целое неотрицательное число, а не ${String(value)}`);
+    throw fail(where, `ожидалось целое неотрицательное число, а не ${String(value)}`);
   }
   return value;
 }
 
 function parseCondition(raw: unknown, where: string): Condition {
-  if (!isRecord(raw)) throw new BehaviourError(where, 'ожидалось Условие-объект');
+  if (!isRecord(raw)) throw fail(where, 'ожидалось Условие-объект');
   const kind = raw['kind'];
 
   switch (kind) {
@@ -143,7 +124,7 @@ function parseCondition(raw: unknown, where: string): Condition {
       onlyKeys(raw, ['kind', 'compare', 'count'], where);
       const compare = raw['compare'];
       if (compare !== 'fewer' && compare !== 'more') {
-        throw new BehaviourError(`${where}.compare`, `ожидалось «fewer» или «more», а не ${String(compare)}`);
+        throw fail(`${where}.compare`, `ожидалось «fewer» или «more», а не ${String(compare)}`);
       }
       return { kind, compare, count: parseCount(raw['count'], `${where}.count`) };
     }
@@ -157,7 +138,7 @@ function parseCondition(raw: unknown, where: string): Condition {
       onlyKeys(raw, ['kind', 'until'], where);
       return { kind, until: parsePercent(raw['until'], `${where}.until`) };
     default:
-      throw new BehaviourError(
+      throw fail(
         where,
         `неизвестное Условие «${String(kind)}»; есть: ${CONDITIONS.join(', ')}`,
       );
@@ -165,7 +146,7 @@ function parseCondition(raw: unknown, where: string): Condition {
 }
 
 function parseAction(raw: unknown, where: string): Action {
-  if (!isRecord(raw)) throw new BehaviourError(where, 'ожидалось Действие-объект');
+  if (!isRecord(raw)) throw fail(where, 'ожидалось Действие-объект');
   const kind = raw['kind'];
 
   switch (kind) {
@@ -181,7 +162,7 @@ function parseAction(raw: unknown, where: string): Action {
       onlyKeys(raw, ['kind', 'unit'], where);
       const unit = raw['unit'];
       if (typeof unit !== 'string' || !(UNIT_KINDS as readonly string[]).includes(unit)) {
-        throw new BehaviourError(
+        throw fail(
           `${where}.unit`,
           `неизвестный тип «${String(unit)}»; есть: ${UNIT_KINDS.join(', ')}`,
         );
@@ -189,7 +170,7 @@ function parseAction(raw: unknown, where: string): Action {
       return { kind, unit: unit as UnitKind };
     }
     default:
-      throw new BehaviourError(
+      throw fail(
         where,
         `неизвестное Действие «${String(kind)}»; есть: ${ACTIONS.join(', ')}`,
       );
@@ -202,11 +183,11 @@ function parseAction(raw: unknown, where: string): Action {
  * его Условие.
  */
 export function parseBehaviour(raw: unknown): Behaviour {
-  if (!isRecord(raw)) throw new BehaviourError('корень', 'ожидался объект с Правилами по типам');
+  if (!isRecord(raw)) throw fail('корень', 'ожидался объект с Правилами по типам');
 
   for (const key of Object.keys(raw)) {
     if (!(UNIT_KINDS as readonly string[]).includes(key)) {
-      throw new BehaviourError(key, `неизвестный тип Юнита; есть: ${UNIT_KINDS.join(', ')}`);
+      throw fail(key, `неизвестный тип Юнита; есть: ${UNIT_KINDS.join(', ')}`);
     }
   }
 
@@ -214,14 +195,14 @@ export function parseBehaviour(raw: unknown): Behaviour {
 
   for (const kind of UNIT_KINDS) {
     const rules = raw[kind];
-    if (!Array.isArray(rules)) throw new BehaviourError(kind, 'нет списка Правил для этого типа');
+    if (!Array.isArray(rules)) throw fail(kind, 'нет списка Правил для этого типа');
     if (rules.length === 0) {
-      throw new BehaviourError(kind, 'список Правил пуст — Юнит не знал бы, что делать');
+      throw fail(kind, 'список Правил пуст — Юнит не знал бы, что делать');
     }
 
     const parsedRules = rules.map((rule: unknown, index) => {
       const where = `${kind}[${index}]`;
-      if (!isRecord(rule)) throw new BehaviourError(where, 'ожидалось Правило-объект');
+      if (!isRecord(rule)) throw fail(where, 'ожидалось Правило-объект');
       onlyKeys(rule, ['when', 'do'], where);
       return {
         when: parseCondition(rule['when'], `${where}.when`),
@@ -234,7 +215,7 @@ export function parseBehaviour(raw: unknown): Behaviour {
     // правило, которого игрок не видит (ADR-0002).
     const last = parsedRules[parsedRules.length - 1];
     if (last?.when.kind !== 'always') {
-      throw new BehaviourError(
+      throw fail(
         `${kind}[${parsedRules.length - 1}].when`,
         'последнее Правило должно быть «always»: иначе неясно, что делать, когда не сработало ни одно',
       );

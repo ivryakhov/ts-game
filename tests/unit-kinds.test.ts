@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { MELEE_RANGE, runMatch, UNIT_STATS } from '@sim/index';
 import type { MatchEvent, MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
-import { matchSetup, STORMING_PARTY, wave } from './match-setup.js';
+import { matchSetup, STORMING_PARTY, army } from './match-setup.js';
 
 const deploy = (
   tick: number,
@@ -96,8 +96,8 @@ describe('Стрелок и ближняя свалка', () => {
   it('лимит ближней Стычки достижим: троих в свалку пускает', () => {
     // Колонна разводит Юнитов по глубине, и если шаг велик, третий номер
     // физически не дотянется — лимит окажется мёртвой буквой.
-    const wave = Array.from({ length: 4 }, (_, index) => deploy(1 + index, 'A', 'scout'));
-    const result = run([...wave, deploy(1, 'B', 'tank')], 80);
+    const scouts = Array.from({ length: 4 }, (_, index) => deploy(1 + index, 'A', 'scout'));
+    const result = run([...scouts, deploy(1, 'B', 'tank')], 80);
     const fighting = result.finalState.units.filter(
       (unit) => unit.side === 'A' && unit.state === 'fighting',
     );
@@ -111,25 +111,25 @@ describe('против отвечающей Цитадели одним типо
     result.events.filter((event) => event.kind === 'unit-died').length;
 
   it('одни Стрелки Цитадель не берут: стены выбивают их по одному', () => {
-    const result = run(wave(['ranger', 'ranger', 'ranger', 'ranger']), 60_000);
+    const result = run(army(['ranger', 'ranger', 'ranger', 'ranger']), 60_000);
 
     expect(result.endReason).not.toBe('citadel-destroyed');
   });
 
   it('одни Танки Цитадель не берут: живучи, но урона мало', () => {
-    const result = run(wave(['tank', 'tank', 'tank']), 60_000);
+    const result = run(army(['tank', 'tank', 'tank']), 60_000);
 
     expect(result.endReason).not.toBe('citadel-destroyed');
   });
 
   it('Танки впереди, Стрелки за спиной — берут, потеряв меньше половины', () => {
-    const result = run(wave(STORMING_PARTY), 60_000);
+    const result = run(army(STORMING_PARTY), 60_000);
 
     expect(result.endReason).toBe('citadel-destroyed');
     expect(lostOf(result)).toBeLessThan(STORMING_PARTY.length / 2 + 1);
   });
 
-  it('каждая волна действительно оплачена — иначе проверки выше пусты', () => {
+  it('каждая армия действительно оплачена — иначе проверки выше пусты', () => {
     const armies: readonly (readonly UnitKind[])[] = [
       ['ranger', 'ranger', 'ranger', 'ranger'],
       ['tank', 'tank', 'tank'],
@@ -137,7 +137,7 @@ describe('против отвечающей Цитадели одним типо
       Array.from({ length: 9 }, (): UnitKind => 'scout'),
     ];
     for (const kinds of armies) {
-      const result = run(wave(kinds), 60_000);
+      const result = run(army(kinds), 60_000);
       expect(result.events.filter((event) => event.kind === 'deploy-refused')).toEqual([]);
     }
   });
@@ -149,7 +149,7 @@ describe('против отвечающей Цитадели одним типо
     const scouts = Array.from({ length: 9 }, () => 'scout' as const);
     const priceOf = (kinds: readonly UnitKind[]) =>
       kinds.reduce((sum, kind) => sum + UNIT_STATS[kind].cost, 0);
-    const result = run(wave(scouts), 60_000);
+    const result = run(army(scouts), 60_000);
 
     expect(priceOf(scouts)).toBe(priceOf(STORMING_PARTY));
     expect(result.endReason).not.toBe('citadel-destroyed');

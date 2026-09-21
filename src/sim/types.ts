@@ -7,6 +7,7 @@
 
 import type { UnitKind } from './balance.js';
 import type { Behaviour } from './rules.js';
+import type { Wave } from './waves.js';
 
 export type { UnitKind };
 
@@ -58,11 +59,16 @@ export interface GameMap {
   readonly resourcePoints: readonly ResourcePointSpec[];
 }
 
-/** Настройка одной Стороны. Экономическая политика появится в тикете 12. */
+/** Настройка одной Стороны. */
 export interface SideSetup {
   readonly id: SideId;
   /** Правила для каждого типа Юнита. Без них — Поведение по умолчанию. */
   readonly behaviour?: Behaviour;
+  /**
+   * Волны, которые Сторона выпускает сама. Без них Юнитов выпускает
+   * только человек — или никто.
+   */
+  readonly waves?: readonly Wave[];
 }
 
 /**

@@ -21,9 +21,9 @@ export interface Hud {
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
-  /** Показать ошибку, которую игрок должен исправить сам. */
+  /** Показать ошибку, которую игрок должен исправить сам. Ошибки копятся, а не заменяют друг друга. */
   warn(message: string): void;
-  /** Объявить исход. Победитель null означает, что время вышло вничью. */
+  /** Объявить исход глазами игрока. Победитель null означает, что время вышло вничью. */
   announce(outcome: { winner: SideId | null; tick: number } | null): void;
 }
 
@@ -41,7 +41,7 @@ export function formatMatchTime(tick: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function createHud(): Hud {
+export function createHud(playerSide: SideId): Hud {
   const clock = element('hud-clock');
   const speed = element('hud-speed');
   const seed = element('hud-seed');
@@ -73,7 +73,9 @@ export function createHud(): Hud {
     },
 
     warn(message: string): void {
-      warning.textContent = message;
+      const line = document.createElement('div');
+      line.textContent = message;
+      warning.append(line);
       warning.hidden = false;
     },
 
@@ -89,11 +91,13 @@ export function createHud(): Hud {
       outcome.classList.toggle('hud__outcome--shown', result !== null);
       if (!result) return;
 
-      const headline = result.winner ? `Победа Стороны ${result.winner}` : 'Время вышло';
+      const headline =
+        result.winner === null ? 'Время вышло' : result.winner === playerSide ? 'Победа' : 'Поражение';
       outcome.innerHTML = '';
       outcome.append(headline);
       const detail = document.createElement('small');
-      detail.textContent = `матч длился ${formatMatchTime(result.tick)}`;
+      const who = result.winner === null ? 'ничья' : `победила Сторона ${result.winner}`;
+      detail.textContent = `${who}, матч длился ${formatMatchTime(result.tick)}`;
       outcome.append(detail);
     },
   };

@@ -1,0 +1,24 @@
+{
+  "scout": [
+    { "when": { "kind": "hp-below", "percent": 35 }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-weakest" } },
+    { "when": { "kind": "recovering", "until": 100 }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ],
+  "tank": [
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-nearest" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ],
+  "ranger": [
+    { "when": { "kind": "hp-below", "percent": 50 }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-most-dangerous" } },
+    { "when": { "kind": "recovering", "until": 100 }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ],
+  "waves": [
+    { "road": "short", "units": ["tank", "ranger", "ranger"] },
+    { "road": "north", "units": ["scout", "scout", "scout", "scout"] },
+    { "road": "short", "units": ["tank", "tank", "ranger", "ranger"] },
+    { "road": "south", "units": ["tank", "ranger", "ranger"] }
+  ]
+}

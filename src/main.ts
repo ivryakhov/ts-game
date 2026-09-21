@@ -6,12 +6,12 @@
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
  */
-import { createMatch, DEFAULT_BEHAVIOUR, parseBehaviour, TICKS_PER_SECOND, UNIT_KINDS } from '@sim/index';
+import { createMatch, DEFAULT_BEHAVIOUR, sideFromFile, TICKS_PER_SECOND } from '@sim/index';
 import type {
   Behaviour,
   MatchSetup,
-  ScheduledRelease,
   SideId,
+  SideSetup,
   UnitId,
   UnitKind,
   WorldSnapshot,
@@ -20,18 +20,18 @@ import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
 import { bindUnitChoice } from './app/unit-choice.js';
-import playerRules from './behaviours/player.json';
+import opponentFile from './behaviours/opponent.json';
+import playerFile from './behaviours/player.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 
-/** Сколько Тиков между волнами. */
-const DEPLOY_PERIOD = 90;
-/** Сколько Юнитов в волне и через сколько Тиков они выходят друг за другом. */
-const WAVE_SIZE = 5;
-const WAVE_GAP = 4;
-const DEMO_WAVES = 20;
+/**
+ * Предел матча — двадцать минут. Матч кончается разрушением Цитадели;
+ * предел нужен только затем, чтобы равный матч не шёл вечно.
+ */
+const MATCH_LIMIT_TICKS = 20 * 60 * TICKS_PER_SECOND;
 
 /** Сид берётся из адреса: ?seed=123 — так матч можно переиграть заново. */
 function seedFromLocation(): number {
@@ -39,74 +39,51 @@ function seedFromLocation(): number {
   return Number.isInteger(asked) && asked >= 0 ? asked : 1;
 }
 
-/**
- * Расписание противника. Сторона игрока никакого расписания не имеет —
- * её Юнитов заказывает человек кликом по Дороге.
- *
- * Это заглушка: настоящий противник появится в тикете 12, когда его
- * поведением станет набор Правил (ADR-0003). Пока он шлёт волны по
- * очереди на каждую Дорогу, насколько хватает Эфира.
- */
-function opponentSchedule(): ScheduledRelease[] {
-  const roads = arena.roads.map((road) => road.id);
-  const actions: ScheduledRelease[] = [];
-
-  for (let wave = 0; wave < DEMO_WAVES; wave += 1) {
-    const roadId = roads[wave % roads.length] ?? 'short';
-    const start = 10 + wave * DEPLOY_PERIOD;
-
-    for (let index = 0; index < WAVE_SIZE; index += 1) {
-      actions.push({
-        tick: start + index * WAVE_GAP,
-        side: 'B',
-        kind: 'deploy',
-        roadId,
-        unit: UNIT_KINDS[(wave + index) % UNIT_KINDS.length] ?? 'scout',
-      });
-    }
-  }
-
-  return actions;
-}
-
 /** За кого играет человек. Выбор Стороны появится вместе с меню матча. */
 const PLAYER_SIDE: SideId = 'A';
-
-/**
- * Поведение игрока из файла src/behaviours/player.json. Файл правит
- * человек, поэтому опечатка в нём — обычное дело: вместо молча стоящих
- * Юнитов игрок видит, где именно ошибся, а матч идёт с Поведением
- * по умолчанию.
- */
-function loadPlayerBehaviour(): { behaviour: Behaviour; problem: string | null } {
-  try {
-    return { behaviour: parseBehaviour(playerRules), problem: null };
-  } catch (error) {
-    return {
-      behaviour: DEFAULT_BEHAVIOUR,
-      problem: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-const seed = seedFromLocation();
-const player = loadPlayerBehaviour();
-const setup: MatchSetup = {
-  seed,
-  map: arena,
-  sides: [{ id: 'A', behaviour: player.behaviour }, { id: 'B' }],
-  releases: opponentSchedule(),
-  // Запас нужен, чтобы матч успел дойти до разрушения Цитадели,
-  // а не упёрся в предел Тиков.
-  maxTicks: DEMO_WAVES * DEPLOY_PERIOD + 6000,
-};
+const OPPONENT_SIDE: SideId = 'B';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#stage');
 if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
-const hud = createHud();
-if (player.problem) hud.warn(`Файл Поведения отвергнут — ${player.problem}`);
+const hud = createHud(PLAYER_SIDE);
+
+/**
+ * Сторона из файла в src/behaviours. Файлы правит человек, поэтому
+ * опечатка в них — обычное дело: вместо молча стоящих Юнитов он видит,
+ * где именно ошибся и чем это обернулось. Сторона тогда выходит
+ * с Поведением по умолчанию и без Волн.
+ */
+function loadSide(id: SideId, raw: unknown, file: string, fallback: string): SideSetup {
+  try {
+    return sideFromFile(id, raw, arena);
+  } catch (error) {
+    const problem = error instanceof Error ? error.message : String(error);
+    hud.warn(`Файл ${file} отвергнут — ${problem}. ${fallback}`);
+    return { id };
+  }
+}
+
+const seed = seedFromLocation();
+// Противник — такая же Сторона из такого же файла, только со списком Волн:
+// Юнитов он выпускает сам, отдельного кода для него нет (ADR-0003).
+const setup: MatchSetup = {
+  seed,
+  map: arena,
+  sides: [
+    loadSide(PLAYER_SIDE, playerFile, 'player.json', 'Юниты игрока действуют по Поведению по умолчанию.'),
+    loadSide(
+      OPPONENT_SIDE,
+      opponentFile,
+      'opponent.json',
+      'Противник не выпускает Юнитов, пока файл не исправлен.',
+    ),
+  ],
+  releases: [],
+  maxTicks: MATCH_LIMIT_TICKS,
+};
+
 const pacer = createPacer(TICKS_PER_SECOND);
 const match = createMatch(setup);
 /** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */

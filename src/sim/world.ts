@@ -5,6 +5,7 @@ import type {
   ScheduledRelease,
   SideId,
   UnitId,
+  UnscheduledRelease,
   WorldSnapshot,
 } from './types.js';
 import type { Rng } from './rng.js';
@@ -23,6 +24,7 @@ import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } f
 import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
+import { callWaves, type WaveCycle } from './waves.js';
 import { createUnit, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
 /**
@@ -42,6 +44,8 @@ export interface World {
   /** Поведение каждой Стороны: по нему её Юниты решают, что делать. */
   readonly behaviours: ReadonlyMap<SideId, Behaviour>;
   readonly purses: ReadonlyMap<SideId, Purse>;
+  /** Стороны, выпускающие Юнитов сами, по своему списку Волн. */
+  readonly waveCycles: readonly WaveCycle[];
   /** Сторона, чья Цитадель пала. Пока никто не пал — null. */
   defeated: SideId | null;
   /** Выпуски, разложенные по Тикам, на которые они назначены. */
@@ -75,6 +79,9 @@ export function createWorld(setup: MatchSetup): World {
       setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
     ),
     purses: createPurses(sides),
+    waveCycles: setup.sides.flatMap((side) =>
+      side.waves ? [{ side: side.id, waves: side.waves, next: 0 }] : [],
+    ),
     defeated: null,
     roads: new Map(
       setup.map.roads.map((road) => [
@@ -94,7 +101,8 @@ export function createWorld(setup: MatchSetup): World {
  * Один шаг симуляции. Порядок строго такой и не зависит ни от чего
  * внешнего — в этом весь смысл фиксированного Тика (ADR-0001):
  *
- * 1. начисляется доход и вступают в силу действия этого Тика;
+ * 1. начисляется доход, вступают в силу Выпуски этого Тика, а Стороны
+ *    с Волнами выпускают очередную, если на неё хватает;
  * 2. по расстановке определяется, кто дерётся, кто ждёт, кто идёт,
  *    одновременно наносится урон и убираются погибшие;
  * 3. двигаются те, кому ничто не мешает, и Колонны выравниваются;
@@ -107,6 +115,9 @@ export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
 
   collectIncome(world.purses);
   for (const action of world.schedule.get(world.tick) ?? []) applyRelease(world, action, events);
+  for (const action of callWaves(world.waveCycles, world.purses)) {
+    applyRelease(world, action, events);
+  }
 
   decide(world);
   fight(world, events);
@@ -209,7 +220,7 @@ export function roadOf(world: World, roadId: string): RoadRuntime {
   return road;
 }
 
-function applyRelease(world: World, action: ScheduledRelease, events: MatchEvent[]): void {
+function applyRelease(world: World, action: UnscheduledRelease, events: MatchEvent[]): void {
   const road = roadOf(world, action.roadId);
 
   if (!payForUnit(world.purses.get(action.side), action.unit)) {
