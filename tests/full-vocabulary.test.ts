@@ -76,13 +76,13 @@ describe('Условие «врагов в Стычке больше N»', () =>
   ]);
 
   it('против одного — дерётся', () => {
-    const result = play(outnumbered, [release(1, 'A'), release(1, 'B')], 70);
+    const result = play(outnumbered, [release(1, 'A'), release(1, 'B')], 95);
     expect(first(result, 'A')?.state).toBe('fighting');
   });
 
   it('против троих — отступает', () => {
     const three = [release(1, 'B'), release(2, 'B'), release(3, 'B')];
-    const result = play(outnumbered, [release(1, 'A'), ...three], 70);
+    const result = play(outnumbered, [release(1, 'A'), ...three], 90);
     expect(first(result, 'A')?.state).toBe('retreating');
   });
 });
@@ -106,7 +106,7 @@ describe('Условие «враг впереди»', () => {
 describe('Условие «чужая Цитадель в радиусе»', () => {
   it('срабатывает на дальности удара Юнита — Стрелок замечает стены за 95 единиц', () => {
     const standoff = everyone([rule({ kind: 'enemy-citadel-in-range' }, HOLD), ADVANCE]);
-    const result = play(standoff, [release(1, 'A', 'ranger')], 200);
+    const result = play(standoff, [release(1, 'A', 'ranger')], 240);
     const ranger = first(result, 'A');
 
     expect(ranger?.state).toBe('holding');
@@ -115,7 +115,7 @@ describe('Условие «чужая Цитадель в радиусе»', () 
   });
 
   it('без него Стрелок доходит до самых стен', () => {
-    const result = play(everyone([ADVANCE]), [release(1, 'A', 'ranger')], 200);
+    const result = play(everyone([ADVANCE]), [release(1, 'A', 'ranger')], 240);
     expect(first(result, 'A')?.state).toBe('sieging');
   });
 });
@@ -131,7 +131,7 @@ describe('Действие «стоять»', () => {
     // Встретив врага посреди Дороги, вдали от любых стен, Юнит встаёт
     // и не отвечает. Враг его бьёт.
     const passive = everyone([rule({ kind: 'enemy-in-range' }, HOLD), ADVANCE]);
-    const result = play(passive, [release(1, 'A'), release(1, 'B')], 70);
+    const result = play(passive, [release(1, 'A'), release(1, 'B')], 95);
     const ours = first(result, 'A');
     const theirs = first(result, 'B');
 

@@ -54,7 +54,7 @@ describe('Действия выбора цели', () => {
     const result = play(
       shooter,
       [release(1, 'A', 'ranger'), release(1, 'B', 'tank'), release(2, 'B', 'scout')],
-      92,
+      138,
     );
     const enemies = sideUnits(result, 'B');
     const hurt = (kind: UnitKind) => {
@@ -104,8 +104,8 @@ describe('цель выбирается только среди досягаем
     const striker = everyone([FIGHT({ kind: 'attack-weakest' }), ADVANCE]);
     const result = play(
       striker,
-      [release(1, 'A', 'scout'), release(1, 'B', 'tank'), release(55, 'B', 'scout')],
-      75,
+      [release(1, 'A', 'scout'), release(1, 'B', 'tank'), release(83, 'B', 'scout')],
+      113,
     );
     const enemies = sideUnits(result, 'B');
     const tank = enemies.find((unit) => unit.kind === 'tank');
@@ -123,8 +123,8 @@ describe('Стрелок бьёт только на своей дальност�
     const striker = everyone([FIGHT({ kind: 'attack-weakest' }), ADVANCE]);
     const result = play(
       striker,
-      [release(1, 'A', 'ranger'), release(1, 'B', 'tank'), release(55, 'B', 'scout')],
-      85,
+      [release(1, 'A', 'ranger'), release(1, 'B', 'tank'), release(83, 'B', 'scout')],
+      128,
     );
     const ranger = first(result, 'A');
     const scout = sideUnits(result, 'B').find((unit) => unit.kind === 'scout');

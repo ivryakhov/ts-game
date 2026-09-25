@@ -46,8 +46,8 @@ describe('лечение у своей Цитадели', () => {
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
     const releases = [deploy(1, 'A'), deploy(1, 'B')];
 
-    const home = ours(duel(cautious, releases, 140));
-    const later = ours(duel(cautious, releases, 180));
+    const home = ours(duel(cautious, releases, 200));
+    const later = ours(duel(cautious, releases, 240));
 
     expect(home?.progress).toBe(0);
     expect(later?.hp ?? 0).toBeGreaterThan(home?.hp ?? Number.POSITIVE_INFINITY);
@@ -59,7 +59,7 @@ describe('лечение у своей Цитадели', () => {
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
     const releases = [deploy(1, 'A'), deploy(1, 'B')];
 
-    for (let tick = 120; tick <= 260; tick += 1) {
+    for (let tick = 170; tick <= 330; tick += 1) {
       const unit = ours(duel(cautious, releases, tick));
       if (!unit) continue;
       expect(unit.hp, `Тик ${tick}`).toBeLessThanOrEqual(unit.maxHp);
@@ -71,15 +71,15 @@ describe('лечение у своей Цитадели', () => {
     // только убывает.
     const reckless = everyone([FIGHT, ADVANCE]);
     const releases = [deploy(1, 'A'), deploy(1, 'B')];
-    const early = ours(duel(reckless, releases, 70));
-    const later = ours(duel(reckless, releases, 90));
+    const early = ours(duel(reckless, releases, 95));
+    const later = ours(duel(reckless, releases, 115));
 
     expect(later?.hp ?? 0).toBeLessThan(early?.hp ?? 0);
   });
 
   it('не лечит у чужой Цитадели', () => {
     // Осаждающий у чужих стен только теряет здоровье.
-    const result = duel(everyone([FIGHT, ADVANCE]), [deploy(1, 'A')], 115);
+    const result = duel(everyone([FIGHT, ADVANCE]), [deploy(1, 'A')], 165);
     const besieger = ours(result);
 
     expect(besieger?.state).toBe('sieging');
@@ -90,7 +90,7 @@ describe('лечение у своей Цитадели', () => {
 describe('Условие «долечиваюсь»', () => {
   it('держит Юнита дома, пока он не вылечится полностью', () => {
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
-    const unit = ours(duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 160));
+    const unit = ours(duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 230));
 
     // Ещё не вылечился — стоит у Цитадели, на Дорогу не выходит.
     expect(unit?.hp ?? 0).toBeLessThan(unit?.maxHp ?? 0);
@@ -113,8 +113,8 @@ describe('Условие «долечиваюсь»', () => {
     const patient = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
     const releases = [deploy(1, 'A'), deploy(1, 'B')];
 
-    const leftHasty = ours(duel(hasty, releases, 200));
-    const leftPatient = ours(duel(patient, releases, 200));
+    const leftHasty = ours(duel(hasty, releases, 240));
+    const leftPatient = ours(duel(patient, releases, 240));
 
     expect(leftHasty?.progress ?? 0).toBeGreaterThan(0);
     expect(leftPatient?.progress).toBe(0);
@@ -141,9 +141,9 @@ describe('Поведение игрока из коробки', () => {
     // Танк противника доходит до наших стен; навстречу выходит Стрелок.
     const releases = [
       { tick: 1, side: 'B' as const, kind: 'deploy' as const, roadId: 'short', unit: 'tank' as const },
-      { tick: 200, side: 'A' as const, kind: 'deploy' as const, roadId: 'short', unit: 'ranger' as const },
+      { tick: 300, side: 'A' as const, kind: 'deploy' as const, roadId: 'short', unit: 'ranger' as const },
     ];
-    const result = duel(player, releases, 260);
+    const result = duel(player, releases, 370);
     const defender = ours(result);
 
     expect(defender?.state).toBe('fighting');
@@ -157,19 +157,19 @@ describe('долечившийся возвращается в Колонну', 
     // Разведчик отступил и лечится у Цитадели; тем временем выходит Танк.
     // Вылечившись, Разведчик — вышедший раньше всех — снова идёт вперёд.
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
-    const releases = [deploy(1, 'A'), deploy(1, 'B'), deploy(160, 'A', 'tank')];
+    const releases = [deploy(1, 'A'), deploy(1, 'B'), deploy(200, 'A', 'tank')];
     const units = (maxTicks: number) => duel(cautious, releases, maxTicks).finalState.units;
     const tankAt = (maxTicks: number) => units(maxTicks).find((unit) => unit.kind === 'tank');
 
-    const healing = units(200).find((unit) => unit.kind === 'scout');
-    const later = units(240);
+    const healing = units(240).find((unit) => unit.kind === 'scout');
+    const later = units(300);
     const scout = later.find((unit) => unit.kind === 'scout');
 
-    // Разведчик ещё дома, когда Танк уже на Дороге, а к Тику 240 оба идут.
+    // Разведчик ещё дома, когда Танк уже на Дороге, а к Тику 300 оба идут.
     expect(healing?.progress).toBe(0);
     expect(scout?.state).toBe('moving');
     // Танк не отброшен назад: он продолжает путь и остаётся впереди.
-    expect(tankAt(240)?.progress ?? 0).toBeGreaterThan(tankAt(200)?.progress ?? 1);
-    expect(scout?.progress ?? 1).toBeLessThan(tankAt(240)?.progress ?? 0);
+    expect(tankAt(300)?.progress ?? 0).toBeGreaterThan(tankAt(240)?.progress ?? 1);
+    expect(scout?.progress ?? 1).toBeLessThan(tankAt(300)?.progress ?? 0);
   });
 });

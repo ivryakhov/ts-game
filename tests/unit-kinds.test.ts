@@ -56,7 +56,7 @@ describe('Стрелок бьёт из-за спин', () => {
   it('наносит урон, сам не вступая в ближнюю Стычку', () => {
     // Танк принимает Стычку на себя, Стрелок упирается ему в спину и бьёт
     // поверх: он быстрее Танка, поэтому догоняет, но обогнать не может.
-    const result = run([deploy(1, 'A', 'tank'), deploy(1, 'B', 'tank'), deploy(2, 'A', 'ranger')], 130);
+    const result = run([deploy(1, 'A', 'tank'), deploy(1, 'B', 'tank'), deploy(2, 'A', 'ranger')], 195);
 
     const ranger = result.finalState.units.find((unit) => unit.kind === 'ranger');
     const enemy = result.finalState.units.find((unit) => unit.side === 'B');
@@ -71,8 +71,8 @@ describe('Стрелок бьёт из-за спин', () => {
     const fightersOf = (result: MatchResult) =>
       result.finalState.units.filter((unit) => unit.side === 'A' && unit.state === 'fighting');
 
-    const alone = run(tank, 130);
-    const withRanger = run([...tank, deploy(2, 'A', 'ranger')], 130);
+    const alone = run(tank, 195);
+    const withRanger = run([...tank, deploy(2, 'A', 'ranger')], 195);
 
     expect(fightersOf(alone)).toHaveLength(1);
     expect(fightersOf(withRanger)).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('Стрелок и ближняя свалка', () => {
   it('стоит дальше ближнего удара — иначе он не «из-за спин»', () => {
     // Если Стрелок попадает в зону ближнего удара, он и сам получает
     // сдачи, и занимает место в лимите: тогда всё его отличие исчезает.
-    const result = run([deploy(1, 'A', 'tank'), deploy(1, 'B', 'tank'), deploy(2, 'A', 'ranger')], 130);
+    const result = run([deploy(1, 'A', 'tank'), deploy(1, 'B', 'tank'), deploy(2, 'A', 'ranger')], 195);
     const ranger = result.finalState.units.find((unit) => unit.kind === 'ranger');
     const enemy = result.finalState.units.find((unit) => unit.side === 'B');
 
@@ -97,7 +97,7 @@ describe('Стрелок и ближняя свалка', () => {
     // Колонна разводит Юнитов по глубине, и если шаг велик, третий номер
     // физически не дотянется — лимит окажется мёртвой буквой.
     const scouts = Array.from({ length: 4 }, (_, index) => deploy(1 + index, 'A', 'scout'));
-    const result = run([...scouts, deploy(1, 'B', 'tank')], 80);
+    const result = run([...scouts, deploy(1, 'B', 'tank')], 120);
     const fighting = result.finalState.units.filter(
       (unit) => unit.side === 'A' && unit.state === 'fighting',
     );

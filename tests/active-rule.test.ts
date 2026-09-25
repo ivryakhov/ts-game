@@ -49,12 +49,12 @@ describe('какое Правило исполняет Юнит', () => {
   });
 
   it('встретив врага — «бить», второе по счёту', () => {
-    const unit = ours(play(cautious, [release(1, 'A'), release(1, 'B')], 70));
+    const unit = ours(play(cautious, [release(1, 'A'), release(1, 'B')], 95));
     expect(unit?.rule).toBe(1);
   });
 
   it('раненый — «отступать», первое', () => {
-    const unit = ours(play(cautious, [release(1, 'A'), release(1, 'B')], 110));
+    const unit = ours(play(cautious, [release(1, 'A'), release(1, 'B')], 135));
     expect(unit?.state).toBe('retreating');
     expect(unit?.rule).toBe(0);
   });
@@ -62,7 +62,7 @@ describe('какое Правило исполняет Юнит', () => {
 
 describe('кого Юнит выбрал целью', () => {
   it('бьющий называет свою цель', () => {
-    const result = play(everyone([FIGHT, ADVANCE]), [release(1, 'A'), release(1, 'B')], 70);
+    const result = play(everyone([FIGHT, ADVANCE]), [release(1, 'A'), release(1, 'B')], 95);
 
     expect(ours(result)?.target).toBe(theirs(result)?.id);
   });
@@ -74,7 +74,7 @@ describe('кого Юнит выбрал целью', () => {
   });
 
   it('отступивший перестаёт целиться', () => {
-    const result = play(everyone([FLEE, FIGHT, ADVANCE]), [release(1, 'A'), release(1, 'B')], 110);
+    const result = play(everyone([FLEE, FIGHT, ADVANCE]), [release(1, 'A'), release(1, 'B')], 135);
 
     expect(ours(result)?.target).toBeNull();
   });
