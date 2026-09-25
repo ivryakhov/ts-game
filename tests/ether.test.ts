@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMatch, runMatch, TICKS_PER_SECOND } from '@sim/index';
+import { createMatch, ECONOMY, runMatch, TICKS_PER_SECOND } from '@sim/index';
 import type { MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
@@ -101,7 +101,7 @@ describe('порядок внутри Тика', () => {
     const start = run([], 0).finalState.ether[0]?.amount ?? 0;
     expect(start).toBe(exactlyAffordable);
 
-    const sixth = Math.ceil(20 / (5 / TICKS_PER_SECOND));
+    const sixth = Math.ceil(20 / (ECONOMY.incomePerSecond / TICKS_PER_SECOND));
     const result = run(
       [...Array.from({ length: 5 }, (_, index) => deploy(1 + index)), deploy(sixth)],
       sixth + 1,

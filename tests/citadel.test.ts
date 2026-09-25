@@ -30,21 +30,21 @@ const citadelOf = (result: MatchResult, side: SideId) =>
 describe('Юниты у чужой Цитадели', () => {
   it('дойдя, принимаются за Цитадель, а не исчезают', () => {
     // Сразу после прибытия: у стен одиночку быстро добивают.
-    const result = run(siege(1), 110);
+    const result = run(siege(1), 160);
 
     expect(result.finalState.units).toHaveLength(1);
     expect(result.finalState.units[0]?.state).toBe('sieging');
   });
 
   it('снимают с Цитадели здоровье', () => {
-    const result = run(siege(1), 130);
+    const result = run(siege(1), 190);
 
     const target = citadelOf(result, 'B');
     expect(target?.hp).toBeLessThan(target?.maxHp ?? 0);
   });
 
   it('не трогают свою Цитадель', () => {
-    const result = run(siege(1), 130);
+    const result = run(siege(1), 190);
 
     const own = citadelOf(result, 'A');
     expect(own?.hp).toBe(own?.maxHp);
@@ -66,12 +66,12 @@ describe('Юниты у чужой Цитадели', () => {
     const target = citadelOf(besieged, 'B');
     const toCitadel = (target?.maxHp ?? 0) - (target?.hp ?? 0);
 
-    // Оба замера берутся после того, как Стычка завязалась (около 49-го
-    // Тика), и до первой смерти (около 116-го): иначе в интервал попадает
+    // Оба замера берутся после того, как Стычка завязалась (около 74-го
+    // Тика), и до первой смерти (около 141-го): иначе в интервал попадает
     // либо время подхода, либо пустота после Стычки.
     const clash = (until: number) =>
       run([deploy(1, 'A'), deploy(1, 'B')], until).finalState.units[0]?.hp ?? 0;
-    const toUnit = clash(60) - clash(60 + ticksOfHitting);
+    const toUnit = clash(90) - clash(90 + ticksOfHitting);
 
     expect(toCitadel).toBeGreaterThan(0);
     expect(toUnit).toBeGreaterThan(0);

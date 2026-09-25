@@ -8,7 +8,7 @@
 export const TICKS_PER_SECOND = 20;
 
 /** Условных единиц карты в секунду. */
-const BASE_SPEED_PER_SECOND = 120;
+const BASE_SPEED_PER_SECOND = 80;
 /** Урона в секунду. */
 const BASE_DAMAGE_PER_SECOND = 15;
 
@@ -82,7 +82,7 @@ export const ECONOMY = {
   /** С чего начинается матч. */
   startingEther: 100,
   /** Пассивный доход в секунду. */
-  incomePerSecond: 5,
+  incomePerSecond: 4.5,
 } as const;
 
 export const CITADEL_STATS = {

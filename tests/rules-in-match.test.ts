@@ -52,7 +52,7 @@ const unitOf = (result: MatchResult, side: SideId) =>
 
 describe('Действие «атаковать ближайшего»', () => {
   it('бьёт врага, стоящего в радиусе', () => {
-    const result = duel(everyone([FIGHT, ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 70);
+    const result = duel(everyone([FIGHT, ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 95);
 
     expect(unitOf(result, 'B')?.hp).toBeLessThan(unitOf(result, 'B')?.maxHp ?? 0);
   });
@@ -62,14 +62,14 @@ describe('Действие «идти вперёд»', () => {
   it('не бьёт: Юнит, умеющий только идти, не наносит врагу урона', () => {
     // Сторона B дерётся как обычно, Сторона A только идёт. Встретившись,
     // A стоит и молча получает удары.
-    const result = duel(everyone([ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 70);
+    const result = duel(everyone([ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 95);
 
     expect(unitOf(result, 'B')?.hp).toBe(unitOf(result, 'B')?.maxHp);
     expect(unitOf(result, 'A')?.hp).toBeLessThan(unitOf(result, 'A')?.maxHp ?? 0);
   });
 
   it('не проходит сквозь врага', () => {
-    const result = duel(everyone([ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 70);
+    const result = duel(everyone([ADVANCE]), [deploy(1, 'A'), deploy(1, 'B')], 95);
     const ours = unitOf(result, 'A');
     const theirs = unitOf(result, 'B');
 
@@ -118,7 +118,7 @@ describe('Условия', () => {
     expect(unitOf(early, 'A')?.state).toBe('moving');
 
     // После ранения — отступает.
-    const hurt = duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 110);
+    const hurt = duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 135);
     expect(unitOf(hurt, 'A')?.state).toBe('retreating');
   });
 });
@@ -138,9 +138,9 @@ describe('Условия и Действия не срабатывают сам�
     // разворота он должен оказаться ближе к своей Цитадели, чем был.
     const turnBack = everyone([FLEE_BELOW(90), FIGHT, ADVANCE]);
     const actions = [deploy(1, 'A'), deploy(1, 'B')];
-    // Стычка с 49-го Тика; 10% здоровья уходит примерно к 56-му.
-    const atTurn = unitOf(duel(turnBack, actions, 58), 'A');
-    const later = unitOf(duel(turnBack, actions, 85), 'A');
+    // Стычка с 74-го Тика; 10% здоровья уходит примерно к 81-му.
+    const atTurn = unitOf(duel(turnBack, actions, 83), 'A');
+    const later = unitOf(duel(turnBack, actions, 110), 'A');
 
     expect(atTurn?.state).toBe('retreating');
     expect(later?.progress ?? 1).toBeLessThan(atTurn?.progress ?? 0);
@@ -150,7 +150,7 @@ describe('Условия и Действия не срабатывают сам�
     // Всегда отступать, едва завидев врага: Юнит уходит, но враг его
     // догоняет и бьёт. Урон по нему обязан проходить.
     const coward = everyone([{ when: { kind: 'enemy-in-range' }, do: { kind: 'retreat' } }, ADVANCE]);
-    const result = duel(coward, [deploy(1, 'A'), deploy(1, 'B')], 70);
+    const result = duel(coward, [deploy(1, 'A'), deploy(1, 'B')], 95);
 
     expect(unitOf(result, 'A')?.hp).toBeLessThan(unitOf(result, 'A')?.maxHp ?? 0);
   });
@@ -171,15 +171,15 @@ describe('порядок Правил', () => {
     // «Всегда идти» стоит первым и всегда истинно — до «драться» дело
     // не доходит никогда, хотя враг в радиусе.
     const advanceFirst = everyone([ADVANCE, FIGHT, ADVANCE]);
-    const result = duel(advanceFirst, [deploy(1, 'A'), deploy(1, 'B')], 70);
+    const result = duel(advanceFirst, [deploy(1, 'A'), deploy(1, 'B')], 95);
 
     expect(unitOf(result, 'B')?.hp).toBe(unitOf(result, 'B')?.maxHp);
   });
 
   it('те же Правила в другом порядке дают другой исход', () => {
     const actions = [deploy(1, 'A'), deploy(1, 'B')];
-    const advanceFirst = duel(everyone([ADVANCE, FIGHT, ADVANCE]), actions, 70);
-    const fightFirst = duel(everyone([FIGHT, ADVANCE]), actions, 70);
+    const advanceFirst = duel(everyone([ADVANCE, FIGHT, ADVANCE]), actions, 95);
+    const fightFirst = duel(everyone([FIGHT, ADVANCE]), actions, 95);
 
     expect(unitOf(advanceFirst, 'B')?.hp).not.toBe(unitOf(fightFirst, 'B')?.hp);
   });

@@ -19,8 +19,8 @@ const killedByCitadel = (events: readonly MatchEvent[]) =>
 
 describe('Цитадель отвечает ударом', () => {
   it('бьёт того, кто её осаждает', () => {
-    // Разведчик доходит за 101 Тик; ещё через двадцать он уже ранен.
-    const besieger = run([deploy(1, 'A')], 121).finalState.units[0];
+    // Разведчик доходит за 151 Тик; ещё через двадцать он уже ранен.
+    const besieger = run([deploy(1, 'A')], 171).finalState.units[0];
 
     expect(besieger?.state).toBe('sieging');
     expect(besieger?.hp).toBeLessThan(besieger?.maxHp ?? 0);
@@ -50,10 +50,10 @@ describe('Цитадель отвечает ударом', () => {
 
   it('из стоящих вплотную бьёт пришедшего первым, а не вышедшего первым', () => {
     // Стрелок выходит первым, но по длинной обходной Дороге и встаёт у стен
-    // около 218-го Тика. Танк выходит вторым по короткой и встаёт около
-    // 217-го. Пришёл первым Танк — его стены и бьют, хотя номер у него больше.
+    // около 327-го Тика. Танк выходит вторым по короткой и встаёт около
+    // 325-го. Пришёл первым Танк — его стены и бьют, хотя номер у него больше.
     const actions = [deploy(1, 'A', 'ranger', 'north'), deploy(2, 'A', 'tank', 'short')];
-    const result = run(actions, 225);
+    const result = run(actions, 335);
     const walls = result.finalState.citadels.find((citadel) => citadel.side === 'B');
     const tank = result.finalState.units.find((unit) => unit.kind === 'tank');
     const ranger = result.finalState.units.find((unit) => unit.kind === 'ranger');
@@ -66,7 +66,7 @@ describe('Цитадель отвечает ударом', () => {
   it('первым бьёт того, кто подошёл раньше, — он и щит', () => {
     // Танк выходит первым и первым встаёт у стен; Разведчик за ним
     // остаётся целым, пока Танк жив.
-    const result = run([deploy(1, 'A', 'tank'), deploy(80, 'A', 'scout')], 260);
+    const result = run([deploy(1, 'A', 'tank'), deploy(120, 'A', 'scout')], 390);
     const tank = result.finalState.units.find((unit) => unit.kind === 'tank');
     const scout = result.finalState.units.find((unit) => unit.kind === 'scout');
 
@@ -75,7 +75,7 @@ describe('Цитадель отвечает ударом', () => {
   });
 
   it('сообщает, кого бьёт: правило должно быть видно игроку', () => {
-    const result = run([deploy(1, 'A')], 110);
+    const result = run([deploy(1, 'A')], 160);
     const walls = result.finalState.citadels.find((citadel) => citadel.side === 'B');
     const besieger = result.finalState.units[0];
 

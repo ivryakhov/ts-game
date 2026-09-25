@@ -28,15 +28,15 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('дойдя до конца Дороги, принимается за чужую Цитадель', () => {
-    // Смотрим сразу после прибытия (101-й Тик): у стен Юнит долго не живёт.
-    const result = run([deploy(1, 'short')], 110);
+    // Смотрим сразу после прибытия (151-й Тик): у стен Юнит долго не живёт.
+    const result = run([deploy(1, 'short')], 160);
 
     expect(result.finalState.units).toHaveLength(1);
     expect(result.finalState.units[0]?.state).toBe('sieging');
   });
 
   it('сообщает о прибытии один раз, а не каждый Тик осады', () => {
-    const result = run([deploy(1, 'short')], 150);
+    const result = run([deploy(1, 'short')], 200);
 
     expect(arrivals(result.events)).toHaveLength(1);
   });
@@ -55,12 +55,12 @@ describe('Юнит идёт по Дороге', () => {
 
   it('доходит за заранее известное число Тиков', () => {
     // Якорь, а не пропорция: короткая Дорога длиной 905 условных единиц
-    // Разведчик при скорости 9 единиц за Тик проходит за 101 Тик,
-    // обходную длиной 1304 — за 145. Числа завязаны на характеристики
+    // Разведчик при скорости 6 единиц за Тик проходит за 151 Тик,
+    // обходную длиной 1304 — за 218. Числа завязаны на характеристики
     // из balance.ts; если они изменятся, тест обязан упасть и заставить
     // пересмотреть темп.
-    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(101);
-    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(145);
+    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(151);
+    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(218);
   });
 
   it('проходит обходную Дорогу заметно дольше короткой', () => {
@@ -115,7 +115,7 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('не перелетает конец Дороги: последний шаг укорачивается', () => {
-    const result = run([deploy(1, 'short')], 100);
+    const result = run([deploy(1, 'short')], 150);
     const unit = result.finalState.units[0];
 
     expect(unit?.progress).toBeLessThanOrEqual(1);
