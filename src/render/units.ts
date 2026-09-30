@@ -14,11 +14,11 @@ import { SIDE_COLORS, UNIT_VISUAL, withAlpha } from './visual-contract.js';
  */
 export interface Hindsight {
   /**
-   * Доля пройденной Дороги, сглаженная между двумя Тиками. Юнит, которого
+   * Точка Юнита на поле, сглаженная между двумя Тиками. Юнит, которого
    * в прошлом снимке не было, встаёт на своё место без сглаживания —
-   * иначе он выехал бы из начала Дороги рывком.
+   * иначе он выехал бы из ворот рывком.
    */
-  progressOf(unit: UnitSnapshot, alpha: number): number;
+  placeOf(unit: UnitSnapshot, alpha: number): Point;
   /**
    * Сила вспышки от полученного урона. Вспышка загорается в начале Тика
    * и гаснет к следующему, поэтому Стычка читается как пульсация,
@@ -31,10 +31,10 @@ export function hindsight(previous: WorldSnapshot): Hindsight {
   const before = new Map(previous.units.map((unit) => [unit.id, unit]));
 
   return {
-    progressOf(unit, alpha) {
+    placeOf(unit, alpha) {
       const from = before.get(unit.id);
-      if (!from) return unit.progress;
-      return from.progress + (unit.progress - from.progress) * alpha;
+      if (!from) return { x: unit.x, y: unit.y };
+      return { x: from.x + (unit.x - from.x) * alpha, y: from.y + (unit.y - from.y) * alpha };
     },
 
     flashOf(unit, alpha) {

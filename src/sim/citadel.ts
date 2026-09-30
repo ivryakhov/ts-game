@@ -1,6 +1,6 @@
 import { CITADEL_STATS } from './balance.js';
-import type { CitadelSnapshot, MatchEvent, SideId, UnitId } from './types.js';
-import { statsOf, type Unit } from './unit.js';
+import type { CitadelSnapshot, MatchEvent, Point, SideId, UnitId } from './types.js';
+import { compareDistance, statsOf, type Unit } from './unit.js';
 
 /**
  * Цитадель — главное строение Стороны. Её разрушение означает поражение,
@@ -8,24 +8,32 @@ import { statsOf, type Unit } from './unit.js';
  */
 export interface Citadel {
   readonly side: SideId;
+  /**
+   * Где она стоит. Враг не заходит внутрь, а встаёт вокруг. Бывает null
+   * только на пустой тестовой карте без Дорог — там и подойти к ней некому.
+   */
+  readonly at: Point | null;
   hp: number;
   readonly maxHp: number;
   /** Кого Цитадель бьёт в этот Тик. Нужно показу: правило должно быть видно. */
   target: UnitId | null;
 }
 
-export function createCitadels(sides: readonly SideId[]): Map<SideId, Citadel> {
+export function createCitadels(
+  sides: readonly SideId[],
+  placeOf: (side: SideId) => Point | null,
+): Map<SideId, Citadel> {
   return new Map(
     sides.map((side) => [
       side,
-      { side, hp: CITADEL_STATS.maxHp, maxHp: CITADEL_STATS.maxHp, target: null },
+      { side, at: placeOf(side), hp: CITADEL_STATS.maxHp, maxHp: CITADEL_STATS.maxHp, target: null },
     ]),
   );
 }
 
 /**
  * Урон, нанесённый осаждающими Юнитами. Каждый бьёт ту Цитадель,
- * к которой пришёл по своей Дороге, а не любую чужую: иначе при трёх
+ * к которой ведёт его Дорога, а не любую чужую: иначе при трёх
  * Сторонах один Юнит доставал бы всех врагов разом.
  *
  * Возвращает Стороны, чьи Цитадели пали в этом Тике.
@@ -60,7 +68,7 @@ export function bombard(
 /** Юнит, до которого Цитадель может дотянуться, и расстояние до него. */
 export interface InReach {
   readonly unit: Unit;
-  /** Вдоль Дороги от Цитадели. */
+  /** По прямой от центра Цитадели. */
   readonly distance: number;
 }
 
@@ -73,7 +81,7 @@ export interface InReach {
  * опереться — пустить Танка вперёд, чтобы он принял удары на себя.
  *
  * Отбирать своих и уже погибших здесь не нужно: в радиус попадают
- * только те, кто идёт к этой Цитадели, а каждая бьёт одного.
+ * только враги, а каждая Цитадель бьёт одного.
  *
  * Возвращает погибших от ударов со стен.
  */
@@ -91,7 +99,7 @@ export function defend(
 
     const target = [...reachOf(citadel.side)].sort(
       (left, right) =>
-        left.distance - right.distance ||
+        compareDistance(left.distance, right.distance) ||
         (left.unit.arrivedAt ?? Number.POSITIVE_INFINITY) -
           (right.unit.arrivedAt ?? Number.POSITIVE_INFINITY) ||
         left.unit.id - right.unit.id,

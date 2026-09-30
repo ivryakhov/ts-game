@@ -82,27 +82,27 @@ describe('Стрелок бьёт из-за спин', () => {
 describe('Стрелок и ближняя свалка', () => {
   it('стоит дальше ближнего удара — иначе он не «из-за спин»', () => {
     // Если Стрелок попадает в зону ближнего удара, он и сам получает
-    // сдачи, и занимает место в лимите: тогда всё его отличие исчезает.
+    // сдачи, и занимает место вокруг врага: тогда всё его отличие исчезает.
     const result = run([deploy(1, 'A', 'tank'), deploy(1, 'B', 'tank'), deploy(2, 'A', 'ranger')], 195);
     const ranger = result.finalState.units.find((unit) => unit.kind === 'ranger');
     const enemy = result.finalState.units.find((unit) => unit.side === 'B');
 
-    const between = Math.abs((ranger?.progress ?? 0) - (enemy?.progress ?? 0)) * 905;
+    const between = Math.hypot((ranger?.x ?? 0) - (enemy?.x ?? 0), (ranger?.y ?? 0) - (enemy?.y ?? 0));
     expect(ranger?.state).toBe('fighting');
     expect(between).toBeGreaterThan(MELEE_RANGE);
     expect(between).toBeLessThanOrEqual(95);
   });
 
-  it('лимит ближней Стычки достижим: троих в свалку пускает', () => {
-    // Колонна разводит Юнитов по глубине, и если шаг велик, третий номер
-    // физически не дотянется — лимит окажется мёртвой буквой.
+  it('Колонна не мешает своим: идущие следом обступают врага, а не ждут в затылок', () => {
+    // Ближние бьют только вплотную. Если бы идущие следом не умели
+    // обходить передних, с Танком дрался бы один передний Разведчик.
     const scouts = Array.from({ length: 4 }, (_, index) => deploy(1 + index, 'A', 'scout'));
     const result = run([...scouts, deploy(1, 'B', 'tank')], 120);
     const fighting = result.finalState.units.filter(
       (unit) => unit.side === 'A' && unit.state === 'fighting',
     );
 
-    expect(fighting).toHaveLength(3);
+    expect(fighting.length).toBeGreaterThanOrEqual(3);
   });
 });
 

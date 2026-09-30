@@ -89,8 +89,10 @@ describe('лечение у своей Цитадели', () => {
 
 describe('Условие «долечиваюсь»', () => {
   it('держит Юнита дома, пока он не вылечится полностью', () => {
+    // Разведчики сходятся к 80-му Тику, наш отступает к 110-му и лечится
+    // дома примерно с 170-го по 210-й.
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
-    const unit = ours(duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 230));
+    const unit = ours(duel(cautious, [deploy(1, 'A'), deploy(1, 'B')], 190));
 
     // Ещё не вылечился — стоит у Цитадели, на Дорогу не выходит.
     expect(unit?.hp ?? 0).toBeLessThan(unit?.maxHp ?? 0);
@@ -113,8 +115,8 @@ describe('Условие «долечиваюсь»', () => {
     const patient = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
     const releases = [deploy(1, 'A'), deploy(1, 'B')];
 
-    const leftHasty = ours(duel(hasty, releases, 240));
-    const leftPatient = ours(duel(patient, releases, 240));
+    const leftHasty = ours(duel(hasty, releases, 190));
+    const leftPatient = ours(duel(patient, releases, 190));
 
     expect(leftHasty?.progress ?? 0).toBeGreaterThan(0);
     expect(leftPatient?.progress).toBe(0);
@@ -138,12 +140,15 @@ describe('Поведение игрока из коробки', () => {
       HEAL_UNTIL(100),
       ADVANCE,
     ]);
-    // Танк противника доходит до наших стен; навстречу выходит Стрелок.
+    // Танк противника доходит до наших стен, Стрелок противника бьёт
+    // из-за его спины; навстречу выходит наш Стрелок. Ближнему его не
+    // достать — он стоит у самого центра Цитадели, — а Стрелку достать.
     const releases = [
-      { tick: 1, side: 'B' as const, kind: 'deploy' as const, roadId: 'short', unit: 'tank' as const },
-      { tick: 300, side: 'A' as const, kind: 'deploy' as const, roadId: 'short', unit: 'ranger' as const },
+      deploy(1, 'B', 'tank'),
+      deploy(2, 'B', 'ranger'),
+      deploy(300, 'A', 'ranger'),
     ];
-    const result = duel(player, releases, 370);
+    const result = duel(player, releases, 320);
     const defender = ours(result);
 
     expect(defender?.state).toBe('fighting');
@@ -157,15 +162,15 @@ describe('долечившийся возвращается в Колонну', 
     // Разведчик отступил и лечится у Цитадели; тем временем выходит Танк.
     // Вылечившись, Разведчик — вышедший раньше всех — снова идёт вперёд.
     const cautious = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
-    const releases = [deploy(1, 'A'), deploy(1, 'B'), deploy(200, 'A', 'tank')];
+    const releases = [deploy(1, 'A'), deploy(1, 'B'), deploy(185, 'A', 'tank')];
     const units = (maxTicks: number) => duel(cautious, releases, maxTicks).finalState.units;
     const tankAt = (maxTicks: number) => units(maxTicks).find((unit) => unit.kind === 'tank');
 
-    const healing = units(240).find((unit) => unit.kind === 'scout');
+    const healing = units(190).find((unit) => unit.kind === 'scout');
     const later = units(300);
     const scout = later.find((unit) => unit.kind === 'scout');
 
-    // Разведчик ещё дома, когда Танк уже на Дороге, а к Тику 300 оба идут.
+    // Разведчик ещё дома, пока Танк выходит, а к Тику 300 оба идут.
     expect(healing?.progress).toBe(0);
     expect(scout?.state).toBe('moving');
     // Танк не отброшен назад: он продолжает путь и остаётся впереди.
