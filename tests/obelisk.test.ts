@@ -55,9 +55,9 @@ describe('ничейный Обелиск', () => {
       obelisk: tick.obelisks.find((obelisk) => obelisk.id === 'north'),
     }));
 
-    const firstStruck = passing.findIndex(({ unit, obelisk }) => unit && obelisk?.target === unit.id);
+    const firstStruck = passing.findIndex(({ unit, obelisk }) => unit && obelisk?.targets.includes(unit.id));
     const before = passing.slice(0, firstStruck);
-    const struck = passing.filter(({ unit, obelisk }) => unit && obelisk?.target === unit.id);
+    const struck = passing.filter(({ unit, obelisk }) => unit && obelisk?.targets.includes(unit.id));
     const after = passing.find(
       ({ unit }) =>
         unit &&
@@ -83,10 +83,10 @@ describe('ничейный Обелиск', () => {
 
     expect(away(unit!, CITADEL_B)).toBeGreaterThan(110);
     expect(unit?.hp).toBe(unit?.maxHp);
-    expect(ticks.every((tick) => tick.obelisks.every((obelisk) => obelisk.target === null))).toBe(true);
+    expect(ticks.every((tick) => tick.obelisks.every((obelisk) => obelisk.targets.length === 0))).toBe(true);
   });
 
-  it('Юнитам разных Сторон на равном расстоянии достаётся по половине удара', () => {
+  it('Юнитам разных Сторон на равном расстоянии достаётся по половине удара, и видны обе цели', () => {
     // Встречные Разведчики на северной Дороге сходятся под Обелиском
     // и останавливаются друг перед другом: оба одинаково от него далеко.
     const ticks = trace([deploy('A', 'north'), deploy('B', 'north')], 400);
@@ -98,13 +98,16 @@ describe('ничейный Обелиск', () => {
       if (away(left, NORTH) > OBELISK_STATS.range) return [];
       const lost = (unit: UnitSnapshot) =>
         (previous.units.find((before) => before.id === unit.id)?.hp ?? 0) - unit.hp;
-      return [[lost(left), lost(right)]];
+      const shown = tick.obelisks.find((obelisk) => obelisk.id === 'north')?.targets ?? [];
+      return [{ left: lost(left), right: lost(right), shown: [...shown].sort(), both: [left.id, right.id].sort() }];
     });
 
     expect(halves.length).toBeGreaterThan(0);
-    for (const [left, right] of halves) {
+    for (const { left, right, shown, both } of halves) {
       expect(left).toBeCloseTo(OBELISK_STATS.damagePerTick / 2, 9);
       expect(right).toBeCloseTo(OBELISK_STATS.damagePerTick / 2, 9);
+      // Снимок отдаёт обе цели: линия удара ведёт к каждой.
+      expect(shown).toEqual(both);
     }
   });
 
@@ -188,7 +191,7 @@ describe('зеркальность с Обелисками', () => {
     });
 
     expect(result.events.some((event) => event.kind === 'unit-died')).toBe(true);
-    expect(result.finalState.obelisks.some((obelisk) => obelisk.target !== null || obelisk.hp > 0)).toBe(true);
+    expect(result.finalState.obelisks.some((obelisk) => obelisk.targets.length > 0 || obelisk.hp > 0)).toBe(true);
     expect(bySide('A')).toEqual(bySide('B'));
   });
 });

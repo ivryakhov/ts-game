@@ -63,9 +63,13 @@ export function createOverlays(ctx: OverlayContext): Overlays {
     }
     // Обелиск бьёт так же, как стены, и его удар виден так же.
     for (const state of frame.current.obelisks) {
-      if (state.target === null || state.hp <= 0) continue;
+      if (state.hp <= 0) continue;
       const spec = map.obelisks.find((obelisk) => obelisk.id === state.id);
-      if (spec) fireLine(frame, spec.at, places.get(state.target), obeliskColor(state.owner));
+      if (!spec) continue;
+      // Разделённый удар виден целиком: по линии к каждому, кого бьют.
+      for (const target of state.targets) {
+        fireLine(frame, spec.at, places.get(target), obeliskColor(state.owner));
+      }
     }
   }
 

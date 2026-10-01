@@ -223,8 +223,11 @@ export interface ObeliskSnapshot {
   readonly owner: SideId | null;
   readonly hp: number;
   readonly maxHp: number;
-  /** Кого Обелиск бьёт прямо сейчас; null — никого нет в радиусе. */
-  readonly target: UnitId | null;
+  /**
+   * Кого Обелиск бьёт прямо сейчас; пусто — никого нет в радиусе. Двое
+   * и больше — когда удар делится между Сторонами поровну.
+   */
+  readonly targets: readonly UnitId[];
 }
 
 export interface WorldSnapshot {

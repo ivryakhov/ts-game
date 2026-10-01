@@ -15,8 +15,8 @@ export interface Obelisk extends Structure {
   owner: SideId | null;
   readonly at: Point;
   readonly maxHp: number;
-  /** Кого Обелиск бьёт в этот Тик. Нужно показу, как и у Цитадели. */
-  target: UnitId | null;
+  /** Кого Обелиск бьёт в этот Тик — всех, если удар делится. Нужно показу. */
+  targets: UnitId[];
 }
 
 export function createObelisks(specs: readonly ObeliskSpec[]): Obelisk[] {
@@ -28,7 +28,7 @@ export function createObelisks(specs: readonly ObeliskSpec[]): Obelisk[] {
     radius: OBELISK_RADIUS,
     hp: OBELISK_STATS.maxHp,
     maxHp: OBELISK_STATS.maxHp,
-    target: null,
+    targets: [],
   }));
 }
 
@@ -50,13 +50,12 @@ export function obelisksFire(
   const fallen = new Set<UnitId>();
 
   for (const obelisk of obelisks) {
-    obelisk.target = null;
+    obelisk.targets = [];
     if (obelisk.hp <= 0) continue;
 
     const targets = targetsOf(obelisk, units.filter((unit) => !fallen.has(unit.id)));
-    const first = targets[0];
-    if (!first) continue;
-    obelisk.target = first.id;
+    if (targets.length === 0) continue;
+    obelisk.targets = targets.map((unit) => unit.id);
 
     const blow = OBELISK_STATS.damagePerTick / targets.length;
     for (const unit of targets) {
@@ -103,6 +102,6 @@ export function obeliskSnapshots(obelisks: readonly Obelisk[]): readonly Obelisk
     owner: obelisk.owner,
     hp: obelisk.hp,
     maxHp: obelisk.maxHp,
-    target: obelisk.target,
+    targets: [...obelisk.targets],
   }));
 }
