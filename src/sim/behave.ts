@@ -5,7 +5,8 @@ import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './un
 
 /**
  * Исполнение Правил: каждый Тик каждый Юнит перебирает Правила своего типа
- * сверху вниз и берёт Действие первого, чьё Условие истинно (ADR-0002).
+ * сверху вниз и берёт Действие первого, чьи Условия истинны все
+ * (ADR-0002, ADR-0005).
  *
  * Решение только выбирается здесь; что из него выйдет — Стычка, движение
  * или осада — определяет мир. Правило задаёт намерение Юнита, а не отменяет
@@ -70,9 +71,7 @@ export function choose(
   const rules = behaviour[unit.kind];
   for (let index = 0; index < rules.length; index += 1) {
     const rule = rules[index];
-    if (rule && conditionsOf(rule).every((condition) => holds(condition, unit, around))) {
-      return { action: rule.do, rule: index };
-    }
+    if (rule && conditionsOf(rule).every((condition) => holds(condition, unit, around))) return { action: rule.do, rule: index };
   }
   throw new Error(`Поведение ${unit.kind}: не сработало ни одно Правило — разбор пропустил дыру`);
 }

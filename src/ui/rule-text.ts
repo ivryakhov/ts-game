@@ -1,4 +1,4 @@
-import { conditionsOf, type Action, type Condition, type Rule, type UnitKind } from '@sim/index';
+import { conditionsOf, isFallback, type Action, type Condition, type Rule, type UnitKind } from '@sim/index';
 
 /**
  * Правила человеческим языком — для панели выделенного Юнита. Слова
@@ -64,11 +64,9 @@ export function describeAction(action: Action): string {
   }
 }
 
-/** «Если у своей Цитадели и здоровье ниже 100% — отступать»: «И» читается союзом. */
 export function describeRule(rule: Rule): string {
   const action = describeAction(rule.do);
-  const conditions = conditionsOf(rule);
-  return conditions.length === 1 && conditions[0]?.kind === 'always'
-    ? `иначе — ${action}`
-    : `если ${conditions.map(describeCondition).join(' и ')} — ${action}`;
+  if (isFallback(rule)) return `иначе — ${action}`;
+  const when = conditionsOf(rule).map(describeCondition).join(' и ');
+  return `если ${when} — ${action}`;
 }
