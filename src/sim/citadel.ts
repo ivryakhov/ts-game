@@ -1,19 +1,17 @@
-import { CITADEL_STATS } from './balance.js';
+import { CITADEL_RADIUS, CITADEL_STATS } from './balance.js';
+import type { Structure } from './structure.js';
 import type { CitadelSnapshot, MatchEvent, Point, SideId, UnitId } from './types.js';
-import { compareDistance, statsOf, type Unit } from './unit.js';
+import { compareDistance, type Unit } from './unit.js';
 
 /**
  * Цитадель — главное строение Стороны. Её разрушение означает поражение,
  * и это единственный способ выиграть матч.
  */
-export interface Citadel {
+export interface Citadel extends Structure {
+  readonly kind: 'citadel';
   readonly side: SideId;
-  /**
-   * Где она стоит. Враг не заходит внутрь, а встаёт вокруг. Бывает null
-   * только на пустой тестовой карте без Дорог — там и подойти к ней некому.
-   */
-  readonly at: Point | null;
-  hp: number;
+  /** Владелец Цитадели не меняется: это её Сторона. */
+  readonly owner: SideId;
   readonly maxHp: number;
   /** Кого Цитадель бьёт в этот Тик. Нужно показу: правило должно быть видно. */
   target: UnitId | null;
@@ -24,45 +22,20 @@ export function createCitadels(
   placeOf: (side: SideId) => Point | null,
 ): Map<SideId, Citadel> {
   return new Map(
-    sides.map((side) => [
+    sides.map((side): [SideId, Citadel] => [
       side,
-      { side, at: placeOf(side), hp: CITADEL_STATS.maxHp, maxHp: CITADEL_STATS.maxHp, target: null },
+      {
+        kind: 'citadel',
+        side,
+        owner: side,
+        at: placeOf(side),
+        radius: CITADEL_RADIUS,
+        hp: CITADEL_STATS.maxHp,
+        maxHp: CITADEL_STATS.maxHp,
+        target: null,
+      },
     ]),
   );
-}
-
-/**
- * Урон, нанесённый осаждающими Юнитами. Каждый бьёт ту Цитадель,
- * к которой ведёт его Дорога, а не любую чужую: иначе при трёх
- * Сторонах один Юнит доставал бы всех врагов разом.
- *
- * Возвращает Стороны, чьи Цитадели пали в этом Тике.
- *
- * Осаждающие бьют слабее, чем в Стычке: до Цитадели доходит лишь доля
- * урона. Иначе прорвавшаяся Волна решала бы матч, а удерживать Дорогу
- * не имело бы смысла.
- */
-export function bombard(
-  besiegers: readonly { unit: Unit; target: SideId }[],
-  citadels: ReadonlyMap<SideId, Citadel>,
-  tick: number,
-  events: MatchEvent[],
-): Set<SideId> {
-  const fallen = new Set<SideId>();
-
-  for (const { unit, target } of besiegers) {
-    const citadel = citadels.get(target);
-    if (!citadel || citadel.hp <= 0 || citadel.side === unit.side) continue;
-
-    citadel.hp -= statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
-    if (citadel.hp > 0) continue;
-
-    citadel.hp = 0;
-    fallen.add(citadel.side);
-    events.push({ kind: 'citadel-destroyed', tick, side: citadel.side });
-  }
-
-  return fallen;
 }
 
 /** Юнит, до которого Цитадель может дотянуться, и расстояние до него. */

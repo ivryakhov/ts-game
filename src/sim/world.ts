@@ -11,7 +11,6 @@ import type {
 } from './types.js';
 import type { Rng } from './rng.js';
 import {
-  bombard,
   citadelSnapshots,
   createCitadels,
   defend,
@@ -25,6 +24,7 @@ import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } f
 import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
+import { batter, besiegedBy } from './structure.js';
 import { callWaves, type WaveCycle } from './waves.js';
 import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
@@ -190,18 +190,20 @@ function holdTheWalls(world: World, events: MatchEvent[]): void {
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
 }
 
-/** Дошедшие до чужой Цитадели бьют её, пока она стоит. */
+/** Дошедшие до чужого строения бьют его, пока оно стоит. Павшая Цитадель — поражение. */
 function siege(world: World, events: MatchEvent[]): void {
   const besiegers = world.units
     .filter((unit) => unit.state === 'sieging')
-    .map((unit) => {
-      const road = roadOf(world, unit.roadId);
-      return { unit, target: unit.forward ? road.to : road.from };
+    .flatMap((unit) => {
+      const target = besiegedBy(world, unit);
+      return target ? [{ unit, target }] : [];
     });
   if (besiegers.length === 0) return;
 
-  for (const side of bombard(besiegers, world.citadels, world.tick, events)) {
-    world.defeated = side;
+  for (const fallen of batter(besiegers)) {
+    if (fallen.kind !== 'citadel' || fallen.owner === null) continue;
+    events.push({ kind: 'citadel-destroyed', tick: world.tick, side: fallen.owner });
+    world.defeated = fallen.owner;
   }
 }
 
