@@ -35,7 +35,7 @@ describe('матч принимает корректное Поведение', 
       scout: [
         { when: { kind: 'hp-below', percent: 30 }, do: { kind: 'retreat' } },
         { when: { kind: 'enemy-in-range' }, do: { kind: 'attack-nearest' } },
-        { when: { kind: 'recovering', until: 100 }, do: { kind: 'retreat' } },
+        { when: [{ kind: 'at-home' }, { kind: 'hp-below', percent: 100 }], do: { kind: 'retreat' } },
         ALWAYS_ADVANCE,
       ],
     };
@@ -129,20 +129,12 @@ describe('матч отвергает негодное Поведение и г�
     expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.percent/);
   });
 
-  it('порог «долечиваюсь» вне отрезка от 0 до 100', () => {
-    const broken = {
+  it('«долечиваюсь» — его больше нет, и разбор подсказывает, как переписать', () => {
+    const old = {
       ...valid,
-      ranger: [{ when: { kind: 'recovering', until: 150 }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
+      scout: [{ when: { kind: 'recovering', until: 100 }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
     };
-    expect(withBehaviour(broken)).toThrow(/ranger\[0\]\.when\.until/);
-  });
-
-  it('«долечиваюсь» без порога — иначе Правило молча не работало бы', () => {
-    const broken = {
-      ...valid,
-      scout: [{ when: { kind: 'recovering' }, do: { kind: 'retreat' } }, ALWAYS_ADVANCE],
-    };
-    expect(withBehaviour(broken)).toThrow(/scout\[0\]\.when\.until/);
+    expect(withBehaviour(old)).toThrow(/scout\[0\]\.when.*recovering.*at-home.*hp-below/);
   });
 
   it('лишний ключ — почти всегда опечатка', () => {
@@ -177,5 +169,46 @@ describe('матч отвергает негодное Поведение и г�
 
   it('пустой список Правил', () => {
     expect(withBehaviour({ ...valid, scout: [] })).toThrow(/scout.*пуст/);
+  });
+});
+
+describe('«И» в Правиле (ADR-0005)', () => {
+  const HOME = { kind: 'at-home' };
+  const HURT = { kind: 'hp-below', percent: 100 };
+  const ALONE = { kind: 'allies-nearby', compare: 'fewer', count: 2 };
+  const withWhen = (when: unknown) => ({
+    ...valid,
+    tank: [{ when: { kind: 'enemy-ahead' }, do: { kind: 'advance' } }, { when, do: { kind: 'hold' } }, ALWAYS_ADVANCE],
+  });
+
+  it('принимает два и три Условия', () => {
+    expect(withBehaviour(withWhen([HOME, HURT]))).not.toThrow();
+    expect(withBehaviour(withWhen([HOME, HURT, ALONE]))).not.toThrow();
+  });
+
+  it('отвергает одно Условие в массиве — оно пишется без массива', () => {
+    expect(withBehaviour(withWhen([HOME]))).toThrow(/tank\[1\]\.when.*без массива/);
+  });
+
+  it('отвергает четыре Условия', () => {
+    expect(withBehaviour(withWhen([HOME, HURT, ALONE, HOME]))).toThrow(/tank\[1\]\.when.*4/);
+  });
+
+  it('отвергает пустой массив', () => {
+    expect(withBehaviour(withWhen([]))).toThrow(/tank\[1\]\.when/);
+  });
+
+  it('отвергает «always» в массиве', () => {
+    expect(withBehaviour(withWhen([HOME, { kind: 'always' }]))).toThrow(/tank\[1\]\.when\[1\].*always/);
+  });
+
+  it('место ошибки называет номер Условия', () => {
+    const broken = withWhen([HOME, { kind: 'allies-nearby', compare: 'fewer', count: -1 }]);
+    expect(withBehaviour(broken)).toThrow(/tank\[1\]\.when\[1\]\.count/);
+  });
+
+  it('последнее Правило «И» не годится — оно должно быть ровно «always»', () => {
+    const open = { ...valid, scout: [{ when: [HOME, HURT], do: { kind: 'advance' } }] };
+    expect(withBehaviour(open)).toThrow(/scout\[0\]\.when.*always/);
   });
 });

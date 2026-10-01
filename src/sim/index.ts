@@ -5,10 +5,13 @@ export { sideFromFile } from './side-file.js';
 export type { Wave } from './waves.js';
 export {
   DEFAULT_BEHAVIOUR,
+  conditionsOf,
+  isFallback,
   parseBehaviour,
   type Action,
   type Behaviour,
   type Condition,
+  type JointCondition,
   type Rule,
 } from './rules.js';
 export {

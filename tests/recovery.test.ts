@@ -23,7 +23,10 @@ const everyone = (rules: readonly Rule[]): Behaviour => ({ scout: rules, tank: r
 const ADVANCE: Rule = { when: { kind: 'always' }, do: { kind: 'advance' } };
 const FIGHT: Rule = { when: { kind: 'enemy-in-range' }, do: { kind: 'attack-nearest' } };
 const FLEE_BELOW = (percent: number): Rule => ({ when: { kind: 'hp-below', percent }, do: { kind: 'retreat' } });
-const HEAL_UNTIL = (until: number): Rule => ({ when: { kind: 'recovering', until }, do: { kind: 'retreat' } });
+const HEAL_UNTIL = (until: number): Rule => ({
+  when: [{ kind: 'at-home' }, { kind: 'hp-below', percent: until }],
+  do: { kind: 'retreat' },
+});
 
 function duel(ours: Behaviour, releases: readonly Release[], maxTicks: number): MatchResult {
   return runMatch(
