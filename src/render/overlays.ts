@@ -1,4 +1,4 @@
-import type { GameMap, Point, RoadMetrics, SideId } from '@sim/index';
+import type { GameMap, Point, SideId } from '@sim/index';
 import { CITADEL_STATS } from '@sim/index';
 import type { Frame } from './renderer.js';
 import { ALARM, ROAD, SIDE_COLORS, UNIT_VISUAL, withAlpha } from './visual-contract.js';
@@ -13,7 +13,6 @@ export interface OverlayContext {
   readonly context: CanvasRenderingContext2D;
   readonly map: GameMap;
   readonly playerSide: SideId;
-  readonly roadMetrics: ReadonlyMap<string, RoadMetrics>;
   toScreen(point: Point): Point;
   scaled(length: number): number;
 }
@@ -26,32 +25,26 @@ export interface Overlays {
 }
 
 export function createOverlays(ctx: OverlayContext): Overlays {
-  const { context, map, playerSide, roadMetrics, toScreen, scaled } = ctx;
+  const { context, map, playerSide, toScreen, scaled } = ctx;
   /** Когда по часам в последний раз досталось Цитадели игрока. */
   let alarmedAtMs = Number.NEGATIVE_INFINITY;
 
   /**
-   * Где начинается огонь со стен. Радиус меряется вдоль Дороги, а не по
-   * прямой, поэтому это засечки на самих Дорогах, а не круг вокруг
-   * Цитадели: круг соврал бы на изгибах.
+   * Где начинается огонь со стен. Радиус меряется по прямой от центра
+   * Цитадели — стены бьют любого врага рядом, сошёл он с Дороги или нет, —
+   * поэтому это пунктирный круг вокруг неё.
    */
   function wallReach(): void {
-    for (const road of map.roads) {
-      const metrics = roadMetrics.get(road.id);
-      if (!metrics || metrics.length <= CITADEL_STATS.range * 2) continue;
-
-      for (const [side, distance] of [
-        [road.from, CITADEL_STATS.range],
-        [road.to, metrics.length - CITADEL_STATS.range],
-      ] as const) {
-        const mark = toScreen(metrics.pointAtDistance(distance));
-        context.save();
-        context.fillStyle = withAlpha(SIDE_COLORS[side], 0.55);
-        context.beginPath();
-        context.arc(mark.x, mark.y, scaled(ROAD.reachMarkRadius), 0, Math.PI * 2);
-        context.fill();
-        context.restore();
-      }
+    for (const citadel of map.citadels) {
+      const center = toScreen(citadel.at);
+      context.save();
+      context.strokeStyle = withAlpha(SIDE_COLORS[citadel.side], 0.35);
+      context.lineWidth = Math.max(1, scaled(ROAD.reachMarkRadius) / 3);
+      context.setLineDash([scaled(4), scaled(7)]);
+      context.beginPath();
+      context.arc(center.x, center.y, scaled(CITADEL_STATS.range), 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
     }
   }
 

@@ -12,9 +12,13 @@ export {
   type Rule,
 } from './rules.js';
 export {
+  BODY_RADIUS,
+  CITADEL_RADIUS,
   CITADEL_STATS,
   ECONOMY,
+  MELEE_GAP,
   MELEE_RANGE,
+  NEARBY_RANGE,
   TICKS_PER_SECOND,
   UNIT_KINDS,
   UNIT_STATS,

@@ -48,8 +48,7 @@ function cubicAt(segment: Cubic, t: number): Point {
  *
  * Параметр распределён по сегментам поровну, а не по длине: на изломах
  * шаг по t даёт чуть разное перемещение. Для отрисовки это незаметно;
- * равномерное по длине движение понадобится Юнитам и будет сделано
- * в тикете 03.
+ * Юниты меряют Дорогу расстоянием — см. measureRoad.
  */
 export function pointAt(road: RoadSpec, t: number): Point {
   const count = segmentCount(road);
@@ -86,6 +85,12 @@ export interface RoadMetrics {
   readonly length: number;
   /** Точка на Дороге в заданном расстоянии от её начала. */
   pointAtDistance(distance: number): Point;
+  /**
+   * Насколько далеко от начала Дороги лежит ближайшая к точке её часть.
+   * Ищется только в окне вокруг near: Юнит, сошедший с Дороги, не должен
+   * вдруг оказаться на другом её конце, если Дорога петляет.
+   */
+  project(point: Point, near: number, window: number): number;
 }
 
 export function measureRoad(road: RoadSpec): RoadMetrics {
@@ -125,6 +130,33 @@ export function measureRoad(road: RoadSpec): RoadMetrics {
 
       const ratio = (target - spanStart) / span;
       return { x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio };
+    },
+
+    project(point: Point, near: number, window: number): number {
+      let best = { distance: Number.POSITIVE_INFINITY, along: Math.min(length, Math.max(0, near)) };
+
+      for (let index = 1; index < shape.length; index += 1) {
+        const spanStart = cumulative[index - 1] ?? 0;
+        const spanEnd = cumulative[index] ?? 0;
+        if (spanEnd < near - window || spanStart > near + window) continue;
+
+        const from = shape[index - 1];
+        const to = shape[index];
+        if (!from || !to) continue;
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const span = dx * dx + dy * dy;
+        const ratio =
+          span === 0
+            ? 0
+            : Math.min(1, Math.max(0, ((point.x - from.x) * dx + (point.y - from.y) * dy) / span));
+        const distance = Math.hypot(from.x + dx * ratio - point.x, from.y + dy * ratio - point.y);
+        if (distance < best.distance) {
+          best = { distance, along: spanStart + (spanEnd - spanStart) * ratio };
+        }
+      }
+
+      return best.along;
     },
   };
 }

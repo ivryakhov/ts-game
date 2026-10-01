@@ -1,12 +1,5 @@
-import type {
-  GameMap,
-  Point,
-  RoadMetrics,
-  RoadSpec,
-  SideId,
-  UnitSnapshot,
-} from '@sim/index';
-import { measureRoad, roadPolyline } from '@sim/index';
+import type { GameMap, Point, RoadSpec, SideId } from '@sim/index';
+import { roadPolyline } from '@sim/index';
 import {
   BACKGROUND,
   PICK_RADIUS,
@@ -43,9 +36,6 @@ export function createCanvasRenderer(
 
   const view: Viewport = { scale: 1, offsetX: 0, offsetY: 0 };
   const shapes = new Map<string, readonly Point[]>();
-  const roadMetrics = new Map<string, RoadMetrics>(
-    map.roads.map((road) => [road.id, measureRoad(road)]),
-  );
   const fading = createFading();
   /** Где нарисован каждый Юнит в последнем кадре — чтобы найти его по клику. */
   let lastPlaces: ReadonlyMap<number, Point> = new Map();
@@ -66,7 +56,6 @@ export function createCanvasRenderer(
     context,
     map,
     playerSide,
-    roadMetrics,
     toScreen,
     scaled,
   });
@@ -164,12 +153,6 @@ export function createCanvasRenderer(
     context.restore();
   }
 
-  function placeOf(unit: UnitSnapshot, progress: number): Point | null {
-    const road = roadMetrics.get(unit.roadId);
-    if (!road) return null;
-    return toScreen(road.pointAtDistance(progress * road.length));
-  }
-
   return {
     resize(width: number, height: number): void {
       const ratio = window.devicePixelRatio || 1;
@@ -234,14 +217,12 @@ export function createCanvasRenderer(
       fading.remember(frame.previous.units, frame.deaths, frame.matchMs);
 
       for (const dead of fading.visible(frame.matchMs)) {
-        const place = placeOf(dead.unit, dead.progress);
-        if (place) drawUnit(context, dead.unit, place, view.scale, { fade: dead.fade });
+        drawUnit(context, dead.unit, toScreen(dead.place), view.scale, { fade: dead.fade });
       }
 
       const places = new Map<number, Point>();
       for (const unit of frame.current.units) {
-        const place = placeOf(unit, seen.progressOf(unit, frame.alpha));
-        if (!place) continue;
+        const place = toScreen(seen.placeOf(unit, frame.alpha));
         places.set(unit.id, place);
         drawUnit(context, unit, place, view.scale, { flash: seen.flashOf(unit, frame.alpha) });
       }

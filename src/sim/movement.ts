@@ -1,16 +1,73 @@
-import { SKIRMISH } from './balance.js';
-import type { MatchEvent } from './types.js';
-import { moveUnit, withdrawUnit, type Unit } from './unit.js';
+import { citadelReachOf, approachOf } from './skirmish.js';
+import { BODY_RADIUS } from './balance.js';
+import { isAttack } from './rules.js';
+import { separate } from './crowd.js';
+import { planStep, type Step } from './steering.js';
+import type { MatchEvent, Point, UnitId, UnitState } from './types.js';
+import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
 import type { World } from './world.js';
 
 /**
- * Движение Юнитов по Дорогам: вперёд, назад и в Колонне. Вынесено из мира,
- * потому что меняется по своим причинам — Стычка и осада к нему не
- * относятся.
+ * Движение Юнитов по полю. Дорога — это маршрут, которого Юнит держится,
+ * а не рельсы: идущий к врагу сходит с неё, а потом возвращается.
+ * Здесь решается, куда Юнит идёт; как он при этом обходит других —
+ * в steering.ts.
  *
  * Зависит от мира только типом, а не кодом: иначе модули замыкались бы
  * в цикл, и первое же значение, вычисляемое при загрузке, падало бы.
  */
+
+/** Насколько далеко вперёд по Дороге Юнит выбирает точку, к которой идёт. */
+const LOOKAHEAD = 40;
+
+/**
+ * В каком окне вокруг прежнего положения ищется проекция на Дорогу.
+ * Шире самого далёкого отхода за врагом, но не настолько, чтобы Юнит
+ * вдруг оказался на другом конце петляющей Дороги.
+ */
+const PROJECTION_WINDOW = 200;
+
+/**
+ * С какого расстояния до чужой Цитадели Юнит перестаёт держаться Дороги
+ * и идёт прямо к стенам — туда, где есть место.
+ */
+const STORM_DISTANCE = 150;
+
+/** Сколько мест у стен перебирается в поисках свободного. */
+const WALL_SLOTS = 72;
+
+/**
+ * Насколько дальше своей дальности может оказаться осаждающий, которого
+ * оттеснили свои, и всё ещё считаться стоящим у стен. Без этого запаса
+ * от каждого толчка в толпе он «уходил» бы от стен и «приходил» снова.
+ */
+const SIEGE_SLACK = 6;
+
+/**
+ * Шаг сетки, к которой привязываются точки Юнитов после каждого Тика.
+ *
+ * Сторона B считает свои точки от другого конца Дороги, и в последних
+ * знаках её числа расходятся с зеркальными числами Стороны A. Толпа
+ * у стен и в Стычке раздувает такой шум до заметного за пару тысяч
+ * Тиков, и матч с одинаковыми Правилами на обеих Сторонах переставал
+ * бы быть зеркальным. Привязка к сетке гасит шум мельче её шага, пока
+ * он не вырос. Шаг — степень двойки, поэтому точки на сетке и их
+ * зеркала представимы в числах с плавающей точкой без потерь.
+ */
+const GRID = 1024;
+
+/**
+ * Привязка к сетке с округлением половин к чётному: обычное округление
+ * тянет половины всегда вверх, а у зеркальной точки это «вниз», и
+ * зеркало расходилось бы на шаг сетки.
+ */
+function snap(value: number): number {
+  const scaled = value * GRID;
+  const floor = Math.floor(scaled);
+  const rest = scaled - floor;
+  const rounded = rest > 0.5 || (rest === 0.5 && floor % 2 !== 0) ? floor + 1 : floor;
+  return rounded / GRID;
+}
 
 function lengthOf(world: World, roadId: string): number {
   const road = world.roads.get(roadId);
@@ -18,47 +75,189 @@ function lengthOf(world: World, roadId: string): number {
   return road.metrics.length;
 }
 
-export function moveUnits(world: World, events: MatchEvent[]): void {
-  const before = new Map(world.units.map((unit) => [unit.id, unit.travelled]));
-  const surviving: Unit[] = [];
+/** Точка на Дороге Юнита в заданном расстоянии от его Цитадели. */
+function roadPoint(world: World, unit: Unit, travelled: number): Point {
+  const road = world.roads.get(unit.roadId);
+  if (!road) throw new Error(`Дороги ${unit.roadId} нет на карте`);
+  const clamped = Math.min(road.metrics.length, Math.max(0, travelled));
+  return road.metrics.pointAtDistance(unit.forward ? clamped : road.metrics.length - clamped);
+}
+
+/**
+ * Идти вперёд — значит держаться Дороги: Юнит целится в её точку чуть
+ * впереди своей проекции. Сошедший с Дороги так и возвращается на неё —
+ * по косой, не теряя хода.
+ */
+function advanceGoal(world: World, unit: Unit): Point {
+  const nearWalls =
+    unit.travelled + LOOKAHEAD >= lengthOf(world, unit.roadId) ||
+    distanceTo(unit, unit.foe) <= STORM_DISTANCE;
+  if (nearWalls) return wallSlot(world, unit);
+  return roadPoint(world, unit, unit.travelled + LOOKAHEAD);
+}
+
+/**
+ * Ближайшее свободное место у чужих стен — на том расстоянии, с которого
+ * Юнит достаёт Цитадель. Идти прямо в её центр значило бы упираться
+ * в спины тех, кто уже осаждает, и выталкивать их под стены; а так
+ * подошедшие позже обступают Цитадель по кругу. Свободного места нет —
+ * Юнит идёт к центру и ждёт, пока место освободится.
+ */
+function wallSlot(world: World, unit: Unit): Point {
+  const radius = citadelReachOf(unit) - 1;
+  const crowd = world.units.filter(
+    (other) => other !== unit && Math.abs(distanceTo(other, unit.foe) - radius) < BODY_RADIUS * 2,
+  );
+
+  let best: { point: Point; distance: number } | null = null;
+  for (let slot = 0; slot < WALL_SLOTS; slot += 1) {
+    const angle = (slot / WALL_SLOTS) * Math.PI * 2;
+    const point = {
+      x: unit.foe.x + Math.cos(angle) * radius,
+      y: unit.foe.y + Math.sin(angle) * radius,
+    };
+    const taken = crowd.some(
+      (other) => Math.hypot(other.x - point.x, other.y - point.y) < BODY_RADIUS * 2 - 1,
+    );
+    if (taken) continue;
+    const distance = distanceTo(unit, point);
+    // Из равноудалённых мест — северное: так решают обе Стороны одинаково.
+    const order = best ? compareDistance(distance, best.distance) || point.y - best.point.y : -1;
+    if (!best || order < 0) best = { point, distance };
+  }
+
+  return best?.point ?? unit.foe;
+}
+
+/** Отступать — значит идти по своей Дороге назад, к своей Цитадели. */
+function retreatGoal(world: World, unit: Unit): Point {
+  if (unit.travelled <= LOOKAHEAD) return unit.home;
+  return roadPoint(world, unit, unit.travelled - LOOKAHEAD);
+}
+
+/** Достаёт ли Юнит чужую Цитадель, пока она стоит. */
+function reachesFoe(world: World, unit: Unit): boolean {
+  const road = world.roads.get(unit.roadId);
+  const foeSide = unit.forward ? road?.to : road?.from;
+  const citadel = foeSide ? world.citadels.get(foeSide) : undefined;
+  if (!citadel || citadel.hp <= 0) return false;
+  const slack = unit.arrived ? SIEGE_SLACK : 0;
+  return distanceTo(unit, unit.foe) <= citadelReachOf(unit) + slack;
+}
+
+/** Что Юнит делает в этот Тик и какой шаг для этого нужен. */
+interface Plan {
+  readonly unit: Unit;
+  readonly step: Step;
+  /** Состояние, если шаг удался, и если Юнит упёрся. */
+  readonly moved: UnitState;
+  readonly stuck: UnitState;
+  /** Идёт ли он к чужим стенам — тогда может дойти до них в этом же Тике. */
+  readonly storming: boolean;
+}
+
+function planFor(
+  world: World,
+  unit: Unit,
+  byId: ReadonlyMap<UnitId, Unit>,
+  quarry: Unit | undefined,
+): Plan {
+  const plan = (step: Step, moved: UnitState, stuck: UnitState = moved): Plan => ({
+    unit,
+    step,
+    moved,
+    stuck,
+    storming: false,
+  });
+
+  // Отступающий уходит назад, к своей Цитадели, — и от чужих стен тоже.
+  // Отходя, он обходит всех, кто мешает, своих и чужих.
+  if (unit.intent.kind === 'retreat') {
+    const manner = { overtake: true, bypassEnemies: true };
+    return plan(planStep(world, unit, retreatGoal(world, unit), 0, manner), 'retreating');
+  }
+
+  // Стоять по Правилу — не то же, что ждать, упёршись: Юнит держит
+  // место сам. Даже если враг до него дотянулся, он стоит по своей воле.
+  if (unit.intent.kind === 'hold') return plan(null, 'holding');
+
+  // Дерущийся Стрелок стоит, где стоял. Ближний держится вплотную
+  // к цели: отходящую преследует, не переставая бить.
+  if (unit.state === 'fighting') {
+    const target = unit.target === null ? undefined : byId.get(unit.target);
+    if (!target || statsOf(unit).ranged) return plan(null, 'fighting');
+    const manner = { overtake: true, bypassEnemies: true };
+    return plan(planStep(world, unit, target, approachOf(unit), manner), 'fighting');
+  }
+
+  // Атакующий, никого не достающий, сходит с Дороги к замеченному врагу.
+  // Он обходит и своих, и чужих: так ближние обступают цель.
+  if (isAttack(unit.intent) && quarry) {
+    const manner = { overtake: true, bypassEnemies: true };
+    return plan(planStep(world, unit, quarry, approachOf(unit), manner), 'moving', 'waiting');
+  }
+
+  // Дошедший до чужой Цитадели никуда больше не идёт: он принимается
+  // за неё и стоит у стен, пока его не убьют или Правило не уведёт.
+  if (reachesFoe(world, unit)) return plan(null, 'sieging');
+
+  // Идущий вперёд держится Дороги, своих не обгоняет, а упёршись
+  // во врага — встаёт: сквозь врага не пройти, и в обход его не пустят.
+  const manner = { overtake: false, bypassEnemies: false };
+  const step = planStep(world, unit, advanceGoal(world, unit), 0, manner);
+  return { ...plan(step, 'moving', 'waiting'), storming: true };
+}
+
+export function moveUnits(
+  world: World,
+  chase: ReadonlyMap<UnitId, UnitId>,
+  events: MatchEvent[],
+): void {
+  const byId = new Map(world.units.map((unit) => [unit.id, unit]));
+
+  // Шаги считаются по одной расстановке для всех и делаются разом: кто
+  // ходит первым, не решает ничего.
+  const plans = world.units.map((unit) => {
+    const quarry = chase.get(unit.id);
+    return planFor(world, unit, byId, quarry === undefined ? undefined : byId.get(quarry));
+  });
+
+  for (const { unit, step, moved, stuck } of plans) {
+    const walking = step !== null && (step.x !== 0 || step.y !== 0);
+    if (step) {
+      unit.x += step.x;
+      unit.y += step.y;
+    }
+    unit.state = step ? moved : stuck;
+    // Своего, который идёт, не обгоняют; стоящего — обходят.
+    unit.marching = walking && (unit.intent.kind === 'advance' || isAttack(unit.intent));
+  }
+
+  separate(world);
+  for (const unit of world.units) {
+    unit.x = snap(unit.x);
+    unit.y = snap(unit.y);
+  }
+
+  // Шагнувший к стенам мог дойти до них в этом же Тике.
+  for (const { unit, storming } of plans) {
+    if (storming && reachesFoe(world, unit)) unit.state = 'sieging';
+  }
 
   for (const unit of world.units) {
-    // Отступающий уходит назад, к своей Цитадели, — и от чужих стен тоже.
-    if (unit.intent.kind === 'retreat') {
-      withdrawUnit(unit);
-      unit.arrived = false;
-      unit.arrivedAt = null;
-      unit.state = 'retreating';
-      surviving.push(unit);
-      continue;
-    }
+    const road = world.roads.get(unit.roadId);
+    if (!road) continue;
+    const length = road.metrics.length;
+    const along = road.metrics.project(
+      unit,
+      unit.forward ? unit.travelled : length - unit.travelled,
+      PROJECTION_WINDOW,
+    );
+    unit.travelled = unit.forward ? along : length - along;
 
-    // Стоять по Правилу — не то же, что ждать очереди в Стычке: Юнит
-    // держит место сам, и идущие следом собираются за его спиной. Даже
-    // если враг до него дотянулся, он стоит по своей воле, а не в очереди.
-    if (unit.intent.kind === 'hold') {
-      unit.state = 'holding';
-      surviving.push(unit);
-      continue;
-    }
-
-    if (unit.state !== 'moving') {
-      surviving.push(unit);
-      continue;
-    }
-
-    // Дошедший не исчезает и никуда больше не идёт: он принимается
-    // за чужую Цитадель и стоит у неё, пока его не убьют.
-    if (unit.arrived) {
-      unit.state = 'sieging';
-      surviving.push(unit);
-      continue;
-    }
-
-    if (moveUnit(unit, lengthOf(world, unit.roadId))) {
-      unit.arrived = true;
+    const arrived = unit.state === 'sieging';
+    if (arrived && !unit.arrived) {
       unit.arrivedAt = world.tick;
-      unit.state = 'sieging';
       events.push({
         kind: 'unit-arrived',
         tick: world.tick,
@@ -67,52 +266,7 @@ export function moveUnits(world: World, events: MatchEvent[]): void {
         roadId: unit.roadId,
       });
     }
-
-    surviving.push(unit);
-  }
-
-  world.units = surviving;
-  keepFormation(world, before);
-}
-
-/**
- * Юнит не обгоняет своих по Дороге: догнав идущего впереди, он держится
- * за его спиной.
- *
- * Порядок Колонны — по положению до этого шага, а при равном положении
- * впереди вышедший раньше. Положение после шага не годится: оно узаконило
- * бы обгон — быстрый Стрелок, успев за Тик пройти больше Танка, становился
- * бы «передним», и зажимали бы уже Танка. Тогда стрелять из-за спин, ради
- * чего Стрелок и заведён, было бы негде.
- *
- * Одно старшинство тоже не годится. Долечившийся у своей Цитадели Юнит
- * вышел раньше всех, но стоит позади всех, и, встав в голову Колонны,
- * он отбрасывал к Цитадели всех, кто ушёл вперёд, пока он лечился.
- */
-function keepFormation(world: World, before: ReadonlyMap<number, number>): void {
-  const columns = new Map<string, Unit[]>();
-
-  for (const unit of world.units) {
-    // Осаждающие стоят у стен, отступающие уходят сквозь своих: Колонну
-    // держат только те, кто идёт вперёд.
-    if (unit.arrived || unit.intent.kind === 'retreat') continue;
-    const key = `${unit.roadId}:${unit.side}`;
-    const column = columns.get(key);
-    if (column) column.push(unit);
-    else columns.set(key, [unit]);
-  }
-
-  for (const column of columns.values()) {
-    const wasAt = (unit: Unit): number => before.get(unit.id) ?? unit.travelled;
-    column.sort((left, right) => wasAt(right) - wasAt(left) || left.id - right.id);
-
-    for (let index = 1; index < column.length; index += 1) {
-      const unit = column[index];
-      const ahead = column[index - 1];
-      if (!unit || !ahead) continue;
-      // Ниже нуля не опускаем: иначе Юнит, зажатый Колонной у самой
-      // Цитадели, уезжает за начало Дороги.
-      unit.travelled = Math.max(0, Math.min(unit.travelled, ahead.travelled - SKIRMISH.spacing));
-    }
+    if (!arrived) unit.arrivedAt = null;
+    unit.arrived = arrived;
   }
 }

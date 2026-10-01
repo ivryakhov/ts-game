@@ -2,6 +2,7 @@ import { measureRoad, type RoadMetrics } from './geometry.js';
 import type {
   MatchEvent,
   MatchSetup,
+  Point,
   ScheduledRelease,
   SideId,
   UnitId,
@@ -17,7 +18,7 @@ import {
   type Citadel,
   type InReach,
 } from './citadel.js';
-import { choose, surroundingsOn } from './behave.js';
+import { choose, surroundingsOf } from './behave.js';
 import { applyPlan } from './combat.js';
 import { CITADEL_STATS } from './balance.js';
 import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } from './ether.js';
@@ -25,7 +26,7 @@ import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
 import { callWaves, type WaveCycle } from './waves.js';
-import { createUnit, isAtHome, unitSnapshot, type Unit } from './unit.js';
+import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
 /**
  * Изменяемое состояние мира. Живёт только внутри одного матча и наружу
@@ -69,12 +70,14 @@ export function schedule(world: World, action: ScheduledRelease): void {
 
 export function createWorld(setup: MatchSetup): World {
   const sides = setup.sides.map((side) => side.id);
+  const placeOf = (side: SideId): Point | null =>
+    setup.map.citadels.find((citadel) => citadel.side === side)?.at ?? null;
 
   const world: World = {
     tick: 0,
     sides,
     units: [],
-    citadels: createCitadels(sides),
+    citadels: createCitadels(sides, placeOf),
     behaviours: new Map(
       setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
     ),
@@ -103,9 +106,10 @@ export function createWorld(setup: MatchSetup): World {
  *
  * 1. начисляется доход, вступают в силу Выпуски этого Тика, а Стороны
  *    с Волнами выпускают очередную, если на неё хватает;
- * 2. по расстановке определяется, кто дерётся, кто ждёт, кто идёт,
+ * 2. по расстановке определяется, кто дерётся, а кто идёт к врагу,
  *    одновременно наносится урон и убираются погибшие;
- * 3. двигаются те, кому ничто не мешает, и Колонны выравниваются;
+ * 3. двигаются все, кто не дерётся и не стоит, — по очереди, по номеру,
+ *    обходя друг друга; встретившие чужие стены встают осаждать;
  * 4. осаждающие бьют чужие Цитадели;
  * 5. Цитадели отвечают ударом со стен;
  * 6. своя Цитадель лечит раненых рядом с собой.
@@ -120,8 +124,8 @@ export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   }
 
   decide(world);
-  fight(world, events);
-  moveUnits(world, events);
+  const chase = fight(world, events);
+  moveUnits(world, chase, events);
   siege(world, events);
   holdTheWalls(world, events);
   mend(world);
@@ -144,44 +148,33 @@ function mend(world: World): void {
 
 /** Каждый Юнит выбирает Действие по Правилам своей Стороны. */
 function decide(world: World): void {
-  for (const [roadId, onRoad] of unitsByRoad(world)) {
-    const around = surroundingsOn(onRoad, roadOf(world, roadId).metrics.length);
+  const around = surroundingsOf(world.units, (roadId) => roadOf(world, roadId).metrics.length);
 
-    for (const unit of onRoad) {
-      const behaviour = world.behaviours.get(unit.side) ?? DEFAULT_BEHAVIOUR;
-      const surroundings = around.get(unit.id);
-      if (!surroundings) continue;
-      const decision = choose(behaviour, unit, surroundings);
-      unit.intent = decision.action;
-      unit.rule = decision.rule;
-    }
-  }
-}
-
-function unitsByRoad(world: World): Map<string, Unit[]> {
-  const byRoad = new Map<string, Unit[]>();
   for (const unit of world.units) {
-    const onRoad = byRoad.get(unit.roadId);
-    if (onRoad) onRoad.push(unit);
-    else byRoad.set(unit.roadId, [unit]);
+    const behaviour = world.behaviours.get(unit.side) ?? DEFAULT_BEHAVIOUR;
+    const surroundings = around.get(unit.id);
+    if (!surroundings) continue;
+    const decision = choose(behaviour, unit, surroundings);
+    unit.intent = decision.action;
+    unit.rule = decision.rule;
   }
-  return byRoad;
 }
 
 /**
- * Цитадели отвечают ударом. Расстояние меряется вдоль Дороги от самой
- * Цитадели: для Юнита, идущего к ней, это остаток его пути.
+ * Цитадели отвечают ударом. Расстояние меряется по прямой от центра
+ * Цитадели: стены бьют любого врага рядом, по какой бы Дороге он ни пришёл
+ * и как бы далеко от неё ни сошёл.
  */
 function holdTheWalls(world: World, events: MatchEvent[]): void {
-  const reachOf = (side: SideId): readonly InReach[] =>
-    world.units.flatMap((unit) => {
-      const road = roadOf(world, unit.roadId);
-      const target = unit.forward ? road.to : road.from;
-      if (target !== side) return [];
-
-      const distance = road.metrics.length - unit.travelled;
+  const reachOf = (side: SideId): readonly InReach[] => {
+    const at = world.citadels.get(side)?.at;
+    if (!at) return [];
+    return world.units.flatMap((unit) => {
+      if (unit.side === side) return [];
+      const distance = distanceTo(unit, at);
       return distance <= CITADEL_STATS.range ? [{ unit, distance }] : [];
     });
+  };
 
   const fallen = defend(world.citadels, reachOf, world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
@@ -202,15 +195,18 @@ function siege(world: World, events: MatchEvent[]): void {
   }
 }
 
-function fight(world: World, events: MatchEvent[]): void {
-  const fallen = new Set<UnitId>();
-
-  for (const [roadId, onRoad] of unitsByRoad(world)) {
-    const plan = planSkirmish(onRoad, roadOf(world, roadId).metrics.length);
-    for (const id of applyPlan(onRoad, plan, world.tick, events)) fallen.add(id);
-  }
-
+/**
+ * Стычки по всему полю разом: Юниты разных Дорог, сошедшиеся рядом,
+ * бьются друг с другом так же, как и на одной Дороге.
+ *
+ * Возвращает, кто к кому идёт, не дотянувшись ни до кого, — это
+ * пригодится движению.
+ */
+function fight(world: World, events: MatchEvent[]): ReadonlyMap<UnitId, UnitId> {
+  const plan = planSkirmish(world.units);
+  const fallen = applyPlan(world.units, plan, world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
+  return plan.chase;
 }
 
 /** Расписание и карта проверены при создании матча, поэтому Дорога обязана найтись. */
@@ -235,12 +231,17 @@ function applyRelease(world: World, action: UnscheduledRelease, events: MatchEve
     return;
   }
 
+  const forward = action.side === road.from;
+  const start = road.metrics.pointAtDistance(0);
+  const end = road.metrics.pointAtDistance(road.metrics.length);
   const unit = createUnit(
     world.nextUnitId,
     action.side,
     action.unit,
     action.roadId,
-    action.side === road.from,
+    forward,
+    forward ? start : end,
+    forward ? end : start,
   );
   world.nextUnitId += 1;
   world.units.push(unit);

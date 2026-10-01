@@ -1,12 +1,13 @@
 import { CITADEL_STATS, UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
 import type { Action } from './rules.js';
 import type { RoadMetrics } from './geometry.js';
-import type { SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
+import type { Point, SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 
 /**
- * Юнит в симуляции. Положение хранится как пройденное расстояние,
- * а не как точка: так скорость остаётся постоянной на изломах Дороги,
- * а точку всегда можно получить из промеров маршрута.
+ * Юнит в симуляции. Положение — точка на поле: Юнит идёт вдоль своей
+ * Дороги, но может сойти с неё, чтобы бить врага, и вернуться. Пройденное
+ * расстояние выводится из точки проекцией на Дорогу — им меряется, как
+ * далеко Юнит продвинулся к чужой Цитадели.
  */
 export interface Unit {
   readonly id: UnitId;
@@ -19,8 +20,18 @@ export interface Unit {
    * своей Цитадели, то есть навстречу друг другу.
    */
   readonly forward: boolean;
-  /** Пройденное расстояние от своей Цитадели. */
+  /** Где Юнит стоит на поле. Меняется только движением и расталкиванием. */
+  x: number;
+  y: number;
+  /**
+   * Пройденное расстояние от своей Цитадели — проекция точки на Дорогу.
+   * Пересчитывается после каждого движения.
+   */
   travelled: number;
+  /** Где стоит своя Цитадель: к ней отступают и у неё лечатся. */
+  readonly home: Point;
+  /** Где стоит чужая Цитадель, к которой ведёт Дорога. */
+  readonly foe: Point;
   /** Выводится заново каждый Тик из расстановки на Дороге. */
   state: UnitState;
   /**
@@ -33,7 +44,8 @@ export interface Unit {
   /** Кого он бьёт в этот Тик; выставляется Стычкой. */
   target: UnitId | null;
   /**
-   * Стоит ли Юнит у чужой Цитадели. Сбрасывается, если он отступил от стен.
+   * Достаёт ли Юнит чужую Цитадель и бьёт ли её. Сбрасывается, как только
+   * он от неё отошёл.
    */
   arrived: boolean;
   /**
@@ -45,15 +57,37 @@ export interface Unit {
   readonly maxHp: number;
   /** Лечила ли его своя Цитадель в этот Тик. */
   healing: boolean;
+  /**
+   * Шёл ли он вперёд в прошлом Тике. Своего, который идёт, не обгоняют —
+   * держатся за его спиной; а упёршегося и стоящего обходят.
+   */
+  marching: boolean;
+}
+
+/** Расстояние по прямой между центрами. */
+export function distanceTo(unit: Unit, point: Point): number {
+  return Math.hypot(point.x - unit.x, point.y - unit.y);
 }
 
 /**
- * Стоит ли Юнит у своей Цитадели — там, где она его лечит. Пройденное
- * расстояние отсчитывается от своей Цитадели, поэтому достаточно
- * посмотреть, далеко ли он от неё ушёл.
+ * Разница расстояний для сортировки: почти равные считаются равными.
+ * Сторона B считает свои точки от другого конца Дороги, и в последних
+ * знаках её числа расходятся с зеркальными числами Стороны A. Решай
+ * такой шум, кто ближе, — матч с одинаковыми Правилами на обеих
+ * Сторонах переставал бы быть зеркальным.
  */
+export function compareDistance(left: number, right: number): number {
+  return Math.abs(left - right) < 1e-6 ? 0 : left - right;
+}
+
+/** Стоит ли Юнит у своей Цитадели — там, где она его лечит. */
 export function isAtHome(unit: Unit): boolean {
-  return unit.travelled <= CITADEL_STATS.healRadius;
+  return distanceTo(unit, unit.home) <= CITADEL_STATS.healRadius;
+}
+
+/** Положение Юнита вдоль Дороги, считая от её начала. */
+export function positionOn(unit: Unit, roadLength: number): number {
+  return unit.forward ? unit.travelled : roadLength - unit.travelled;
 }
 
 /** Доля оставшегося здоровья в процентах — мерка Условий Правил. */
@@ -71,6 +105,8 @@ export function createUnit(
   kind: UnitKind,
   roadId: string,
   forward: boolean,
+  home: Point,
+  foe: Point,
 ): Unit {
   const stats = UNIT_STATS[kind];
   return {
@@ -79,7 +115,11 @@ export function createUnit(
     kind,
     roadId,
     forward,
+    x: home.x,
+    y: home.y,
     travelled: 0,
+    home,
+    foe,
     state: 'moving',
     intent: { kind: 'advance' },
     rule: 0,
@@ -89,18 +129,8 @@ export function createUnit(
     hp: stats.maxHp,
     maxHp: stats.maxHp,
     healing: false,
+    marching: false,
   };
-}
-
-/** Двигает Юнита на один Тик вперёд. Возвращает true, если он дошёл до конца Дороги. */
-export function moveUnit(unit: Unit, roadLength: number): boolean {
-  unit.travelled = Math.min(roadLength, unit.travelled + statsOf(unit).speedPerTick);
-  return unit.travelled >= roadLength;
-}
-
-/** Отводит Юнита на один Тик назад, к своей Цитадели, но не дальше неё. */
-export function withdrawUnit(unit: Unit): void {
-  unit.travelled = Math.max(0, unit.travelled - statsOf(unit).speedPerTick);
 }
 
 export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
@@ -114,6 +144,8 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     // Доля отсчитывается от начала Дороги, а не от своей Цитадели,
     // чтобы рендеру не приходилось знать о направлениях.
     progress: unit.forward ? covered : 1 - covered,
+    x: unit.x,
+    y: unit.y,
     state: unit.state,
     healing: unit.healing,
     rule: unit.rule,

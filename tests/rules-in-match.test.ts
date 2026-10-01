@@ -147,10 +147,10 @@ describe('Условия и Действия не срабатывают сам�
   });
 
   it('отступающего можно добить в спину — отход не даёт неуязвимости', () => {
-    // Всегда отступать, едва завидев врага: Юнит уходит, но враг его
-    // догоняет и бьёт. Урон по нему обязан проходить.
+    // Всегда отступать, едва завидев врага: медленный Танк уходит, но
+    // быстрый Разведчик его догоняет и бьёт. Урон по нему обязан проходить.
     const coward = everyone([{ when: { kind: 'enemy-in-range' }, do: { kind: 'retreat' } }, ADVANCE]);
-    const result = duel(coward, [deploy(1, 'A'), deploy(1, 'B')], 95);
+    const result = duel(coward, [deploy(1, 'A', 'tank'), deploy(1, 'B')], 150);
 
     expect(unitOf(result, 'A')?.hp).toBeLessThan(unitOf(result, 'A')?.maxHp ?? 0);
   });

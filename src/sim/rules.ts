@@ -13,17 +13,17 @@ import { filePart, isRecord } from './parse.js';
 export type Condition =
   | { readonly kind: 'always' }
   | { readonly kind: 'hp-below'; readonly percent: number }
-  /** Дотягиваюсь до врага — сам или в свалке своей Колонны. */
+  /** Вижу врага, которого могу достать, — к нему и сойду с Дороги. */
   | { readonly kind: 'enemy-in-range' }
   /** Стою у своей Цитадели и здоровье ещё ниже until процентов. */
   | { readonly kind: 'recovering'; readonly until: number }
   /** Своих рядом, не считая меня, меньше или больше count. */
   | { readonly kind: 'allies-nearby'; readonly compare: 'fewer' | 'more'; readonly count: number }
-  /** Врагов, дотягивающихся до моей Колонны, больше above. */
+  /** Врагов, которых я вижу, не считая отступающих, больше above. */
   | { readonly kind: 'enemies-in-skirmish'; readonly above: number }
-  /** Впереди по Дороге есть враг — на любом расстоянии, даже если не достаю. */
+  /** Впереди по моей Дороге есть враг — на любом расстоянии, даже если не вижу. */
   | { readonly kind: 'enemy-ahead' }
-  /** До чужой Цитадели не дальше моей дальности удара. */
+  /** Достаю чужую Цитадель со своего места. */
   | { readonly kind: 'enemy-citadel-in-range' };
 
 /** Что Юнит делает в этот Тик. */

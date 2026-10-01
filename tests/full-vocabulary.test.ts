@@ -110,8 +110,8 @@ describe('Условие «чужая Цитадель в радиусе»', () 
     const ranger = first(result, 'A');
 
     expect(ranger?.state).toBe('holding');
-    // 905 — длина короткой Дороги, 95 — дальность Стрелка.
-    expect((1 - (ranger?.progress ?? 0)) * 905).toBeCloseTo(95, -1);
+    // Цитадель B стоит в (1050, 420); 95 — дальность Стрелка.
+    expect(Math.hypot(1050 - (ranger?.x ?? 0), 420 - (ranger?.y ?? 0))).toBeCloseTo(95, -1);
   });
 
   it('без него Стрелок доходит до самых стен', () => {
@@ -150,10 +150,11 @@ describe('сбор Колонны перед атакой', () => {
     ]);
     const four = [release(1, 'A'), release(20, 'A'), release(40, 'A'), release(60, 'A')];
     const result = play(gather, [...four, release(1, 'B', 'tank')], 200);
-    const at = sideUnits(result, 'A').map((unit) => unit.progress * 905);
+    const at = sideUnits(result, 'A').map((unit) => unit.progress * 900);
 
-    // Собрались вместе, а не растянулись по Дороге...
-    expect(Math.max(...at) - Math.min(...at)).toBeLessThan(60);
+    // Собрались вместе, а не растянулись по Дороге: четверо в затылок —
+    // это меньше сотни, а выходя по одному, они растянулись бы на три.
+    expect(Math.max(...at) - Math.min(...at)).toBeLessThan(100);
     // ...и дошли до Стычки: Танк противника ранен.
     expect(first(result, 'B')?.hp).toBeLessThan(first(result, 'B')?.maxHp ?? 0);
   });
@@ -166,18 +167,19 @@ describe('сбор Колонны перед атакой', () => {
     ]);
     const straggling = [release(1, 'A'), release(40, 'A'), release(80, 'A')];
     const spread = (result: MatchResult) => {
-      const at = sideUnits(result, 'A').map((unit) => unit.progress * 905);
+      const at = sideUnits(result, 'A').map((unit) => unit.progress * 900);
       return Math.max(...at) - Math.min(...at);
     };
 
-    // До прихода третьего двое ждут у своей Цитадели.
+    // До прихода третьего двое ждут у своей Цитадели — у самых ворот,
+    // разойдясь плечом к плечу.
     const waiting = play(gather, straggling.slice(0, 2), 79);
-    expect(sideUnits(waiting, 'A').every((unit) => unit.progress === 0)).toBe(true);
+    expect(sideUnits(waiting, 'A').every((unit) => unit.progress * 900 < 30)).toBe(true);
 
     // Собравшись, идут вместе; без Правила растянулись бы на сорок Тиков пути.
     const together = play(gather, straggling, 110);
     const apart = play(everyone([FIGHT(), ADVANCE]), straggling, 110);
-    expect(spread(together)).toBeLessThan(60);
+    expect(spread(together)).toBeLessThan(100);
     expect(spread(apart)).toBeGreaterThan(300);
   });
 });

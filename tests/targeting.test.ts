@@ -24,13 +24,18 @@ const ADVANCE: Rule = rule({ kind: 'always' }, { kind: 'advance' });
 const FIGHT = (act: Action = { kind: 'attack-nearest' }): Rule => rule({ kind: 'enemy-in-range' }, act);
 const HOLD: Action = { kind: 'hold' };
 
-function play(ours: Behaviour, releases: readonly Release[], maxTicks: number): MatchResult {
+function play(
+  ours: Behaviour,
+  releases: readonly Release[],
+  maxTicks: number,
+  theirs: Behaviour = DEFAULT_BEHAVIOUR,
+): MatchResult {
   return runMatch(
     matchSetup({
       map: arena,
       sides: [
         { id: 'A', behaviour: ours },
-        { id: 'B', behaviour: DEFAULT_BEHAVIOUR },
+        { id: 'B', behaviour: theirs },
       ],
       releases,
       maxTicks,
@@ -44,7 +49,8 @@ const first = (result: MatchResult, side: SideId) => sideUnits(result, side)[0];
 
 describe('Действия выбора цели', () => {
   /**
-   * Навстречу Стрелку выходят Танк и следом, вплотную за ним, Разведчик.
+   * Навстречу Стрелку выходят Танк и следом, в затылок за ним, Разведчик.
+   * Они не отвечают — только идут, поэтому Разведчик не обгоняет Танка.
    * Дальность меряется честно, от самого Стрелка: сначала он достаёт только
    * Танка, а по мере сближения — и Разведчика за его спиной. Кого он бьёт,
    * когда достаёт обоих, видно по здоровью.
@@ -55,6 +61,7 @@ describe('Действия выбора цели', () => {
       shooter,
       [release(1, 'A', 'ranger'), release(1, 'B', 'tank'), release(2, 'B', 'scout')],
       138,
+      everyone([ADVANCE]),
     );
     const enemies = sideUnits(result, 'B');
     const hurt = (kind: UnitKind) => {
@@ -129,7 +136,7 @@ describe('Стрелок бьёт только на своей дальност�
     const ranger = first(result, 'A');
     const scout = sideUnits(result, 'B').find((unit) => unit.kind === 'scout');
     const tank = sideUnits(result, 'B').find((unit) => unit.kind === 'tank');
-    const toScout = Math.abs((scout?.progress ?? 0) - (ranger?.progress ?? 0)) * 905;
+    const toScout = Math.hypot((scout?.x ?? 0) - (ranger?.x ?? 0), (scout?.y ?? 0) - (ranger?.y ?? 0));
 
     expect(ranger?.state).toBe('fighting');
     expect(toScout).toBeGreaterThan(95);
@@ -147,7 +154,7 @@ describe('Стрелок молчит вне дальности', () => {
     const early = play(sniper, [release(1, 'A', 'ranger'), release(1, 'B', 'scout')], 80);
     const theirs = first(early, 'B');
     const ours = first(early, 'A');
-    const gap = Math.abs((theirs?.progress ?? 0) - (ours?.progress ?? 0)) * 905;
+    const gap = Math.hypot((theirs?.x ?? 0) - (ours?.x ?? 0), (theirs?.y ?? 0) - (ours?.y ?? 0));
 
     expect(gap).toBeGreaterThan(95);
     expect(theirs?.hp).toBe(theirs?.maxHp);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runMatch } from '@sim/index';
+import { BODY_RADIUS, CITADEL_RADIUS, MELEE_GAP, runMatch } from '@sim/index';
 import type { MatchEvent, ScheduledRelease } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { matchSetup } from './match-setup.js';
@@ -54,13 +54,13 @@ describe('Юнит идёт по Дороге', () => {
   });
 
   it('доходит за заранее известное число Тиков', () => {
-    // Якорь, а не пропорция: короткая Дорога длиной 905 условных единиц
-    // Разведчик при скорости 6 единиц за Тик проходит за 151 Тик,
-    // обходную длиной 1304 — за 218. Числа завязаны на характеристики
-    // из balance.ts; если они изменятся, тест обязан упасть и заставить
-    // пересмотреть темп.
-    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(151);
-    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(218);
+    // Якорь, а не пропорция: короткая Дорога длиной 900 условных единиц,
+    // и Разведчик при скорости 6 единиц за Тик встаёт у стен — в 60 от
+    // центра Цитадели — за 140 Тиков, на обходной — за 206. Числа завязаны
+    // на характеристики из balance.ts; если они изменятся, тест обязан
+    // упасть и заставить пересмотреть темп.
+    expect(arrivals(run([deploy(1, 'short')]).events)[0]?.tick).toBe(140);
+    expect(arrivals(run([deploy(1, 'north')]).events)[0]?.tick).toBe(206);
   });
 
   it('проходит обходную Дорогу заметно дольше короткой', () => {
@@ -114,12 +114,13 @@ describe('Юнит идёт по Дороге', () => {
     expect(fromB).toBe(fromA);
   });
 
-  it('не перелетает конец Дороги: последний шаг укорачивается', () => {
+  it('встаёт у чужих стен, а не заходит внутрь Цитадели', () => {
     const result = run([deploy(1, 'short')], 150);
     const unit = result.finalState.units[0];
+    const fromCentre = Math.hypot(1050 - (unit?.x ?? 0), 420 - (unit?.y ?? 0));
 
-    expect(unit?.progress).toBeLessThanOrEqual(1);
-    expect(unit?.progress).toBeGreaterThan(0.99);
+    expect(fromCentre).toBeGreaterThanOrEqual(CITADEL_RADIUS + BODY_RADIUS - 1e-6);
+    expect(fromCentre).toBeLessThanOrEqual(CITADEL_RADIUS + BODY_RADIUS + MELEE_GAP);
   });
 
   it('два прогона с одним Сидом идут одинаково', () => {

@@ -1,7 +1,7 @@
 import type { Action, Behaviour, Condition } from './rules.js';
 import { NEARBY_RANGE } from './balance.js';
-import { inReach, positionOn } from './skirmish.js';
-import { healthPercent, isAtHome, statsOf, type Unit } from './unit.js';
+import { citadelReachOf, enemiesInSight } from './skirmish.js';
+import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
 
 /**
  * Исполнение Правил: каждый Тик каждый Юнит перебирает Правила своего типа
@@ -14,17 +14,17 @@ import { healthPercent, isAtHome, statsOf, type Unit } from './unit.js';
 
 /** Всё, что Условия вправе знать о Юните и его окружении. */
 export interface Surroundings {
-  /** Дотягивается ли Юнит до врага — сам или в свалке своей Колонны. */
+  /** Видит ли Юнит врага — того, к кому готов сойти с Дороги. */
   readonly enemyInReach: boolean;
   /** Стоит ли Юнит у своей Цитадели — там, где она его лечит. */
   readonly atHome: boolean;
   /** Сколько своих рядом, не считая его самого. */
   readonly alliesNearby: number;
-  /** Сколько врагов дотягивается до его Колонны. */
+  /** Сколько врагов он видит, не считая отступающих. */
   readonly enemiesInSkirmish: number;
   /** Есть ли враг впереди по Дороге — на любом расстоянии. */
   readonly enemyAhead: boolean;
-  /** Не дальше ли чужая Цитадель его дальности удара. */
+  /** Достаёт ли он чужую Цитадель со своего места. */
   readonly enemyCitadelInRange: boolean;
 }
 
@@ -72,51 +72,46 @@ export function choose(
 }
 
 /**
- * Окружение каждого Юнита одной Дороги. Считается разом для всей Дороги
- * той же меркой, что и Стычка, — иначе Правило и физика разошлись бы.
+ * Окружение каждого Юнита. Считается той же меркой, что и Стычка, —
+ * иначе Правило и физика разошлись бы: Юнит, который «видит врага»,
+ * обязан и пойти к нему, если Правило велит атаковать.
  */
-export function surroundingsOn(
+export function surroundingsOf(
   units: readonly Unit[],
-  roadLength: number,
+  roadLength: (roadId: string) => number,
 ): Map<number, Surroundings> {
-  const reachable = inReach(units, roadLength);
-  // Отступающие из Стычки вышли — их не считают, хоть враг и дотягивается.
-  const reachingOf = (side: Unit['side']): number =>
-    units.filter(
-      (unit) => unit.side === side && reachable.has(unit.id) && unit.intent.kind !== 'retreat',
-    ).length;
-
   return new Map(
     units.map((unit) => {
-      const here = positionOn(unit, roadLength);
+      const seen = enemiesInSight(unit, units);
       const allies = units.filter(
         (other) =>
           other.side === unit.side &&
           other.id !== unit.id &&
-          Math.abs(positionOn(other, roadLength) - here) <= NEARBY_RANGE,
+          distanceTo(unit, other) <= NEARBY_RANGE,
       ).length;
-      // «Впереди» — по направлению движения Юнита вдоль Дороги.
+
+      // «Впереди» — по направлению движения Юнита вдоль его Дороги.
+      const length = roadLength(unit.roadId);
+      const here = positionOn(unit, length);
       const ahead = units.some(
         (other) =>
           other.side !== unit.side &&
-          (unit.forward
-            ? positionOn(other, roadLength) > here
-            : positionOn(other, roadLength) < here),
+          other.roadId === unit.roadId &&
+          (unit.forward ? positionOn(other, length) > here : positionOn(other, length) < here),
       );
-      const enemySide = units.find((other) => other.side !== unit.side)?.side;
 
       return [
         unit.id,
         {
-          enemyInReach: reachable.has(unit.id),
+          enemyInReach: seen.length > 0,
           atHome: isAtHome(unit),
           alliesNearby: allies,
-          enemiesInSkirmish: enemySide ? reachingOf(enemySide) : 0,
+          // Отступающие из Стычки вышли — их не считают, хоть они и видны.
+          enemiesInSkirmish: seen.filter((enemy) => enemy.intent.kind !== 'retreat').length,
           enemyAhead: ahead,
-          enemyCitadelInRange: roadLength - unit.travelled <= statsOf(unit).range,
+          enemyCitadelInRange: distanceTo(unit, unit.foe) <= citadelReachOf(unit),
         },
       ];
     }),
   );
 }
-
