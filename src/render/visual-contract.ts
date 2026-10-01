@@ -28,6 +28,22 @@ export const CITADEL = {
   ruinAlpha: 0.25,
 } as const;
 
+/**
+ * Обелиск — ромб: белый, пока ничей, затем в цвете владельца. Полуширина
+ * ромба совпадает с радиусом тела в симуляции.
+ */
+export const OBELISK = {
+  radius: 20,
+  neutralColor: '#f8fafc',
+  glowRadius: 70,
+  coreRadius: 7,
+  ringWidth: 2.5,
+  /** Полоска здоровья под ромбом. */
+  healthWidth: 44,
+  healthHeight: 5,
+  healthGap: 12,
+} as const;
+
 /** Вспышка экрана, когда бьют Цитадель игрока. */
 export const ALARM = {
   maxAlpha: 0.16,

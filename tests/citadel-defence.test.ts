@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runMatch } from '@sim/index';
 import type { MatchEvent, MatchResult, ScheduledRelease, SideId, UnitKind } from '@sim/index';
-import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 const deploy = (
   tick: number,
@@ -12,7 +11,7 @@ const deploy = (
 ): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
 const run = (actions: readonly ScheduledRelease[], maxTicks = 20_000): MatchResult =>
-  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
+  runMatch(matchSetup({ map: arenaWithoutObelisks, releases: actions, maxTicks }));
 
 const killedByCitadel = (events: readonly MatchEvent[]) =>
   events.filter((event) => event.kind === 'unit-died' && 'killer' in event && event.killer.kind === 'citadel');

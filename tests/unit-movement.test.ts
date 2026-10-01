@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BODY_RADIUS, CITADEL_RADIUS, MELEE_GAP, runMatch } from '@sim/index';
 import type { MatchEvent, ScheduledRelease } from '@sim/index';
-import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledRelease => ({
   tick,
@@ -13,7 +12,7 @@ const deploy = (tick: number, roadId: string, side: 'A' | 'B' = 'A'): ScheduledR
 });
 
 function run(actions: readonly ScheduledRelease[], maxTicks = 1000) {
-  return runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
+  return runMatch(matchSetup({ map: arenaWithoutObelisks, releases: actions, maxTicks }));
 }
 
 const arrivals = (events: readonly MatchEvent[]) =>

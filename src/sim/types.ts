@@ -38,10 +38,10 @@ export interface RoadSpec {
 }
 
 /**
- * Ресурсная точка. В спеке 0001 не реализуется, но поле присутствует
- * в формате карты, чтобы спека 0003 не потребовала его менять.
+ * Обелиск — строение у обочины обходной Дороги (ADR-0006). Стоит ничьим,
+ * пока его не возьмут ударом.
  */
-export interface ResourcePointSpec {
+export interface ObeliskSpec {
   readonly id: string;
   readonly at: Point;
 }
@@ -56,7 +56,7 @@ export interface GameMap {
   readonly size: MapSize;
   readonly citadels: readonly CitadelSpec[];
   readonly roads: readonly RoadSpec[];
-  readonly resourcePoints: readonly ResourcePointSpec[];
+  readonly obelisks: readonly ObeliskSpec[];
 }
 
 /** Настройка одной Стороны. */
@@ -145,10 +145,11 @@ export type MatchEvent =
       readonly killer: Killer;
     };
 
-/** Кто нанёс последний удар: Юнит в Стычке или Цитадель со стен. */
+/** Кто нанёс последний удар: Юнит в Стычке, Цитадель со стен или Обелиск. */
 export type Killer =
   | { readonly kind: 'unit'; readonly unitId: UnitId }
-  | { readonly kind: 'citadel'; readonly side: SideId };
+  | { readonly kind: 'citadel'; readonly side: SideId }
+  | { readonly kind: 'obelisk'; readonly obeliskId: string };
 
 export type EndReason = 'tick-limit' | 'citadel-destroyed';
 
@@ -215,11 +216,26 @@ export interface CitadelSnapshot {
   readonly target: UnitId | null;
 }
 
+/** Обелиск глазами рендера. Где он стоит — в карте. */
+export interface ObeliskSnapshot {
+  readonly id: string;
+  /** null — ничей. */
+  readonly owner: SideId | null;
+  readonly hp: number;
+  readonly maxHp: number;
+  /**
+   * Кого Обелиск бьёт прямо сейчас; пусто — никого нет в радиусе. Двое
+   * и больше — когда удар делится между Сторонами поровну.
+   */
+  readonly targets: readonly UnitId[];
+}
+
 export interface WorldSnapshot {
   readonly tick: number;
   readonly sides: readonly SideId[];
   readonly units: readonly UnitSnapshot[];
   readonly citadels: readonly CitadelSnapshot[];
+  readonly obelisks: readonly ObeliskSnapshot[];
   readonly ether: readonly EtherSnapshot[];
 }
 

@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createMatch, TICKS_PER_SECOND } from '@sim/index';
 import type { MatchResult, MatchSetup } from '@sim/index';
 import { createPacer, type Speed } from '../src/app/pacer.js';
-import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
  * Скорость воспроизведения и пауза — свойства показа, а не симуляции.
@@ -22,7 +21,7 @@ import { matchSetup } from './match-setup.js';
  */
 const setup = (): MatchSetup =>
   matchSetup({
-    map: arena,
+    map: arenaWithoutObelisks,
     seed: 4242,
     maxTicks: 100_000,
     releases: ['short', 'north', 'south'].flatMap((roadId, index) => [

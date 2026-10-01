@@ -44,6 +44,10 @@ const NORTH: readonly Point[] = [
   p(950, DETOUR_Y), p(990, 300), B,
 ];
 
+/** Насколько Обелиск отстоит от прямого участка Дороги к центру поля. */
+const OBELISK_OFFSET = 60;
+const OBELISK_NORTH = p(WIDTH / 2, DETOUR_Y + OBELISK_OFFSET);
+
 export const arena: GameMap = {
   size: { width: WIDTH, height: HEIGHT },
 
@@ -65,7 +69,11 @@ export const arena: GameMap = {
     { id: 'south', from: 'A', to: 'B', points: NORTH.map(flip) },
   ],
 
-  // Ресурсные точки появятся в тикете 07 спеки 0003; поле объявлено
-  // заранее, чтобы формат карты не пришлось менять задним числом.
-  resourcePoints: [],
+  // По Обелиску на обходную Дорогу (спека 0003): в середине прямого
+  // участка, в стороне от Дороги к центру поля. Оба стоят на вертикальной
+  // оси, поэтому до них одинаково далеко обеим Сторонам.
+  obelisks: [
+    { id: 'north', at: OBELISK_NORTH },
+    { id: 'south', at: flip(OBELISK_NORTH) },
+  ],
 };

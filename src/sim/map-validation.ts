@@ -1,4 +1,6 @@
-import type { GameMap, MatchSetup, RoadSpec, ScheduledRelease } from './types.js';
+import { BODY_RADIUS, CITADEL_RADIUS, OBELISK_RADIUS } from './balance.js';
+import { roadPolyline } from './geometry.js';
+import type { GameMap, MatchSetup, ObeliskSpec, Point, RoadSpec, ScheduledRelease } from './types.js';
 
 /**
  * Проверка целостности карты. Выполняется при запуске матча, поэтому
@@ -20,6 +22,45 @@ export function validateMap(map: GameMap): void {
   }
 
   for (const road of map.roads) validateRoad(road, map);
+
+  if (new Set(map.obelisks.map((obelisk) => obelisk.id)).size !== map.obelisks.length) {
+    throw new Error('Карта: у двух Обелисков один идентификатор');
+  }
+  for (const obelisk of map.obelisks) validateObelisk(obelisk, map);
+}
+
+/**
+ * Обелиск стоит у обочины: идущий по Дороге проходит мимо, не задевая
+ * его тела, — Дорогу он не перекрывает (ADR-0006). И не налезает
+ * на Цитадель.
+ */
+function validateObelisk(obelisk: ObeliskSpec, map: GameMap): void {
+  for (const road of map.roads) {
+    if (distanceToPolyline(obelisk.at, roadPolyline(road)) < OBELISK_RADIUS + BODY_RADIUS) {
+      throw new Error(`Обелиск ${obelisk.id}: задевает идущих по Дороге ${road.id}`);
+    }
+  }
+  for (const citadel of map.citadels) {
+    const gap = Math.hypot(obelisk.at.x - citadel.at.x, obelisk.at.y - citadel.at.y);
+    if (gap < OBELISK_RADIUS + CITADEL_RADIUS) {
+      throw new Error(`Обелиск ${obelisk.id}: налезает на Цитадель Стороны ${citadel.side}`);
+    }
+  }
+}
+
+function distanceToPolyline(point: Point, line: readonly Point[]): number {
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < line.length; index += 1) {
+    const from = line[index - 1];
+    const to = line[index];
+    if (!from || !to) continue;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const span = dx * dx + dy * dy;
+    const t = span === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / span));
+    nearest = Math.min(nearest, Math.hypot(point.x - (from.x + dx * t), point.y - (from.y + dy * t)));
+  }
+  return nearest;
 }
 
 function validateRoad(road: RoadSpec, map: GameMap): void {

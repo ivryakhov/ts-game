@@ -10,8 +10,7 @@ import type {
   UnitKind,
   UnitSnapshot,
 } from '@sim/index';
-import { arena } from '../src/maps/arena.js';
-import { matchSetup } from './match-setup.js';
+import { matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
  * Дорога — маршрут, а не рельсы (ADR-0004): Юнит сходит с неё, чтобы бить
@@ -26,7 +25,7 @@ const deploy = (
 ): ScheduledRelease => ({ tick, side, kind: 'deploy', roadId, unit });
 
 const run = (actions: readonly ScheduledRelease[], maxTicks = 3000): MatchResult =>
-  runMatch(matchSetup({ map: arena, releases: actions, maxTicks }));
+  runMatch(matchSetup({ map: arenaWithoutObelisks, releases: actions, maxTicks }));
 
 const everyone = (rules: readonly Rule[]): Behaviour => ({ scout: rules, tank: rules, ranger: rules });
 
@@ -37,7 +36,7 @@ function brawl(): LiveMatch {
     kinds.map((unit, index) => deploy(from + index, side, roadId, unit));
   return createMatch(
     matchSetup({
-      map: arena,
+      map: arenaWithoutObelisks,
       releases: [
         ...column('A', 'short', 1),
         ...column('B', 'short', 1),
@@ -104,7 +103,7 @@ describe('ближний удар — только вплотную', () => {
     const eight = Array.from({ length: 8 }, (_, index) => deploy(1 + index, 'A'));
     const match = createMatch(
       matchSetup({
-        map: arena,
+        map: arenaWithoutObelisks,
         sides: [{ id: 'A' }, { id: 'B', behaviour: standFast }],
         releases: [...eight, deploy(1, 'B', 'short', 'tank')],
         maxTicks: 400,
@@ -130,7 +129,7 @@ describe('ближний удар — только вплотную', () => {
     // Смотрим на Тик первого касания: позже отставшие обходят своих
     // и обступают врага, и «передний» теряет смысл.
     const massAttack = [...Array.from({ length: 5 }, (_, index) => deploy(1 + index, 'A')), deploy(1, 'B')];
-    const match = createMatch(matchSetup({ map: arena, releases: massAttack, maxTicks: 200 }));
+    const match = createMatch(matchSetup({ map: arenaWithoutObelisks, releases: massAttack, maxTicks: 200 }));
     let units: readonly UnitSnapshot[] = [];
     while (!match.finished && !units.some((unit) => unit.state === 'fighting')) {
       match.step();
@@ -153,7 +152,7 @@ describe('Юнит сходит с Дороги, чтобы бить, и воз�
   // Танк A осаждает Цитадель B с запада, придя по короткой Дороге.
   // Защитник B выходит по южной Дороге, которая уходит от стен на юг.
   const releases = [deploy(1, 'A', 'short', 'tank'), deploy(300, 'B', 'south', 'tank')];
-  const south = measureRoad(arena.roads.find((road) => road.id === 'south') ?? arena.roads[0]!);
+  const south = measureRoad(arenaWithoutObelisks.roads.find((road) => road.id === 'south') ?? arenaWithoutObelisks.roads[0]!);
   const offRoad = (unit: UnitSnapshot | undefined): number => {
     if (!unit) return Number.NaN;
     const nearest = south.pointAtDistance(south.project(unit, unit.progress * south.length, 300));

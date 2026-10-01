@@ -25,6 +25,7 @@ import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
 import { batter, besiegedBy } from './structure.js';
+import { createObelisks, obeliskSnapshots, obelisksFire, type Obelisk } from './obelisk.js';
 import { callWaves, type WaveCycle } from './waves.js';
 import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
@@ -42,6 +43,7 @@ export interface World {
   units: Unit[];
   readonly roads: ReadonlyMap<string, RoadRuntime>;
   readonly citadels: ReadonlyMap<SideId, Citadel>;
+  readonly obelisks: readonly Obelisk[];
   /** Поведение каждой Стороны: по нему её Юниты решают, что делать. */
   readonly behaviours: ReadonlyMap<SideId, Behaviour>;
   readonly purses: ReadonlyMap<SideId, Purse>;
@@ -78,6 +80,7 @@ export function createWorld(setup: MatchSetup): World {
     sides,
     units: [],
     citadels: createCitadels(sides, placeOf),
+    obelisks: createObelisks(setup.map.obelisks),
     behaviours: new Map(
       setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
     ),
@@ -111,7 +114,7 @@ export function createWorld(setup: MatchSetup): World {
  * 3. двигаются все, кто не дерётся и не стоит, — по очереди, по номеру,
  *    обходя друг друга; встретившие чужие стены встают осаждать;
  * 4. осаждающие бьют чужие Цитадели;
- * 5. Цитадели отвечают ударом со стен;
+ * 5. Цитадели отвечают ударом со стен, Обелиски бьют идущих мимо;
  * 6. своя Цитадель лечит раненых рядом с собой.
  */
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
@@ -183,11 +186,13 @@ function underTheWalls(world: World, side: SideId): readonly InReach[] {
 /**
  * Цитадели отвечают ударом. Расстояние меряется по прямой от центра
  * Цитадели: стены бьют любого врага рядом, по какой бы Дороге он ни пришёл
- * и как бы далеко от неё ни сошёл.
+ * и как бы далеко от неё ни сошёл. Следом бьют Обелиски — по выжившим.
  */
 function holdTheWalls(world: World, events: MatchEvent[]): void {
   const fallen = defend(world.citadels, (side) => underTheWalls(world, side), world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
+  const shot = obelisksFire(world.obelisks, world.units, world.tick, events);
+  if (shot.size > 0) world.units = world.units.filter((unit) => !shot.has(unit.id));
 }
 
 /** Дошедшие до чужого строения бьют его, пока оно стоит. Павшая Цитадель — поражение. */
@@ -280,6 +285,7 @@ export function snapshot(world: World): WorldSnapshot {
       return shown.target !== null && !alive.has(shown.target) ? { ...shown, target: null } : shown;
     }),
     citadels: citadelSnapshots(world.citadels),
+    obelisks: obeliskSnapshots(world.obelisks),
     ether: etherSnapshots(world.purses),
   };
 }
