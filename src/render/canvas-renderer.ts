@@ -127,7 +127,7 @@ export function createCanvasRenderer(
     return closest;
   }
 
-  function drawRoad(road: RoadSpec, matchMs: number, highlighted: boolean): void {
+  function drawRoad(road: RoadSpec, highlighted: boolean): void {
     context.save();
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -148,7 +148,6 @@ export function createCanvasRenderer(
     context.strokeStyle = roadGradient(road);
     context.lineWidth = scaled(ROAD.dashWidth);
     context.setLineDash(ROAD.dash.map(scaled));
-    context.lineDashOffset = -scaled((matchMs / 1000) * ROAD.dashSpeed);
     context.stroke();
 
     context.restore();
@@ -201,7 +200,7 @@ export function createCanvasRenderer(
       context.fillRect(0, 0, cssWidth, cssHeight);
 
       for (const road of map.roads) {
-        drawRoad(road, frame.matchMs, road.id === frame.highlightedRoad);
+        drawRoad(road, road.id === frame.highlightedRoad);
       }
       overlays.wallReach();
       for (const citadel of map.citadels) {
