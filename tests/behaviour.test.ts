@@ -42,6 +42,14 @@ describe('матч принимает корректное Поведение', 
 
     expect(withBehaviour(everything)).not.toThrow();
   });
+
+  it('«враг у своей Цитадели» — без параметров', () => {
+    const home = { when: { kind: 'enemy-at-home' }, do: { kind: 'retreat' } };
+    expect(withBehaviour({ ...valid, tank: [home, ALWAYS_ADVANCE] })).not.toThrow();
+
+    const extra = { when: { kind: 'enemy-at-home', range: 200 }, do: { kind: 'retreat' } };
+    expect(withBehaviour({ ...valid, tank: [extra, ALWAYS_ADVANCE] })).toThrow(/tank\[0\]\.when/);
+  });
 });
 
 describe('матч принимает полный словарь', () => {

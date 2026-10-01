@@ -1,5 +1,5 @@
 import { conditionsOf, type Action, type Behaviour, type Condition } from './rules.js';
-import { NEARBY_RANGE } from './balance.js';
+import { CITADEL_STATS, NEARBY_RANGE } from './balance.js';
 import { citadelReachOf, enemiesInSight } from './skirmish.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
 
@@ -26,6 +26,8 @@ export interface Surroundings {
   readonly enemyAhead: boolean;
   /** Достаёт ли он чужую Цитадель со своего места. */
   readonly enemyCitadelInRange: boolean;
+  /** Стоит ли враг под стенами своей Цитадели — на любом расстоянии от Юнита. */
+  readonly enemyAtHome: boolean;
 }
 
 export function holds(condition: Condition, unit: Unit, around: Surroundings): boolean {
@@ -48,6 +50,8 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
       return around.enemyAhead;
     case 'enemy-citadel-in-range':
       return around.enemyCitadelInRange;
+    case 'enemy-at-home':
+      return around.enemyAtHome;
   }
 }
 
@@ -102,6 +106,13 @@ export function surroundingsOf(
           (unit.forward ? positionOn(other, length) > here : positionOn(other, length) < here),
       );
 
+      // «У своей Цитадели» — та же дальность, что у удара её стен: враг,
+      // которого они уже бьют. Мерка — где враг стоит сейчас, а не память
+      // об уроне: отошёл за стены — Условие снова ложно.
+      const besieged = units.some(
+        (other) => other.side !== unit.side && distanceTo(other, unit.home) <= CITADEL_STATS.range,
+      );
+
       return [
         unit.id,
         {
@@ -112,6 +123,7 @@ export function surroundingsOf(
           enemiesInSkirmish: seen.filter((enemy) => enemy.intent.kind !== 'retreat').length,
           enemyAhead: ahead,
           enemyCitadelInRange: distanceTo(unit, unit.foe) <= citadelReachOf(unit),
+          enemyAtHome: besieged,
         },
       ];
     }),

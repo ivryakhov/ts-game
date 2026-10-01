@@ -24,7 +24,9 @@ export type Condition =
   /** Впереди по моей Дороге есть враг — на любом расстоянии, даже если не вижу. */
   | { readonly kind: 'enemy-ahead' }
   /** Достаю чужую Цитадель со своего места. */
-  | { readonly kind: 'enemy-citadel-in-range' };
+  | { readonly kind: 'enemy-citadel-in-range' }
+  /** Враг подошёл к моей Цитадели на удар её стен — где бы я сам ни стоял. */
+  | { readonly kind: 'enemy-at-home' };
 
 /** Что Юнит делает в этот Тик. */
 export type Action =
@@ -85,6 +87,7 @@ const CONDITIONS = [
   'enemies-in-skirmish',
   'enemy-ahead',
   'enemy-citadel-in-range',
+  'enemy-at-home',
 ] as const;
 const ACTIONS = [
   'advance',
@@ -137,6 +140,7 @@ function parseCondition(raw: unknown, where: string): Condition {
     case 'at-home':
     case 'enemy-ahead':
     case 'enemy-citadel-in-range':
+    case 'enemy-at-home':
       onlyKeys(raw, ['kind'], where);
       return { kind };
     case 'allies-nearby': {
