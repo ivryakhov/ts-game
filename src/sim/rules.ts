@@ -15,8 +15,8 @@ export type Condition =
   | { readonly kind: 'hp-below'; readonly percent: number }
   /** Вижу врага, которого могу достать, — к нему и сойду с Дороги. */
   | { readonly kind: 'enemy-in-range' }
-  /** Стою у своей Цитадели и здоровье ещё ниже until процентов. */
-  | { readonly kind: 'recovering'; readonly until: number }
+  /** Стою у своей Цитадели — там, где она лечит и куда встаёт выпущенный. */
+  | { readonly kind: 'at-home' }
   /** Своих рядом, не считая меня, меньше или больше count. */
   | { readonly kind: 'allies-nearby'; readonly compare: 'fewer' | 'more'; readonly count: number }
   /** Врагов, которых я вижу, не считая отступающих, больше above. */
@@ -50,9 +50,30 @@ export function isAttack(action: Action): action is AttackAction {
   return action.kind.startsWith('attack-');
 }
 
+/** Условие, которое может стоять в «И», — любое, кроме «всегда». */
+export type JointCondition = Exclude<Condition, { kind: 'always' }>;
+
+/** Сколько Условий может стоять в одном «И» (ADR-0005). */
+export const MIN_JOINT_CONDITIONS = 2;
+export const MAX_JOINT_CONDITIONS = 3;
+
 export interface Rule {
-  readonly when: Condition;
+  /**
+   * Одно Условие или «И» из двух-трёх: Правило срабатывает, только когда
+   * истинны все (ADR-0005). Одно Условие пишется без массива.
+   */
+  readonly when: Condition | readonly JointCondition[];
   readonly do: Action;
+}
+
+/** Условия Правила списком — одно или все из «И». */
+export function conditionsOf(rule: Rule): readonly Condition[] {
+  return Array.isArray(rule.when) ? rule.when : [rule.when as Condition];
+}
+
+/** Правило «иначе» — с единственным Условием «всегда». */
+export function isFallback(rule: Rule): boolean {
+  return !Array.isArray(rule.when) && (rule.when as Condition).kind === 'always';
 }
 
 /** Упорядоченный список Правил на каждый тип Юнита. */
@@ -62,7 +83,7 @@ const CONDITIONS = [
   'always',
   'hp-below',
   'enemy-in-range',
-  'recovering',
+  'at-home',
   'allies-nearby',
   'enemies-in-skirmish',
   'enemy-ahead',
@@ -118,6 +139,7 @@ function parseCondition(raw: unknown, where: string): Condition {
     case 'enemy-in-range':
     case 'enemy-ahead':
     case 'enemy-citadel-in-range':
+    case 'at-home':
       onlyKeys(raw, ['kind'], where);
       return { kind };
     case 'allies-nearby': {
@@ -135,14 +157,39 @@ function parseCondition(raw: unknown, where: string): Condition {
       onlyKeys(raw, ['kind', 'percent'], where);
       return { kind, percent: parsePercent(raw['percent'], `${where}.percent`) };
     case 'recovering':
-      onlyKeys(raw, ['kind', 'until'], where);
-      return { kind, until: parsePercent(raw['until'], `${where}.until`) };
+      throw fail(
+        where,
+        'Условия recovering больше нет — пишите ' +
+          '[{"kind":"at-home"},{"kind":"hp-below","percent":N}] (ADR-0005)',
+      );
     default:
       throw fail(
         where,
         `неизвестное Условие «${String(kind)}»; есть: ${CONDITIONS.join(', ')}`,
       );
   }
+}
+
+/** Одно Условие-объект или массив из двух-трёх Условий без «всегда». */
+function parseWhen(raw: unknown, where: string): Rule['when'] {
+  if (!Array.isArray(raw)) return parseCondition(raw, where);
+
+  if (raw.length < MIN_JOINT_CONDITIONS || raw.length > MAX_JOINT_CONDITIONS) {
+    throw fail(
+      where,
+      `в «И» от ${MIN_JOINT_CONDITIONS} до ${MAX_JOINT_CONDITIONS} Условий, а не ${raw.length}` +
+        (raw.length === 1 ? ' — одно Условие пишется без массива' : ''),
+    );
+  }
+
+  return raw.map((item: unknown, index) => {
+    const at = `${where}[${index}]`;
+    const condition = parseCondition(item, at);
+    if (condition.kind === 'always') {
+      throw fail(at, '«always» не входит в «И» — оно стоит только одно');
+    }
+    return condition;
+  });
 }
 
 function parseAction(raw: unknown, where: string): Action {
@@ -205,7 +252,7 @@ export function parseBehaviour(raw: unknown): Behaviour {
       if (!isRecord(rule)) throw fail(where, 'ожидалось Правило-объект');
       onlyKeys(rule, ['when', 'do'], where);
       return {
-        when: parseCondition(rule['when'], `${where}.when`),
+        when: parseWhen(rule['when'], `${where}.when`),
         do: parseAction(rule['do'], `${where}.do`),
       };
     });
@@ -214,7 +261,7 @@ export function parseBehaviour(raw: unknown): Behaviour {
     // не сработало ни одно, делал бы что-то, чего нет в файле, — скрытое
     // правило, которого игрок не видит (ADR-0002).
     const last = parsedRules[parsedRules.length - 1];
-    if (last?.when.kind !== 'always') {
+    if (last === undefined || !isFallback(last)) {
       throw fail(
         `${kind}[${parsedRules.length - 1}].when`,
         'последнее Правило должно быть «always»: иначе неясно, что делать, когда не сработало ни одно',

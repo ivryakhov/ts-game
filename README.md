@@ -13,6 +13,7 @@
 | Принятые решения | [docs/adr/](./docs/adr) |
 | План v1 | [docs/v1-plan.md](./docs/v1-plan.md) |
 | Спецификация первой контрольной точки | [docs/specs/0001-rules-driven-match.md](./docs/specs/0001-rules-driven-match.md) |
+| Спецификация Подготовки и редактора Правил | [docs/specs/0002-podgotovka-i-redaktor-pravil.md](./docs/specs/0002-podgotovka-i-redaktor-pravil.md) |
 | Тикеты | [docs/tickets/](./docs/tickets) |
 | Документ видения (расходится с v1) | [docs/game-concept.md](./docs/game-concept.md) |
 

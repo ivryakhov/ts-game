@@ -1,4 +1,6 @@
-# Тикеты спеки 0001
+# Тикеты
+
+## Спека 0001
 
 Разбивка [спеки 0001](../specs/0001-rules-driven-match.md) на вертикальные срезы.
 Каждый тикет проходит через все слои и заканчивается сборкой, которую можно
@@ -25,6 +27,29 @@
 | [11](11-podsvetka-aktivnogo-pravila.md) | Подсветка активного Правила | 10 | да |
 | [12](12-protivnik-kak-nabor-pravil.md) | Противник как набор Правил | 10 | да |
 | [13](13-yunity-skhodyat-s-dorogi.md) | Юниты сходят с Дороги | 12 | да |
+
+## Спека 0002
+
+Разбивка [спеки 0002](../specs/0002-podgotovka-i-redaktor-pravil.md):
+Подготовка, редактор Правил и «И» в Правилах. Задачи в GitHub — подзадачи
+[ivryakhov/ts-game#5](https://github.com/ivryakhov/ts-game/issues/5). Новые слова (14–15) не
+зависят от экрана, а экран (16) идёт без редактора — так первая проверка
+наступает раньше самой дорогой части.
+
+```
+14 ─┬─→ 15 ─────┐
+    └─→ 17 ─┬─→ 18
+16 ────↗    └─→ 19
+```
+
+| # | Тикет | Блокируется | Демо | Задача |
+|---|---|---|---|---|
+| [14](14-i-v-pravilakh.md) | «И» в Правилах и «у своей Цитадели» | — | да | [ivryakhov/ts-game#6](https://github.com/ivryakhov/ts-game/issues/6) |
+| [15](15-vrag-u-svoey-tsitadeli.md) | «Враг у своей Цитадели» | 14 | да | [ivryakhov/ts-game#8](https://github.com/ivryakhov/ts-game/issues/8) |
+| [16](16-ekran-podgotovki.md) | Экран Подготовки | — | да | [ivryakhov/ts-game#7](https://github.com/ivryakhov/ts-game/issues/7) |
+| [17](17-redaktor-pravil.md) | Редактор Правил | 14, 16 | да | [ivryakhov/ts-game#9](https://github.com/ivryakhov/ts-game/issues/9) |
+| [18](18-zagotovki.md) | Заготовки | 15, 17 | да | [ivryakhov/ts-game#10](https://github.com/ivryakhov/ts-game/issues/10) |
+| [19](19-khranenie-povedeniya.md) | Хранение Поведения | 17 | да | [ivryakhov/ts-game#11](https://github.com/ivryakhov/ts-game/issues/11) |
 
 Готовый тикет отмечается галочками в своём файле. Следующим берётся любой,
 у которого все блокирующие тикеты закрыты.
