@@ -1,0 +1,19 @@
+{
+  "Напролом": [
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-nearest" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ],
+  "Осторожный": [
+    { "when": { "kind": "hp-below", "percent": 40 }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-nearest" } },
+    { "when": [{ "kind": "at-home" }, { "kind": "hp-below", "percent": 100 }], "do": { "kind": "retreat" } },
+    { "when": [{ "kind": "at-home" }, { "kind": "allies-nearby", "compare": "fewer", "count": 2 }], "do": { "kind": "hold" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ],
+  "Защитник": [
+    { "when": [{ "kind": "enemy-at-home" }, { "kind": "enemy-in-range" }], "do": { "kind": "attack-nearest" } },
+    { "when": { "kind": "enemy-at-home" }, "do": { "kind": "retreat" } },
+    { "when": { "kind": "enemy-in-range" }, "do": { "kind": "attack-nearest" } },
+    { "when": { "kind": "always" }, "do": { "kind": "advance" } }
+  ]
+}

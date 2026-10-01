@@ -22,10 +22,13 @@ import type {
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
+import { parsePresets, type Preset } from './app/presets.js';
 import { freshSeed } from './app/seed.js';
+
 import { bindUnitChoice } from './app/unit-choice.js';
 import opponentFile from './behaviours/opponent.json';
 import playerFile from './behaviours/player.json';
+import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { rememberSeed, seedFromAddress } from './ui/address.js';
@@ -33,6 +36,7 @@ import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
 import { createPrep } from './ui/prep.js';
+import { readSaved, writeSaved } from './ui/saved.js';
 
 /**
  * Предел матча — двадцать минут. Матч кончается разрушением Цитадели;
@@ -49,7 +53,24 @@ if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud(PLAYER_SIDE);
-const prep = createPrep((seed) => startMatch(seed));
+/** Заготовки негодными быть не должны, но если файл испорчен — без них, а не без игры. */
+let presets: readonly Preset[] = [];
+let presetsProblem: string | null = null;
+try {
+  presets = parsePresets(presetsFile);
+} catch (error) {
+  presetsProblem = `Файл presets.json отвергнут — ${error instanceof Error ? error.message : String(error)}.`;
+}
+
+const prep = createPrep({
+  onStart(next, behaviour) {
+    playerBehaviour = behaviour;
+    startMatch(next);
+  },
+  onEdit: writeSaved,
+  presets,
+});
+if (presetsProblem) prep.warn(presetsProblem);
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
   edit: () => openPrep(),
@@ -90,13 +111,29 @@ const opponentSide = loadSide(
 );
 
 /**
+ * Поведение игрока — то, с которым начат последний матч: с Подготовки,
+ * а до первого старта — из файла. «Переиграть» берёт его же.
+ */
+const fileBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
+const saved = readSaved();
+let playerBehaviour: Behaviour = saved.kind === 'ok' ? saved.behaviour : fileBehaviour;
+if (saved.kind === 'rejected') {
+  prep.warn(`Сохранённые Правила отвергнуты — ${saved.problem}. Взяты Правила из player.json.`, {
+    label: 'Скачать отвергнутый набор',
+    name: 'rejected-behaviour.json',
+    text: saved.text,
+  });
+}
+prep.setPlayer(playerBehaviour, fileBehaviour);
+
+/**
  * Матч получает копии Сторон: что бы ни случилось с Поведением на
  * Подготовке после старта, идущий матч оно не задевает.
  */
 const setupFor = (seed: Seed): MatchSetup => ({
   seed,
   map: arena,
-  sides: [structuredClone(playerSide), structuredClone(opponentSide)],
+  sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide)],
   releases: [],
   maxTicks: MATCH_LIMIT_TICKS,
 });
@@ -153,7 +190,7 @@ function openPrep(): void {
   phase = 'prep';
   document.body.dataset['phase'] = phase;
   selectedUnit = null;
-  prep.show(seed, behaviourOf(PLAYER_SIDE), behaviourOf(OPPONENT_SIDE));
+  prep.show(seed, behaviourOf(OPPONENT_SIDE));
 }
 
 function fit(): void {

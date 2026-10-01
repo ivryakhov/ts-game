@@ -81,7 +81,8 @@ export function isFallback(rule: Rule): boolean {
 /** Упорядоченный список Правил на каждый тип Юнита. */
 export type Behaviour = Readonly<Record<UnitKind, readonly Rule[]>>;
 
-const CONDITIONS = [
+/** Все виды Условий и Действий — для разбора и для выпадающих списков редактора. */
+export const CONDITION_KINDS = [
   'always',
   'hp-below',
   'enemy-in-range',
@@ -92,7 +93,7 @@ const CONDITIONS = [
   'enemy-citadel-in-range',
   'enemy-at-home',
 ] as const;
-const ACTIONS = [
+export const ACTION_KINDS = [
   'advance',
   'retreat',
   'hold',
@@ -169,7 +170,7 @@ function parseCondition(raw: unknown, where: string): Condition {
     default:
       throw fail(
         where,
-        `неизвестное Условие «${String(kind)}»; есть: ${CONDITIONS.join(', ')}`,
+        `неизвестное Условие «${String(kind)}»; есть: ${CONDITION_KINDS.join(', ')}`,
       );
   }
 }
@@ -223,9 +224,42 @@ function parseAction(raw: unknown, where: string): Action {
     default:
       throw fail(
         where,
-        `неизвестное Действие «${String(kind)}»; есть: ${ACTIONS.join(', ')}`,
+        `неизвестное Действие «${String(kind)}»; есть: ${ACTION_KINDS.join(', ')}`,
       );
   }
+}
+
+/**
+ * Разбирает список Правил одного типа. `where` — имя списка в месте ошибки:
+ * тип Юнита в файле Стороны, название Заготовки в файле Заготовок.
+ */
+export function parseRules(rules: unknown, where: string): readonly Rule[] {
+  if (!Array.isArray(rules)) throw fail(where, 'нет списка Правил для этого типа');
+  if (rules.length === 0) {
+    throw fail(where, 'список Правил пуст — Юнит не знал бы, что делать');
+  }
+
+  const parsedRules = rules.map((rule: unknown, index) => {
+    const at = `${where}[${index}]`;
+    if (!isRecord(rule)) throw fail(at, 'ожидалось Правило-объект');
+    onlyKeys(rule, ['when', 'do'], at);
+    return {
+      when: parseWhen(rule['when'], `${at}.when`),
+      do: parseAction(rule['do'], `${at}.do`),
+    };
+  });
+
+  // Последнее Правило обязано срабатывать всегда. Иначе Юнит, у которого
+  // не сработало ни одно, делал бы что-то, чего нет в файле, — скрытое
+  // правило, которого игрок не видит (ADR-0002).
+  const last = parsedRules[parsedRules.length - 1];
+  if (last === undefined || !isFallback(last)) {
+    throw fail(
+      `${where}[${parsedRules.length - 1}].when`,
+      'последнее Правило должно быть «always»: иначе неясно, что делать, когда не сработало ни одно',
+    );
+  }
+  return parsedRules;
 }
 
 /**
@@ -243,37 +277,6 @@ export function parseBehaviour(raw: unknown): Behaviour {
   }
 
   const parsed: Partial<Record<UnitKind, readonly Rule[]>> = {};
-
-  for (const kind of UNIT_KINDS) {
-    const rules = raw[kind];
-    if (!Array.isArray(rules)) throw fail(kind, 'нет списка Правил для этого типа');
-    if (rules.length === 0) {
-      throw fail(kind, 'список Правил пуст — Юнит не знал бы, что делать');
-    }
-
-    const parsedRules = rules.map((rule: unknown, index) => {
-      const where = `${kind}[${index}]`;
-      if (!isRecord(rule)) throw fail(where, 'ожидалось Правило-объект');
-      onlyKeys(rule, ['when', 'do'], where);
-      return {
-        when: parseWhen(rule['when'], `${where}.when`),
-        do: parseAction(rule['do'], `${where}.do`),
-      };
-    });
-
-    // Последнее Правило обязано срабатывать всегда. Иначе Юнит, у которого
-    // не сработало ни одно, делал бы что-то, чего нет в файле, — скрытое
-    // правило, которого игрок не видит (ADR-0002).
-    const last = parsedRules[parsedRules.length - 1];
-    if (last === undefined || !isFallback(last)) {
-      throw fail(
-        `${kind}[${parsedRules.length - 1}].when`,
-        'последнее Правило должно быть «always»: иначе неясно, что делать, когда не сработало ни одно',
-      );
-    }
-
-    parsed[kind] = parsedRules;
-  }
-
+  for (const kind of UNIT_KINDS) parsed[kind] = parseRules(raw[kind], kind);
   return parsed as Behaviour;
 }
