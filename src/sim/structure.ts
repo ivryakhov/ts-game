@@ -6,15 +6,14 @@ import type { World } from './world.js';
 /**
  * Строение — то, что стоит на поле и что можно осаждать: у него есть
  * центр, тело, сквозь которое не пройти, здоровье и владелец. Осада
- * знает только строение, а не то, какое именно: так к Цитадели сможет
- * добавиться Обелиск без второй Осады (ADR-0006). Пока Цитадель —
- * единственное строение.
+ * знает только строение, а не то, какое именно: Цитадель и Обелиск
+ * осаждаются одинаково (ADR-0006).
  *
  * Зависит от мира только типом, а не кодом: иначе модули замыкались
  * бы в цикл.
  */
 export interface Structure {
-  readonly kind: 'citadel';
+  readonly kind: 'citadel' | 'obelisk';
   /** Чьё строение. null — ничьё: такое строение враг каждой Стороне. */
   readonly owner: SideId | null;
   /**
@@ -29,7 +28,7 @@ export interface Structure {
 
 /** Все строения мира в постоянном порядке: от него зависит порядок событий. */
 export function structuresOf(world: World): readonly Structure[] {
-  return [...world.citadels.values()];
+  return [...world.citadels.values(), ...world.obelisks];
 }
 
 /**

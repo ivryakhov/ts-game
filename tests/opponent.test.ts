@@ -13,8 +13,7 @@ import type {
 } from '@sim/index';
 import opponentFile from '../src/behaviours/opponent.json';
 import playerFile from '../src/behaviours/player.json';
-import { arena } from '../src/maps/arena.js';
-import { army, matchSetup } from './match-setup.js';
+import { army, matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
  * Противник — не отдельный код, а Сторона с файлом: Правила плюс список
@@ -47,7 +46,7 @@ function opponentPlays(
   releases: readonly ScheduledRelease[] = [],
 ): MatchResult {
   return runMatch(
-    matchSetup({ map: arena, sides: [{ id: 'A' }, { id: 'B', waves }], releases, maxTicks }),
+    matchSetup({ map: arenaWithoutObelisks, sides: [{ id: 'A' }, { id: 'B', waves }], releases, maxTicks }),
   );
 }
 
@@ -144,9 +143,9 @@ describe('противник не получает скрытых преимущ
   });
 
   it('одинаковые файлы на обеих Сторонах дают зеркальный матч: форы нет ни у кого', () => {
-    const side = (id: SideId): SideSetup => sideFromFile(id, opponentFile, arena);
+    const side = (id: SideId): SideSetup => sideFromFile(id, opponentFile, arenaWithoutObelisks);
     const result = runMatch(
-      matchSetup({ map: arena, sides: [side('A'), side('B')], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
+      matchSetup({ map: arenaWithoutObelisks, sides: [side('A'), side('B')], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
     );
     const bySide = (id: SideId) => ({
       citadel: result.finalState.citadels.find((citadel) => citadel.side === id)?.hp,
@@ -184,7 +183,7 @@ describe('матч двух наборов Правил без участия ч
   const duel = (a: keyof typeof sets, b: keyof typeof sets) =>
     runMatch(
       matchSetup({
-        map: arena,
+        map: arenaWithoutObelisks,
         sides: [{ id: 'A', ...sets[a] }, { id: 'B', ...sets[b] }],
         maxTicks: GAME_LIMIT,
       }),
@@ -212,8 +211,8 @@ describe('противник из игры', () => {
     // Противник, не способный взять даже пустую Цитадель, — не соперник.
     const result = runMatch(
       matchSetup({
-        map: arena,
-        sides: [sideFromFile('A', playerFile, arena), sideFromFile('B', opponentFile, arena)],
+        map: arenaWithoutObelisks,
+        sides: [sideFromFile('A', playerFile, arenaWithoutObelisks), sideFromFile('B', opponentFile, arenaWithoutObelisks)],
         maxTicks: GAME_LIMIT,
       }),
     );

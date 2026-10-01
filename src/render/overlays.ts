@@ -1,6 +1,7 @@
 import type { GameMap, Point, SideId } from '@sim/index';
 import { CITADEL_STATS } from '@sim/index';
 import type { Frame } from './renderer.js';
+import { obeliskColor } from './obelisks.js';
 import { ALARM, ROAD, SIDE_COLORS, UNIT_VISUAL, withAlpha } from './visual-contract.js';
 
 /**
@@ -49,29 +50,38 @@ export function createOverlays(ctx: OverlayContext): Overlays {
   }
 
   /**
-   * Луч от Цитадели к той, кого она бьёт. Правило «стены бьют ближайшего,
-   * а из стоящих вплотную — пришедшего первым» должно читаться с экрана:
+   * Луч от Цитадели или Обелиска к тому, кого они бьют. Правило «стены
+   * бьют ближайшего, а из стоящих вплотную — пришедшего первым» должно
+   * читаться с экрана:
    * игрок на него опирается, выпуская Танка вперёд (ADR-0002).
    */
   function wallFire(frame: Frame, places: ReadonlyMap<number, Point>): void {
     for (const health of frame.current.citadels) {
       if (health.target === null || health.hp <= 0) continue;
       const spec = map.citadels.find((citadel) => citadel.side === health.side);
-      const target = places.get(health.target);
-      if (!spec || !target) continue;
-
-      const from = toScreen(spec.at);
-      context.save();
-      context.strokeStyle = withAlpha(SIDE_COLORS[health.side], 0.75);
-      context.lineWidth = scaled(ROAD.wallFireWidth);
-      context.setLineDash([scaled(6), scaled(5)]);
-      context.lineDashOffset = -scaled(frame.matchMs / 12);
-      context.beginPath();
-      context.moveTo(from.x, from.y);
-      context.lineTo(target.x, target.y);
-      context.stroke();
-      context.restore();
+      if (spec) fireLine(frame, spec.at, places.get(health.target), SIDE_COLORS[health.side]);
     }
+    // Обелиск бьёт так же, как стены, и его удар виден так же.
+    for (const state of frame.current.obelisks) {
+      if (state.target === null || state.hp <= 0) continue;
+      const spec = map.obelisks.find((obelisk) => obelisk.id === state.id);
+      if (spec) fireLine(frame, spec.at, places.get(state.target), obeliskColor(state.owner));
+    }
+  }
+
+  function fireLine(frame: Frame, at: Point, target: Point | undefined, color: string): void {
+    if (!target) return;
+    const from = toScreen(at);
+    context.save();
+    context.strokeStyle = withAlpha(color, 0.75);
+    context.lineWidth = scaled(ROAD.wallFireWidth);
+    context.setLineDash([scaled(6), scaled(5)]);
+    context.lineDashOffset = -scaled(frame.matchMs / 12);
+    context.beginPath();
+    context.moveTo(from.x, from.y);
+    context.lineTo(target.x, target.y);
+    context.stroke();
+    context.restore();
   }
 
   /**

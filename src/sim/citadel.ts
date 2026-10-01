@@ -46,6 +46,19 @@ export interface InReach {
 }
 
 /**
+ * Порядок, в котором стены выбирают цель: ближайший к центру, а из стоящих
+ * вплотную — тот, кто встал у стен первым. Так же выбирает и Обелиск.
+ */
+export function wallOrder(left: InReach, right: InReach): number {
+  return (
+    compareDistance(left.distance, right.distance) ||
+    (left.unit.arrivedAt ?? Number.POSITIVE_INFINITY) -
+      (right.unit.arrivedAt ?? Number.POSITIVE_INFINITY) ||
+    left.unit.id - right.unit.id
+  );
+}
+
+/**
  * Ответный удар Цитадели. Каждая бьёт одного вражеского Юнита в своём
  * радиусе — ближайшего к себе, а из стоящих вплотную того, кто встал
  * у стен первым.
@@ -70,13 +83,7 @@ export function defend(
     citadel.target = null;
     if (citadel.hp <= 0) continue;
 
-    const target = [...reachOf(citadel.side)].sort(
-      (left, right) =>
-        compareDistance(left.distance, right.distance) ||
-        (left.unit.arrivedAt ?? Number.POSITIVE_INFINITY) -
-          (right.unit.arrivedAt ?? Number.POSITIVE_INFINITY) ||
-        left.unit.id - right.unit.id,
-    )[0];
+    const target = [...reachOf(citadel.side)].sort(wallOrder)[0];
     if (!target) continue;
 
     citadel.target = target.unit.id;

@@ -1,5 +1,6 @@
 import { ECONOMY, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
-import type { MatchSetup, ScheduledRelease, SideId, UnitKind } from '@sim/index';
+import type { GameMap, MatchSetup, ScheduledRelease, SideId, UnitKind } from '@sim/index';
+import { arena } from '../src/maps/arena.js';
 
 /**
  * Настройка матча по умолчанию для тестов: пустая карта, две Стороны,
@@ -8,7 +9,7 @@ import type { MatchSetup, ScheduledRelease, SideId, UnitKind } from '@sim/index'
 export function matchSetup(overrides: Partial<MatchSetup> = {}): MatchSetup {
   return {
     seed: 1,
-    map: { size: { width: 1200, height: 840 }, citadels: [], roads: [], resourcePoints: [] },
+    map: { size: { width: 1200, height: 840 }, citadels: [], roads: [], obelisks: [] },
     sides: [{ id: 'A' }, { id: 'B' }],
     releases: [],
     maxTicks: 100,
@@ -35,3 +36,9 @@ export function army(
 
 /** Состав, который при нынешнем балансе берёт Цитадель. */
 export const STORMING_PARTY: readonly UnitKind[] = ['tank', 'tank', 'ranger', 'ranger'];
+
+/**
+ * Арена без Обелисков — для тестов, которые идут по обходным Дорогам,
+ * а проверяют не Обелиски: удар Обелиска не должен менять их ожидания.
+ */
+export const arenaWithoutObelisks: GameMap = { ...arena, obelisks: [] };

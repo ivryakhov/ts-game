@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CITADEL_STATS, DEFAULT_BEHAVIOUR, createMatch } from '@sim/index';
 import type { Behaviour, GameMap, MatchResult, Release, Rule, SideId, UnitSnapshot } from '@sim/index';
-import { arena } from '../src/maps/arena.js';
-import { army, matchSetup } from './match-setup.js';
+import { army, matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
  * «Враг у своей Цитадели» (спека 0002, тикет 15): знание глобальное, как
@@ -27,7 +26,7 @@ const fromHomeA = (unit: UnitSnapshot) => Math.hypot(unit.x - HOME_A.x, unit.y -
 function trace(ours: Behaviour, releases: readonly Release[], maxTicks: number) {
   const match = createMatch(
     matchSetup({
-      map: arena,
+      map: arenaWithoutObelisks,
       sides: [
         { id: 'A', behaviour: ours },
         { id: 'B', behaviour: DEFAULT_BEHAVIOUR },
@@ -93,7 +92,7 @@ describe('Условие «враг у своей Цитадели»', () => {
         { id: 'short', from: 'A', to: 'B', points: [point(150), point(450), point(750), point(1052)] },
         { id: 'north', from: 'A', to: 'B', points: [point(149), point(250, 100), point(950, 100), point(1052)] },
       ],
-      resourcePoints: [],
+      obelisks: [],
     };
     const match = createMatch(
       matchSetup({
@@ -165,7 +164,7 @@ describe('Условие «враг у своей Цитадели»', () => {
     ];
     const match = createMatch(
       matchSetup({
-        map: arena,
+        map: arenaWithoutObelisks,
         sides: [
           { id: 'A', behaviour: same },
           { id: 'B', behaviour: same },
