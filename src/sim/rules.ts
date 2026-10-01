@@ -15,7 +15,7 @@ export type Condition =
   | { readonly kind: 'hp-below'; readonly percent: number }
   /** Вижу врага, которого могу достать, — к нему и сойду с Дороги. */
   | { readonly kind: 'enemy-in-range' }
-  /** Стою там, где лечит своя Цитадель; только что выпущенный — тоже там. */
+  /** Стою у своей Цитадели — там, где она лечит и куда встаёт выпущенный. */
   | { readonly kind: 'at-home' }
   /** Своих рядом, не считая меня, меньше или больше count. */
   | { readonly kind: 'allies-nearby'; readonly compare: 'fewer' | 'more'; readonly count: number }
@@ -50,28 +50,31 @@ export function isAttack(action: Action): action is AttackAction {
   return action.kind.startsWith('attack-');
 }
 
-/**
- * Два или три Условия, истинные разом, — «И» (ADR-0005). Больше трёх
- * не прочесть одной строкой, а одно пишется без массива.
- */
-export type Conjunction = readonly [Condition, Condition] | readonly [Condition, Condition, Condition];
+/** Условие, которое может стоять в «И», — любое, кроме «всегда». */
+export type JointCondition = Exclude<Condition, { kind: 'always' }>;
+
+/** Сколько Условий может стоять в одном «И» (ADR-0005). */
+export const MIN_JOINT_CONDITIONS = 2;
+export const MAX_JOINT_CONDITIONS = 3;
 
 export interface Rule {
-  readonly when: Condition | Conjunction;
+  /**
+   * Одно Условие или «И» из двух-трёх: Правило срабатывает, только когда
+   * истинны все (ADR-0005). Одно Условие пишется без массива.
+   */
+  readonly when: Condition | readonly JointCondition[];
   readonly do: Action;
 }
 
-export function isConjunction(when: Condition | Conjunction): when is Conjunction {
-  return Array.isArray(when);
-}
-
-/** Условия Правила списком — одно оно или их несколько. */
+/** Условия Правила списком — одно или все из «И». */
 export function conditionsOf(rule: Rule): readonly Condition[] {
-  return isConjunction(rule.when) ? rule.when : [rule.when];
+  return Array.isArray(rule.when) ? rule.when : [rule.when as Condition];
 }
 
-/** Самое длинное «И», которое ещё читается одной строкой (ADR-0005). */
-export const MAX_CONDITIONS = 3;
+/** Правило «иначе» — с единственным Условием «всегда». */
+export function isFallback(rule: Rule): boolean {
+  return !Array.isArray(rule.when) && (rule.when as Condition).kind === 'always';
+}
 
 /** Упорядоченный список Правил на каждый тип Юнита. */
 export type Behaviour = Readonly<Record<UnitKind, readonly Rule[]>>;
@@ -134,9 +137,9 @@ function parseCondition(raw: unknown, where: string): Condition {
   switch (kind) {
     case 'always':
     case 'enemy-in-range':
-    case 'at-home':
     case 'enemy-ahead':
     case 'enemy-citadel-in-range':
+    case 'at-home':
       onlyKeys(raw, ['kind'], where);
       return { kind };
     case 'allies-nearby': {
@@ -154,11 +157,10 @@ function parseCondition(raw: unknown, where: string): Condition {
       onlyKeys(raw, ['kind', 'percent'], where);
       return { kind, percent: parsePercent(raw['percent'], `${where}.percent`) };
     case 'recovering':
-      // Старое слово встречается в файлах и сохранениях, написанных до
-      // ADR-0005: игрок должен узнать, чем его заменить, а не гадать.
       throw fail(
         where,
-        'Условия «recovering» больше нет — пишите [{"kind":"at-home"},{"kind":"hp-below","percent":N}] (ADR-0005)',
+        'Условия recovering больше нет — пишите ' +
+          '[{"kind":"at-home"},{"kind":"hp-below","percent":N}] (ADR-0005)',
       );
     default:
       throw fail(
@@ -166,6 +168,28 @@ function parseCondition(raw: unknown, where: string): Condition {
         `неизвестное Условие «${String(kind)}»; есть: ${CONDITIONS.join(', ')}`,
       );
   }
+}
+
+/** Одно Условие-объект или массив из двух-трёх Условий без «всегда». */
+function parseWhen(raw: unknown, where: string): Rule['when'] {
+  if (!Array.isArray(raw)) return parseCondition(raw, where);
+
+  if (raw.length < MIN_JOINT_CONDITIONS || raw.length > MAX_JOINT_CONDITIONS) {
+    throw fail(
+      where,
+      `в «И» от ${MIN_JOINT_CONDITIONS} до ${MAX_JOINT_CONDITIONS} Условий, а не ${raw.length}` +
+        (raw.length === 1 ? ' — одно Условие пишется без массива' : ''),
+    );
+  }
+
+  return raw.map((item: unknown, index) => {
+    const at = `${where}[${index}]`;
+    const condition = parseCondition(item, at);
+    if (condition.kind === 'always') {
+      throw fail(at, '«always» не входит в «И» — оно стоит только одно');
+    }
+    return condition;
+  });
 }
 
 function parseAction(raw: unknown, where: string): Action {
@@ -198,30 +222,6 @@ function parseAction(raw: unknown, where: string): Action {
         `неизвестное Действие «${String(kind)}»; есть: ${ACTIONS.join(', ')}`,
       );
   }
-}
-
-/**
- * Условия Правила: одно — объектом, несколько — массивом. У записи одна
- * форма: массив из одного Условия отвергается, как и «always» внутри «И» —
- * «всегда и что-то» значит просто «что-то».
- */
-function parseWhen(raw: unknown, where: string): Condition | Conjunction {
-  if (!Array.isArray(raw)) return parseCondition(raw, where);
-
-  if (raw.length < 2 || raw.length > MAX_CONDITIONS) {
-    throw fail(
-      where,
-      `в «И» от двух до ${MAX_CONDITIONS} Условий, а не ${raw.length}: одно пишется без массива, больше не прочесть одной строкой`,
-    );
-  }
-  const all = raw.map((item: unknown, index) => {
-    const condition = parseCondition(item, `${where}[${index}]`);
-    if (condition.kind === 'always') {
-      throw fail(`${where}[${index}]`, '«always» не входит в «И»: оно стоит только одно');
-    }
-    return condition;
-  });
-  return all as unknown as Conjunction;
 }
 
 /**
@@ -261,7 +261,7 @@ export function parseBehaviour(raw: unknown): Behaviour {
     // не сработало ни одно, делал бы что-то, чего нет в файле, — скрытое
     // правило, которого игрок не видит (ADR-0002).
     const last = parsedRules[parsedRules.length - 1];
-    if (!last || isConjunction(last.when) || last.when.kind !== 'always') {
+    if (last === undefined || !isFallback(last)) {
       throw fail(
         `${kind}[${parsedRules.length - 1}].when`,
         'последнее Правило должно быть «always»: иначе неясно, что делать, когда не сработало ни одно',
