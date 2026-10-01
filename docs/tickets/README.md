@@ -51,5 +51,29 @@
 | [18](18-zagotovki.md) | Заготовки | 15, 17 | да | [ivryakhov/ts-game#10](https://github.com/ivryakhov/ts-game/issues/10) |
 | [19](19-khranenie-povedeniya.md) | Хранение Поведения | 17 | да | [ivryakhov/ts-game#11](https://github.com/ivryakhov/ts-game/issues/11) |
 
+## Спека 0003
+
+Разбивка [спеки 0003](../specs/0003-obeliski.md): Обелиски на обходных
+Дорогах. Задачи в GitHub — подзадачи
+[ivryakhov/ts-game#18](https://github.com/ivryakhov/ts-game/issues/18).
+Тикет 20 — подготовка кода без демо, как 01: Осада переводится на строение,
+чтобы Обелиск встал в неё рядом с Цитаделью. Слова в редакторе (25) ждут
+и захвата, и самого редактора из спеки 0002.
+
+```
+20 ─→ 21 ─→ 22 ─┬─→ 23
+                ├─→ 24
+                └─→ 25 ←── 17
+```
+
+| # | Тикет | Блокируется | Демо | Задача |
+|---|---|---|---|---|
+| [20](20-osada-u-stroeniya.md) | Осада у строения, а не только у Цитадели | — | нет | [ivryakhov/ts-game#19](https://github.com/ivryakhov/ts-game/issues/19) |
+| [21](21-obelisk-na-pole.md) | Обелиск на поле: ничей, бьёт проходящих | 20 | да | [ivryakhov/ts-game#20](https://github.com/ivryakhov/ts-game/issues/20) |
+| [22](22-zakhvat-obeliska.md) | Захват: «чужой Обелиск в радиусе» и «бить Обелиск» | 21 | да | [ivryakhov/ts-game#21](https://github.com/ivryakhov/ts-game/issues/21) |
+| [23](23-dokhod-s-obeliskov.md) | Доход с Обелисков | 22 | да | [ivryakhov/ts-game#22](https://github.com/ivryakhov/ts-game/issues/22) |
+| [24](24-protivnik-beryot-obeliski.md) | Противник берёт Обелиски | 22 | да | [ivryakhov/ts-game#23](https://github.com/ivryakhov/ts-game/issues/23) |
+| [25](25-obelisk-v-redaktore.md) | Обелиск в редакторе Правил | 22, 17 | да | [ivryakhov/ts-game#24](https://github.com/ivryakhov/ts-game/issues/24) |
+
 Готовый тикет отмечается галочками в своём файле. Следующим берётся любой,
 у которого все блокирующие тикеты закрыты.

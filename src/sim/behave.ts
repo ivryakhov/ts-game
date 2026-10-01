@@ -1,6 +1,7 @@
 import { conditionsOf, type Action, type Behaviour, type Condition } from './rules.js';
-import { NEARBY_RANGE } from './balance.js';
-import { citadelReachOf, enemiesInSight } from './skirmish.js';
+import { CITADEL_RADIUS, NEARBY_RANGE } from './balance.js';
+import { enemiesInSight } from './skirmish.js';
+import { reachOfStructure } from './structure.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
 import type { SideId } from './types.js';
 
@@ -117,7 +118,8 @@ export function surroundingsOf(
           // Отступающие из Стычки вышли — их не считают, хоть они и видны.
           enemiesInSkirmish: seen.filter((enemy) => enemy.intent.kind !== 'retreat').length,
           enemyAhead: ahead,
-          enemyCitadelInRange: distanceTo(unit, unit.foe) <= citadelReachOf(unit),
+          enemyCitadelInRange:
+            distanceTo(unit, unit.foe) <= reachOfStructure(unit, { radius: CITADEL_RADIUS }),
           // Враг, которого уже бьют стены: мерка — где он стоит сейчас,
           // а не память об уроне. Отошёл за стены — Условие снова ложно.
           enemyAtHome: besieged(unit.side),

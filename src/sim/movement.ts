@@ -1,4 +1,5 @@
-import { citadelReachOf, approachOf } from './skirmish.js';
+import { approachOf } from './skirmish.js';
+import { besiegedBy, reachOfStructure, type Structure } from './structure.js';
 import { BODY_RADIUS } from './balance.js';
 import { isAttack } from './rules.js';
 import { separate } from './crowd.js';
@@ -92,29 +93,33 @@ function advanceGoal(world: World, unit: Unit): Point {
   const nearWalls =
     unit.travelled + LOOKAHEAD >= lengthOf(world, unit.roadId) ||
     distanceTo(unit, unit.foe) <= STORM_DISTANCE;
-  if (nearWalls) return wallSlot(world, unit);
+  const target = besiegedBy(world, unit);
+  if (nearWalls && target) return wallSlot(world, unit, target);
+  if (nearWalls) return unit.foe;
   return roadPoint(world, unit, unit.travelled + LOOKAHEAD);
 }
 
 /**
- * Ближайшее свободное место у чужих стен — на том расстоянии, с которого
- * Юнит достаёт Цитадель. Идти прямо в её центр значило бы упираться
- * в спины тех, кто уже осаждает, и выталкивать их под стены; а так
- * подошедшие позже обступают Цитадель по кругу. Свободного места нет —
- * Юнит идёт к центру и ждёт, пока место освободится.
+ * Ближайшее свободное место у стен осаждаемого строения — на том
+ * расстоянии от его центра, с которого Юнит его достаёт. Идти прямо
+ * в центр значило бы упираться в спины тех, кто уже осаждает,
+ * и выталкивать их под стены; а так подошедшие позже обступают строение
+ * по кругу. Свободного места нет — Юнит идёт к центру и ждёт, пока
+ * место освободится.
  */
-function wallSlot(world: World, unit: Unit): Point {
-  const radius = citadelReachOf(unit) - 1;
+function wallSlot(world: World, unit: Unit, target: Structure): Point {
+  const centre = target.at ?? unit.foe;
+  const radius = reachOfStructure(unit, target) - 1;
   const crowd = world.units.filter(
-    (other) => other !== unit && Math.abs(distanceTo(other, unit.foe) - radius) < BODY_RADIUS * 2,
+    (other) => other !== unit && Math.abs(distanceTo(other, centre) - radius) < BODY_RADIUS * 2,
   );
 
   let best: { point: Point; distance: number } | null = null;
   for (let slot = 0; slot < WALL_SLOTS; slot += 1) {
     const angle = (slot / WALL_SLOTS) * Math.PI * 2;
     const point = {
-      x: unit.foe.x + Math.cos(angle) * radius,
-      y: unit.foe.y + Math.sin(angle) * radius,
+      x: centre.x + Math.cos(angle) * radius,
+      y: centre.y + Math.sin(angle) * radius,
     };
     const taken = crowd.some(
       (other) => Math.hypot(other.x - point.x, other.y - point.y) < BODY_RADIUS * 2 - 1,
@@ -126,7 +131,7 @@ function wallSlot(world: World, unit: Unit): Point {
     if (!best || order < 0) best = { point, distance };
   }
 
-  return best?.point ?? unit.foe;
+  return best?.point ?? centre;
 }
 
 /** Отступать — значит идти по своей Дороге назад, к своей Цитадели. */
@@ -135,14 +140,12 @@ function retreatGoal(world: World, unit: Unit): Point {
   return roadPoint(world, unit, unit.travelled - LOOKAHEAD);
 }
 
-/** Достаёт ли Юнит чужую Цитадель, пока она стоит. */
+/** Достаёт ли Юнит осаждаемое строение, пока оно стоит. */
 function reachesFoe(world: World, unit: Unit): boolean {
-  const road = world.roads.get(unit.roadId);
-  const foeSide = unit.forward ? road?.to : road?.from;
-  const citadel = foeSide ? world.citadels.get(foeSide) : undefined;
-  if (!citadel || citadel.hp <= 0) return false;
+  const target = besiegedBy(world, unit);
+  if (!target?.at || target.hp <= 0) return false;
   const slack = unit.arrived ? SIEGE_SLACK : 0;
-  return distanceTo(unit, unit.foe) <= citadelReachOf(unit) + slack;
+  return distanceTo(unit, target.at) <= reachOfStructure(unit, target) + slack;
 }
 
 /** Что Юнит делает в этот Тик и какой шаг для этого нужен. */

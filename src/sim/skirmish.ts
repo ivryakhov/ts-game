@@ -1,4 +1,4 @@
-import { BODY_RADIUS, CITADEL_RADIUS, MELEE_GAP } from './balance.js';
+import { BODY_RADIUS, CITADEL_RADIUS } from './balance.js';
 import type { UnitId, UnitState } from './types.js';
 import { isAttack } from './rules.js';
 import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
@@ -46,14 +46,6 @@ export interface SkirmishPlan {
  */
 export function reachOf(unit: Unit): number {
   return statsOf(unit).range;
-}
-
-/**
- * С какого расстояния до центра чужой Цитадели Юнит её бьёт. Ближний —
- * встав у самой стены; Стрелок — со своей дальности, как и по Юнитам.
- */
-export function citadelReachOf(unit: Unit): number {
-  return statsOf(unit).ranged ? statsOf(unit).range : CITADEL_RADIUS + BODY_RADIUS + MELEE_GAP;
 }
 
 /**

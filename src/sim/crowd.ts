@@ -1,4 +1,5 @@
-import { BODY_RADIUS, CITADEL_RADIUS } from './balance.js';
+import { BODY_RADIUS } from './balance.js';
+import { isWallAgainst, structuresOf } from './structure.js';
 import type { Unit } from './unit.js';
 import type { World } from './world.js';
 
@@ -16,29 +17,22 @@ import type { World } from './world.js';
  */
 const SEPARATION_PASSES = 3;
 
-/** Стена Цитадели: круг, ближе которого центр Юнита не подходит. */
+/** Стена строения: круг, ближе которого центр Юнита не подходит. */
 export interface Wall {
   readonly x: number;
   readonly y: number;
   readonly clearance: number;
 }
 
-/**
- * Чужие Цитадели, пока стоят: внутрь них не зайти. Своя Цитадель
- * препятствием не считается — из неё Юниты выходят и в неё же
- * отступают лечиться.
- */
+/** Чужие строения, пока стоят: внутрь них не зайти. */
 export function wallsAgainst(world: World, unit: Unit): Wall[] {
-  const walls: Wall[] = [];
-  for (const citadel of world.citadels.values()) {
-    if (citadel.side === unit.side || citadel.hp <= 0 || !citadel.at) continue;
-    walls.push({
-      x: citadel.at.x,
-      y: citadel.at.y,
-      clearance: CITADEL_RADIUS + BODY_RADIUS,
-    });
-  }
-  return walls;
+  return structuresOf(world)
+    .filter((structure) => isWallAgainst(structure, unit.side))
+    .map((structure) => ({
+      x: structure.at.x,
+      y: structure.at.y,
+      clearance: structure.radius + BODY_RADIUS,
+    }));
 }
 
 /**
