@@ -1,4 +1,4 @@
-import type { Action, Behaviour, Condition } from './rules.js';
+import { conditionsOf, type Action, type Behaviour, type Condition } from './rules.js';
 import { NEARBY_RANGE } from './balance.js';
 import { citadelReachOf, enemiesInSight } from './skirmish.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
@@ -36,8 +36,8 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
       return healthPercent(unit) < condition.percent;
     case 'enemy-in-range':
       return around.enemyInReach;
-    case 'recovering':
-      return around.atHome && healthPercent(unit) < condition.until;
+    case 'at-home':
+      return around.atHome;
     case 'allies-nearby':
       return condition.compare === 'fewer'
         ? around.alliesNearby < condition.count
@@ -52,7 +52,7 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
 }
 
 /**
- * Первое Правило, чьё Условие истинно: его Действие и номер. Разбор
+ * Первое Правило, чьи Условия истинны все: его Действие и номер. Разбор
  * Поведения требует, чтобы последнее Правило было «always», поэтому что-то
  * сработает всегда — скрытого запасного действия нет.
  *
@@ -66,7 +66,9 @@ export function choose(
   const rules = behaviour[unit.kind];
   for (let index = 0; index < rules.length; index += 1) {
     const rule = rules[index];
-    if (rule && holds(rule.when, unit, around)) return { action: rule.do, rule: index };
+    if (rule && conditionsOf(rule).every((condition) => holds(condition, unit, around))) {
+      return { action: rule.do, rule: index };
+    }
   }
   throw new Error(`Поведение ${unit.kind}: не сработало ни одно Правило — разбор пропустил дыру`);
 }

@@ -4,11 +4,15 @@ export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export { sideFromFile } from './side-file.js';
 export type { Wave } from './waves.js';
 export {
+  conditionsOf,
   DEFAULT_BEHAVIOUR,
+  isConjunction,
+  MAX_CONDITIONS,
   parseBehaviour,
   type Action,
   type Behaviour,
   type Condition,
+  type Conjunction,
   type Rule,
 } from './rules.js';
 export {

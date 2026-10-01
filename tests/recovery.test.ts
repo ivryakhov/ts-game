@@ -23,7 +23,11 @@ const everyone = (rules: readonly Rule[]): Behaviour => ({ scout: rules, tank: r
 const ADVANCE: Rule = { when: { kind: 'always' }, do: { kind: 'advance' } };
 const FIGHT: Rule = { when: { kind: 'enemy-in-range' }, do: { kind: 'attack-nearest' } };
 const FLEE_BELOW = (percent: number): Rule => ({ when: { kind: 'hp-below', percent }, do: { kind: 'retreat' } });
-const HEAL_UNTIL = (until: number): Rule => ({ when: { kind: 'recovering', until }, do: { kind: 'retreat' } });
+/** «Долечиться до N%» — это «у своей Цитадели» и «здоровье ниже N%» разом (ADR-0005). */
+const HEAL_UNTIL = (until: number): Rule => ({
+  when: [{ kind: 'at-home' }, { kind: 'hp-below', percent: until }],
+  do: { kind: 'retreat' },
+});
 
 function duel(ours: Behaviour, releases: readonly Release[], maxTicks: number): MatchResult {
   return runMatch(
@@ -87,7 +91,7 @@ describe('лечение у своей Цитадели', () => {
   });
 });
 
-describe('Условие «долечиваюсь»', () => {
+describe('«у своей Цитадели и здоровье ниже N%» — долечиться', () => {
   it('держит Юнита дома, пока он не вылечится полностью', () => {
     // Разведчики сходятся к 80-му Тику, наш отступает к 110-му и лечится
     // дома примерно с 170-го по 210-й.
@@ -109,7 +113,7 @@ describe('Условие «долечиваюсь»', () => {
   });
 
   it('без него Юнит уходит недолеченным — едва перевалив порог отступления', () => {
-    // Порог отступления 60%: без «долечиваюсь» Юнит разворачивается,
+    // Порог отступления 60%: без Правила «долечиться» Юнит разворачивается,
     // как только здоровье превысит 60%, и уходит далеко не полным.
     const hasty = everyone([FLEE_BELOW(60), FIGHT, ADVANCE]);
     const patient = everyone([FLEE_BELOW(60), HEAL_UNTIL(100), FIGHT, ADVANCE]);
@@ -132,7 +136,7 @@ describe('Условие «долечиваюсь»', () => {
 
 describe('Поведение игрока из коробки', () => {
   it('защитник у своих ворот отвечает врагу, а не встаёт лечиться', () => {
-    // «Долечиваюсь» стоит ниже «враг в радиусе»: пока враг рядом, Юнит
+    // «Долечиться» стоит ниже «враг в радиусе»: пока враг рядом, Юнит
     // дерётся, а лечится, только когда драться не с кем.
     const player = everyone([
       FLEE_BELOW(30),

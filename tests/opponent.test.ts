@@ -165,7 +165,7 @@ describe('матч двух наборов Правил без участия ч
   const FIGHT: Rule = { when: { kind: 'enemy-in-range' }, do: { kind: 'attack-nearest' } };
   const ADVANCE: Rule = { when: { kind: 'always' }, do: { kind: 'advance' } };
   const FLEE: Rule = { when: { kind: 'hp-below', percent: 50 }, do: { kind: 'retreat' } };
-  const HEAL: Rule = { when: { kind: 'recovering', until: 100 }, do: { kind: 'retreat' } };
+  const HEAL: Rule = { when: [{ kind: 'at-home' }, { kind: 'hp-below', percent: 100 }], do: { kind: 'retreat' } };
   const everyone = (rules: readonly Rule[]): Behaviour => ({ scout: rules, tank: rules, ranger: rules });
 
   const sets = {

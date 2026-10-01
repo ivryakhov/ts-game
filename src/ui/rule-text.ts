@@ -1,4 +1,4 @@
-import type { Action, Condition, Rule, UnitKind } from '@sim/index';
+import { conditionsOf, type Action, type Condition, type Rule, type UnitKind } from '@sim/index';
 
 /**
  * Правила человеческим языком — для панели выделенного Юнита. Слова
@@ -30,8 +30,8 @@ export function describeCondition(condition: Condition): string {
       return `здоровье ниже ${condition.percent}%`;
     case 'enemy-in-range':
       return 'враг в радиусе';
-    case 'recovering':
-      return `долечиваюсь до ${condition.until}%`;
+    case 'at-home':
+      return 'у своей Цитадели';
     case 'allies-nearby':
       return `своих рядом ${condition.compare === 'fewer' ? 'меньше' : 'больше'} ${condition.count}`;
     case 'enemies-in-skirmish':
@@ -62,9 +62,11 @@ export function describeAction(action: Action): string {
   }
 }
 
+/** «Если у своей Цитадели и здоровье ниже 100% — отступать»: «И» читается союзом. */
 export function describeRule(rule: Rule): string {
   const action = describeAction(rule.do);
-  return rule.when.kind === 'always'
+  const conditions = conditionsOf(rule);
+  return conditions.length === 1 && conditions[0]?.kind === 'always'
     ? `иначе — ${action}`
-    : `если ${describeCondition(rule.when)} — ${action}`;
+    : `если ${conditions.map(describeCondition).join(' и ')} — ${action}`;
 }
