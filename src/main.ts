@@ -22,10 +22,12 @@ import type {
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
+import { parsePresets, type Preset } from './app/presets.js';
 import { freshSeed } from './app/seed.js';
 import { bindUnitChoice } from './app/unit-choice.js';
 import opponentFile from './behaviours/opponent.json';
 import playerFile from './behaviours/player.json';
+import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { rememberSeed, seedFromAddress } from './ui/address.js';
@@ -49,10 +51,20 @@ if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud(PLAYER_SIDE);
+/** Заготовки негодными быть не должны, но если файл испорчен — без них, а не без игры. */
+let presets: readonly Preset[] = [];
+let presetsProblem: string | null = null;
+try {
+  presets = parsePresets(presetsFile);
+} catch (error) {
+  presetsProblem = `Файл presets.json отвергнут — ${error instanceof Error ? error.message : String(error)}.`;
+}
+
 const prep = createPrep((next, behaviour) => {
   playerBehaviour = behaviour;
   startMatch(next);
-});
+}, presets);
+if (presetsProblem) prep.warn(presetsProblem);
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
   edit: () => openPrep(),
@@ -97,7 +109,7 @@ const opponentSide = loadSide(
  * а до первого старта — из файла. «Переиграть» берёт его же.
  */
 let playerBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
-prep.setPlayer(playerBehaviour);
+prep.setPlayer(playerBehaviour, playerBehaviour);
 
 /**
  * Матч получает копии Сторон: что бы ни случилось с Поведением на

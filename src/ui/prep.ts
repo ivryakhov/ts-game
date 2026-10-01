@@ -1,6 +1,8 @@
 import { parseBehaviour, UNIT_KINDS, type Behaviour, type Rule, type Seed, type UnitKind } from '@sim/index';
-import { checkRules, draftFromBehaviour, rawBehaviour, type Draft, type DraftError } from '../app/draft.js';
+import { checkRules, draftFromBehaviour, draftRules, rawBehaviour, type Draft, type DraftError } from '../app/draft.js';
+import type { Preset } from '../app/presets.js';
 import { parseSeed } from '../app/seed.js';
+import { presetPicker } from './preset-picker.js';
 import { createRuleEditor } from './rule-editor.js';
 import { describeRule, UNIT_TITLES } from './rule-text.js';
 import { describeStats } from './stats-text.js';
@@ -17,8 +19,8 @@ import { describeStats } from './stats-text.js';
 export interface Prep {
   /** Открыть Подготовку с этим Сидом. Черновик игрока остаётся прежним. */
   show(seed: Seed, opponent: Behaviour): void;
-  /** Заменить черновик игрока целиком. */
-  setPlayer(player: Behaviour): void;
+  /** Заменить черновик игрока целиком. `file` — Поведение из player.json, Заготовка «Из файла». */
+  setPlayer(player: Behaviour, file: Behaviour): void;
   hide(): void;
   /** Показать ошибку, которую игрок должен исправить сам. Ошибки копятся. */
   warn(message: string): void;
@@ -69,7 +71,7 @@ function opponentView(behaviour: Behaviour): HTMLElement[] {
 }
 
 /** Матч начинается с Сидом и Поведением игрока — уже разобранным. */
-export function createPrep(onStart: (seed: Seed, player: Behaviour) => void): Prep {
+export function createPrep(onStart: (seed: Seed, player: Behaviour) => void, presets: readonly Preset[]): Prep {
   const panel = element('prep');
   const tabs = element('prep-tabs');
   const body = element('prep-body');
@@ -81,6 +83,7 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void): Pr
   let active: Tab = UNIT_KINDS[0] ?? 'opponent';
   let opponent: Behaviour | null = null;
   let draft: Draft | null = null;
+  let file: Behaviour | null = null;
   const errors = new Map<UnitKind, DraftError>();
   /** Редактор открытой вкладки — ему показывают ошибку его типа. */
   let editor: ReturnType<typeof createRuleEditor> | null = null;
@@ -104,7 +107,11 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void): Pr
       draft = draft && { ...draft, [kind]: next };
       check();
     });
-    return [statsCard(kind), editor.element];
+    const picker = presetPicker(presets, file?.[kind] ?? [], `Правила типа «${UNIT_TITLES[kind]}»`, (chosen) => {
+      draft = draft && { ...draft, [kind]: draftRules(chosen) };
+      render();
+    });
+    return [statsCard(kind), picker, editor.element];
   };
 
   const render = (): void => {
@@ -156,7 +163,8 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void): Pr
       if (!start.disabled) start.focus();
     },
 
-    setPlayer(player): void {
+    setPlayer(player, fromFile): void {
+      file = fromFile;
       draft = draftFromBehaviour(player);
       render();
     },
