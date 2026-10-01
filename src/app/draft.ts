@@ -132,10 +132,19 @@ export function canMove(rules: DraftRules, index: number, step: -1 | 1): boolean
   return moveRule(rules, index, step) !== rules;
 }
 
+/**
+ * «И» возможно, пока Условий меньше трёх и среди них нет «всегда»: оно
+ * в «И» не входит (ADR-0005), а безусловное Правило выше «иначе» файл
+ * Стороны допускает и редактор показывает как есть.
+ */
+export function canAddCondition(rule: DraftRule): boolean {
+  return rule.when.length < MAX_CONDITIONS && !rule.when.some((condition) => condition.kind === 'always');
+}
+
 /** «+ и»: ещё одно Условие — первое из тех, что в строке ещё нет. */
 export function addCondition(rules: DraftRules, index: number, kinds: readonly Condition['kind'][]): DraftRules {
   const rule = rules[index];
-  if (!rule || isLast(rules, index) || rule.when.length >= MAX_CONDITIONS) return rules;
+  if (!rule || isLast(rules, index) || !canAddCondition(rule)) return rules;
   const used = new Set(rule.when.map((condition) => condition.kind));
   const kind = kinds.find((candidate) => !used.has(candidate)) ?? kinds[0] ?? 'enemy-in-range';
   return replaceAt(rules, index, { ...rule, when: [...rule.when, freshCondition(kind)] });

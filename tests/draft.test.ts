@@ -63,6 +63,15 @@ describe('черновик Правил', () => {
     expect(checkRules(rules)).toBeNull();
   });
 
+  it('безусловное Правило выше «иначе» из файла остаётся годным, и «И» к нему не добавить', () => {
+    const rules: DraftRules = [
+      { when: [{ kind: 'always' }], do: { kind: 'hold' } },
+      { when: [{ kind: 'always' }], do: { kind: 'advance' } },
+    ];
+    expect(checkRules(rules)).toBeNull();
+    expect(addCondition(rules, 0, kinds)).toBe(rules);
+  });
+
   it('число вне допустимого называется на месте текстом разбора', () => {
     const rules = setCondition(addCondition(scout, 0, kinds), 0, 1, { kind: 'allies-nearby', compare: 'fewer', count: -1 });
     expect(checkRules(rules)).toEqual({

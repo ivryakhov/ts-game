@@ -2,10 +2,10 @@ import { ACTION_KINDS, CONDITION_KINDS, UNIT_KINDS, type Condition, type UnitKin
 import {
   addCondition,
   addRule,
+  canAddCondition,
   canMove,
   freshAction,
   freshCondition,
-  MAX_CONDITIONS,
   moveRule,
   removeCondition,
   removeRule,
@@ -64,6 +64,13 @@ const CONDITION_OPTIONS: readonly ConditionOption[] = SELECTABLE.flatMap((kind) 
     make: () => freshCondition(kind, value.endsWith(':more') ? 'more' : 'fewer'),
   })),
 );
+
+/**
+ * «Всегда» не выбирается в списке: безусловное Правило — это «иначе».
+ * Но файл Стороны допускает его и выше последней строки, и такое Правило,
+ * загруженное из файла, показывается как есть, а не пустым полем.
+ */
+const ALWAYS_OPTION: ConditionOption = { value: 'always', label: 'всегда', make: () => ({ kind: 'always' }) };
 
 const optionValue = (condition: DraftCondition): string =>
   condition.kind === 'allies-nearby' ? `allies-nearby:${String(condition['compare'])}` : condition.kind;
@@ -134,10 +141,11 @@ export function createRuleEditor(
 
   const conditionGroup = (index: number, at: number, condition: DraftCondition, count: number): HTMLElement => {
     const group = make('span', 'editor__condition');
-    const options = CONDITION_OPTIONS.map((option) => [option.value, option.label] as const);
+    const choices = condition.kind === 'always' ? [...CONDITION_OPTIONS, ALWAYS_OPTION] : CONDITION_OPTIONS;
+    const options = choices.map((option) => [option.value, option.label] as const);
     group.append(
       select(options, optionValue(condition), (value) => {
-        const option = CONDITION_OPTIONS.find((candidate) => candidate.value === value);
+        const option = choices.find((candidate) => candidate.value === value);
         if (option) commit(setCondition(rules, index, at, option.make()));
       }),
     );
@@ -203,7 +211,7 @@ export function createRuleEditor(
       if (at > 0) line.append(make('span', 'editor__word', 'и'));
       line.append(conditionGroup(index, at, condition, rule.when.length));
     });
-    if (rule.when.length < MAX_CONDITIONS) {
+    if (canAddCondition(rule)) {
       line.append(button('+ и', 'добавить Условие', () => commit(addCondition(rules, index, SELECTABLE))));
     }
     line.append(
