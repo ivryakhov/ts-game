@@ -1,7 +1,8 @@
 import { conditionsOf, type Action, type Behaviour, type Condition } from './rules.js';
-import { CITADEL_STATS, NEARBY_RANGE } from './balance.js';
+import { NEARBY_RANGE } from './balance.js';
 import { citadelReachOf, enemiesInSight } from './skirmish.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
+import type { SideId } from './types.js';
 
 /**
  * Исполнение Правил: каждый Тик каждый Юнит перебирает Правила своего типа
@@ -84,6 +85,8 @@ export function choose(
 export function surroundingsOf(
   units: readonly Unit[],
   roadLength: (roadId: string) => number,
+  /** Есть ли враг под стенами Цитадели Стороны — той же меркой, что у стен. */
+  besieged: (side: SideId) => boolean,
 ): Map<number, Surroundings> {
   return new Map(
     units.map((unit) => {
@@ -105,13 +108,6 @@ export function surroundingsOf(
           (unit.forward ? positionOn(other, length) > here : positionOn(other, length) < here),
       );
 
-      // «У своей Цитадели» — та же дальность, что у удара её стен: враг,
-      // которого они уже бьют. Мерка — где враг стоит сейчас, а не память
-      // об уроне: отошёл за стены — Условие снова ложно.
-      const besieged = units.some(
-        (other) => other.side !== unit.side && distanceTo(other, unit.home) <= CITADEL_STATS.range,
-      );
-
       return [
         unit.id,
         {
@@ -122,7 +118,9 @@ export function surroundingsOf(
           enemiesInSkirmish: seen.filter((enemy) => enemy.intent.kind !== 'retreat').length,
           enemyAhead: ahead,
           enemyCitadelInRange: distanceTo(unit, unit.foe) <= citadelReachOf(unit),
-          enemyAtHome: besieged,
+          // Враг, которого уже бьют стены: мерка — где он стоит сейчас,
+          // а не память об уроне. Отошёл за стены — Условие снова ложно.
+          enemyAtHome: besieged(unit.side),
         },
       ];
     }),
