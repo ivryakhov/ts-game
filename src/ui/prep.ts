@@ -2,6 +2,7 @@ import { parseBehaviour, UNIT_KINDS, type Behaviour, type Rule, type Seed, type 
 import { checkRules, draftFromBehaviour, draftRules, rawBehaviour, type Draft, type DraftError } from '../app/draft.js';
 import type { Preset } from '../app/presets.js';
 import { parseSeed } from '../app/seed.js';
+import { bindBehaviourFiles, offerDownload } from './behaviour-files.js';
 import { presetPicker } from './preset-picker.js';
 import { createRuleEditor } from './rule-editor.js';
 import { describeRule, UNIT_TITLES } from './rule-text.js';
@@ -22,8 +23,11 @@ export interface Prep {
   /** Заменить черновик игрока целиком. `file` — Поведение из player.json, Заготовка «Из файла». */
   setPlayer(player: Behaviour, file: Behaviour): void;
   hide(): void;
-  /** Показать ошибку, которую игрок должен исправить сам. Ошибки копятся. */
-  warn(message: string): void;
+  /**
+   * Показать ошибку, которую игрок должен исправить сам. Ошибки копятся.
+   * `keep` — текст, который игрок может скачать: отвергнутое не теряется молча.
+   */
+  warn(message: string, keep?: { label: string; name: string; text: string }): void;
 }
 
 type Tab = UnitKind | 'opponent';
@@ -70,8 +74,15 @@ function opponentView(behaviour: Behaviour): HTMLElement[] {
   ];
 }
 
-/** Матч начинается с Сидом и Поведением игрока — уже разобранным. */
-export function createPrep(onStart: (seed: Seed, player: Behaviour) => void, presets: readonly Preset[]): Prep {
+export interface PrepOptions {
+  /** Матч начинается с Сидом и Поведением игрока — уже разобранным. */
+  onStart(seed: Seed, player: Behaviour): void;
+  /** Игрок поправил Правила, и черновик без ошибок. */
+  onEdit(player: Behaviour): void;
+  readonly presets: readonly Preset[];
+}
+
+export function createPrep({ onStart, onEdit, presets }: PrepOptions): Prep {
   const panel = element('prep');
   const tabs = element('prep-tabs');
   const body = element('prep-body');
@@ -102,14 +113,25 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void, pre
     checkSeed();
   };
 
+  /** Поведение с экрана — то, что прошло разбор файла, или null при ошибке. */
+  const current = (): Behaviour | null => (draft && errors.size === 0 ? parseBehaviour(rawBehaviour(draft)) : null);
+
+  /** После правки игрока: проверить и, если ошибок нет, сохранить. */
+  const edited = (redraw: boolean): void => {
+    if (redraw) render();
+    else check();
+    const behaviour = current();
+    if (behaviour) onEdit(behaviour);
+  };
+
   const playerView = (kind: UnitKind, rules: Draft): HTMLElement[] => {
     editor = createRuleEditor(rules[kind], (next) => {
       draft = draft && { ...draft, [kind]: next };
-      check();
+      edited(false);
     });
     const picker = presetPicker(presets, file?.[kind] ?? [], `Правила типа «${UNIT_TITLES[kind]}»`, (chosen) => {
       draft = draft && { ...draft, [kind]: draftRules(chosen) };
-      render();
+      edited(true);
     });
     return [statsCard(kind), picker, editor.element];
   };
@@ -144,9 +166,17 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void, pre
   /** Последний рубеж — тот же разбор, что у файла Стороны. */
   const begin = (): void => {
     const seed = checkSeed();
-    if (seed === null || !draft || errors.size > 0) return;
-    onStart(seed, parseBehaviour(rawBehaviour(draft)));
+    const behaviour = current();
+    if (seed !== null && behaviour) onStart(seed, behaviour);
   };
+
+  bindBehaviourFiles({
+    current,
+    load(behaviour): void {
+      draft = draftFromBehaviour(behaviour);
+      edited(true);
+    },
+  });
 
   seedInput.addEventListener('input', checkSeed);
   seedInput.addEventListener('keydown', (event) => {
@@ -173,8 +203,15 @@ export function createPrep(onStart: (seed: Seed, player: Behaviour) => void, pre
       panel.hidden = true;
     },
 
-    warn(message): void {
-      warning.append(block('div', 'prep__warning-line', message));
+    warn(message, keep): void {
+      const line = block('div', 'prep__warning-line', message);
+      if (keep) {
+        const button = block('button', 'button prep__warning-action', keep.label);
+        button.type = 'button';
+        button.addEventListener('click', () => offerDownload(keep.name, keep.text));
+        line.append(' ', button);
+      }
+      warning.append(line);
       warning.hidden = false;
     },
   };

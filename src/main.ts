@@ -24,6 +24,7 @@ import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
 import { parsePresets, type Preset } from './app/presets.js';
 import { freshSeed } from './app/seed.js';
+
 import { bindUnitChoice } from './app/unit-choice.js';
 import opponentFile from './behaviours/opponent.json';
 import playerFile from './behaviours/player.json';
@@ -35,6 +36,7 @@ import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
 import { createPrep } from './ui/prep.js';
+import { readSaved, writeSaved } from './ui/saved.js';
 
 /**
  * Предел матча — двадцать минут. Матч кончается разрушением Цитадели;
@@ -60,10 +62,14 @@ try {
   presetsProblem = `Файл presets.json отвергнут — ${error instanceof Error ? error.message : String(error)}.`;
 }
 
-const prep = createPrep((next, behaviour) => {
-  playerBehaviour = behaviour;
-  startMatch(next);
-}, presets);
+const prep = createPrep({
+  onStart(next, behaviour) {
+    playerBehaviour = behaviour;
+    startMatch(next);
+  },
+  onEdit: writeSaved,
+  presets,
+});
 if (presetsProblem) prep.warn(presetsProblem);
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
@@ -108,8 +114,17 @@ const opponentSide = loadSide(
  * Поведение игрока — то, с которым начат последний матч: с Подготовки,
  * а до первого старта — из файла. «Переиграть» берёт его же.
  */
-let playerBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
-prep.setPlayer(playerBehaviour, playerBehaviour);
+const fileBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
+const saved = readSaved();
+let playerBehaviour: Behaviour = saved.kind === 'ok' ? saved.behaviour : fileBehaviour;
+if (saved.kind === 'rejected') {
+  prep.warn(`Сохранённые Правила отвергнуты — ${saved.problem}. Взяты Правила из player.json.`, {
+    label: 'Скачать отвергнутый набор',
+    name: 'rejected-behaviour.json',
+    text: saved.text,
+  });
+}
+prep.setPlayer(playerBehaviour, fileBehaviour);
 
 /**
  * Матч получает копии Сторон: что бы ни случилось с Поведением на

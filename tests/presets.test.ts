@@ -25,8 +25,8 @@ describe('Заготовки', () => {
   );
 
   it('ошибка называет Заготовку и место', () => {
-    expect(() => parsePresets({ Бой: [{ when: { kind: 'hp-below', percent: 120 }, do: { kind: 'retreat' } }] })).toThrow(
-      /Поведение, Бой\[0\]\.when\.percent/,
+    expect(() => parsePresets({ Рывок: [{ when: { kind: 'hp-below', percent: 120 }, do: { kind: 'retreat' } }] })).toThrow(
+      /Поведение, Рывок\[0\]\.when\.percent/,
     );
   });
 

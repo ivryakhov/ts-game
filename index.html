@@ -203,6 +203,8 @@
       }
       .prep__error { color: #fca5a5; font-size: 12px; }
       .prep__start { margin-left: auto; }
+      .prep__files { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -6px 0 12px; }
+      .prep__warning-action { margin-left: 6px; padding: 2px 8px; font-size: 12px; }
       .prep__presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
       .prep__tab--error { border-color: rgba(248, 113, 113, 0.7); color: #fca5a5; }
 
@@ -261,6 +263,12 @@
       <h1 class="prep__title">Подготовка</h1>
       <div class="prep__warning" id="prep-warning" hidden></div>
       <nav class="prep__tabs" id="prep-tabs"></nav>
+      <div class="prep__files">
+        <button type="button" class="button editor__button" id="prep-download" title="Правила всех трёх типов файлом player.json">Скачать Правила</button>
+        <button type="button" class="button editor__button" id="prep-upload" title="Заменить Правила всех трёх типов файлом">Загрузить Правила</button>
+        <input type="file" id="prep-upload-input" accept=".json,application/json" hidden />
+        <span class="prep__error" id="prep-file-status" hidden></span>
+      </div>
       <div id="prep-body"></div>
       <footer class="prep__footer">
         <label>Сид <input class="prep__seed-input" id="prep-seed" type="text" inputmode="numeric" autocomplete="off" /></label>
