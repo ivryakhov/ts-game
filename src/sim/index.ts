@@ -2,12 +2,16 @@
 export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export { sideFromFile } from './side-file.js';
+export { FileError } from './parse.js';
 export type { Wave } from './waves.js';
 export {
+  ACTION_KINDS,
+  CONDITION_KINDS,
   DEFAULT_BEHAVIOUR,
   conditionsOf,
   isFallback,
   parseBehaviour,
+  parseRules,
   type Action,
   type Behaviour,
   type Condition,

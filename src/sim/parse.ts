@@ -5,7 +5,13 @@
  */
 
 export class FileError extends Error {
-  constructor(part: string, where: string, what: string) {
+  constructor(
+    part: string,
+    /** Место ошибки: `tank[1].when[0].count`. Редактор ставит текст рядом с ним. */
+    readonly where: string,
+    /** Что не так — без названия части и места. */
+    readonly what: string,
+  ) {
     super(`${part}, ${where}: ${what}`);
     this.name = 'FileError';
   }

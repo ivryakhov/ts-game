@@ -49,7 +49,10 @@ if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud(PLAYER_SIDE);
-const prep = createPrep((seed) => startMatch(seed));
+const prep = createPrep((next, behaviour) => {
+  playerBehaviour = behaviour;
+  startMatch(next);
+});
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
   edit: () => openPrep(),
@@ -90,13 +93,20 @@ const opponentSide = loadSide(
 );
 
 /**
+ * Поведение игрока — то, с которым начат последний матч: с Подготовки,
+ * а до первого старта — из файла. «Переиграть» берёт его же.
+ */
+let playerBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
+prep.setPlayer(playerBehaviour);
+
+/**
  * Матч получает копии Сторон: что бы ни случилось с Поведением на
  * Подготовке после старта, идущий матч оно не задевает.
  */
 const setupFor = (seed: Seed): MatchSetup => ({
   seed,
   map: arena,
-  sides: [structuredClone(playerSide), structuredClone(opponentSide)],
+  sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide)],
   releases: [],
   maxTicks: MATCH_LIMIT_TICKS,
 });
@@ -153,7 +163,7 @@ function openPrep(): void {
   phase = 'prep';
   document.body.dataset['phase'] = phase;
   selectedUnit = null;
-  prep.show(seed, behaviourOf(PLAYER_SIDE), behaviourOf(OPPONENT_SIDE));
+  prep.show(seed, behaviourOf(OPPONENT_SIDE));
 }
 
 function fit(): void {
