@@ -2,6 +2,7 @@ import { conditionsOf, type Action, type Behaviour, type Condition } from './rul
 import { CITADEL_RADIUS, NEARBY_RANGE } from './balance.js';
 import { enemiesInSight } from './skirmish.js';
 import { reachOfStructure } from './structure.js';
+import { obeliskInSight, type Obelisk } from './obelisk.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
 import type { SideId } from './types.js';
 
@@ -31,6 +32,8 @@ export interface Surroundings {
   readonly enemyCitadelInRange: boolean;
   /** Стоит ли враг под стенами своей Цитадели — на любом расстоянии от Юнита. */
   readonly enemyAtHome: boolean;
+  /** Видит ли он ничей или вражеский Обелиск. */
+  readonly obeliskInRange: boolean;
 }
 
 export function holds(condition: Condition, unit: Unit, around: Surroundings): boolean {
@@ -55,6 +58,8 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
       return around.enemyCitadelInRange;
     case 'enemy-at-home':
       return around.enemyAtHome;
+    case 'obelisk-in-range':
+      return around.obeliskInRange;
   }
 }
 
@@ -85,6 +90,7 @@ export function choose(
  */
 export function surroundingsOf(
   units: readonly Unit[],
+  obelisks: readonly Obelisk[],
   roadLength: (roadId: string) => number,
   /** Есть ли враг под стенами Цитадели Стороны — той же меркой, что у стен. */
   besieged: (side: SideId) => boolean,
@@ -123,6 +129,7 @@ export function surroundingsOf(
           // Враг, которого уже бьют стены: мерка — где он стоит сейчас,
           // а не память об уроне. Отошёл за стены — Условие снова ложно.
           enemyAtHome: besieged(unit.side),
+          obeliskInRange: obeliskInSight(obelisks, unit) !== null,
         },
       ];
     }),
