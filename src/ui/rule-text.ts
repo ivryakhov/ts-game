@@ -40,6 +40,8 @@ export function describeCondition(condition: Condition): string {
       return 'враг впереди';
     case 'enemy-citadel-in-range':
       return 'чужая Цитадель в радиусе';
+    case 'enemy-at-home':
+      return 'враг у своей Цитадели';
   }
 }
 
