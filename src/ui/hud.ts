@@ -46,6 +46,7 @@ export function createHud(playerSide: SideId): Hud {
   const speed = element('hud-speed');
   const seed = element('hud-seed');
   const outcome = element('hud-outcome');
+  const outcomeText = element('hud-outcome-text');
   const ether = element('hud-ether');
   const kinds = element('hud-kinds');
   const warning = element('hud-warning');
@@ -93,12 +94,10 @@ export function createHud(playerSide: SideId): Hud {
 
       const headline =
         result.winner === null ? 'Время вышло' : result.winner === playerSide ? 'Победа' : 'Поражение';
-      outcome.innerHTML = '';
-      outcome.append(headline);
       const detail = document.createElement('small');
       const who = result.winner === null ? 'ничья' : `победила Сторона ${result.winner}`;
       detail.textContent = `${who}, матч длился ${formatMatchTime(result.tick)}`;
-      outcome.append(detail);
+      outcomeText.replaceChildren(headline, detail);
     },
   };
 }
