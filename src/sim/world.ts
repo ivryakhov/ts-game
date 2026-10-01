@@ -148,7 +148,12 @@ function mend(world: World): void {
 
 /** Каждый Юнит выбирает Действие по Правилам своей Стороны. */
 function decide(world: World): void {
-  const around = surroundingsOf(world.units, (roadId) => roadOf(world, roadId).metrics.length);
+  const besieged = new Set(world.sides.filter((side) => underTheWalls(world, side).length > 0));
+  const around = surroundingsOf(
+    world.units,
+    (roadId) => roadOf(world, roadId).metrics.length,
+    (side) => besieged.has(side),
+  );
 
   for (const unit of world.units) {
     const behaviour = world.behaviours.get(unit.side) ?? DEFAULT_BEHAVIOUR;
@@ -161,22 +166,27 @@ function decide(world: World): void {
 }
 
 /**
+ * Враги, которых достают стены Цитадели Стороны, — от её центра, а не от
+ * конца Дороги: тот может отстоять от центра. Этой же меркой Юниты знают,
+ * что враг у их Цитадели, — иначе Условие и стены разошлись бы на краю.
+ */
+function underTheWalls(world: World, side: SideId): readonly InReach[] {
+  const at = world.citadels.get(side)?.at;
+  if (!at) return [];
+  return world.units.flatMap((unit) => {
+    if (unit.side === side) return [];
+    const distance = distanceTo(unit, at);
+    return distance <= CITADEL_STATS.range ? [{ unit, distance }] : [];
+  });
+}
+
+/**
  * Цитадели отвечают ударом. Расстояние меряется по прямой от центра
  * Цитадели: стены бьют любого врага рядом, по какой бы Дороге он ни пришёл
  * и как бы далеко от неё ни сошёл.
  */
 function holdTheWalls(world: World, events: MatchEvent[]): void {
-  const reachOf = (side: SideId): readonly InReach[] => {
-    const at = world.citadels.get(side)?.at;
-    if (!at) return [];
-    return world.units.flatMap((unit) => {
-      if (unit.side === side) return [];
-      const distance = distanceTo(unit, at);
-      return distance <= CITADEL_STATS.range ? [{ unit, distance }] : [];
-    });
-  };
-
-  const fallen = defend(world.citadels, reachOf, world.tick, events);
+  const fallen = defend(world.citadels, (side) => underTheWalls(world, side), world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
 }
 

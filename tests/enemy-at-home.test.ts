@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CITADEL_STATS, DEFAULT_BEHAVIOUR, createMatch } from '@sim/index';
-import type { Behaviour, MatchResult, Release, Rule, SideId, UnitSnapshot } from '@sim/index';
+import type { Behaviour, GameMap, MatchResult, Release, Rule, SideId, UnitSnapshot } from '@sim/index';
 import { arena } from '../src/maps/arena.js';
 import { army, matchSetup } from './match-setup.js';
 
@@ -76,6 +76,54 @@ describe('Условие «враг у своей Цитадели»', () => {
     // Развернулся далеко от дома: Условие не зависит от того, где он стоит.
     const turned = ticks.find((tick) => tick.ours?.state === 'retreating')?.ours;
     expect(turned && fromHomeA(turned)).toBeGreaterThan(500);
+  });
+
+  it('мерится от центра Цитадели, как удар стен, а не от конца Дороги', () => {
+    // Конец обходной Дороги на единицу левее центра Цитадели A — карта это
+    // допускает. Враг с короткой Дороги встаёт ровно в 110 от центра: стены
+    // его уже бьют, а от конца Дороги до него 111.
+    const point = (x: number, y = 420) => ({ x, y });
+    const offset: GameMap = {
+      size: { width: 1200, height: 840 },
+      citadels: [
+        { side: 'A', at: point(150) },
+        { side: 'B', at: point(1052) },
+      ],
+      roads: [
+        { id: 'short', from: 'A', to: 'B', points: [point(150), point(450), point(750), point(1052)] },
+        { id: 'north', from: 'A', to: 'B', points: [point(149), point(250, 100), point(950, 100), point(1052)] },
+      ],
+      resourcePoints: [],
+    };
+    const match = createMatch(
+      matchSetup({
+        map: offset,
+        sides: [
+          { id: 'A', behaviour: everyone([GO_HOME, ADVANCE]) },
+          { id: 'B', behaviour: DEFAULT_BEHAVIOUR },
+        ],
+        releases: [
+          { tick: 100, side: 'A', kind: 'deploy', roadId: 'north', unit: 'scout' },
+          { tick: 40, side: 'B', kind: 'deploy', roadId: 'short', unit: 'scout' },
+        ],
+        maxTicks: 200,
+      }),
+    );
+    const ticks: { wallsFire: boolean; retreating: boolean }[] = [];
+    while (!match.finished) {
+      match.step();
+      const { units, citadels } = match.snapshot();
+      ticks.push({
+        wallsFire: citadels.find((citadel) => citadel.side === 'A')?.target != null,
+        retreating: units.find((unit) => unit.side === 'A')?.state === 'retreating',
+      });
+    }
+
+    const first = ticks.findIndex((tick) => tick.wallsFire);
+    expect(first).toBeGreaterThan(0);
+    // Решение следующего Тика — по расстановке, при которой стены ударили.
+    expect(ticks[first]?.retreating).toBe(false);
+    expect(ticks[first + 1]?.retreating).toBe(true);
   });
 
   // Танк осаждает Цитадель A; наш Разведчик вышел позже и ушёл далеко
