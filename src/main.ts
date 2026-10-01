@@ -1,7 +1,8 @@
 /**
- * Точка входа браузерной сборки: холст, матч, цикл кадров и управление
- * временем.
+ * Точка входа браузерной сборки: холст, Подготовка, матч, цикл кадров
+ * и управление временем.
  *
+ * Игра открывается Подготовкой; матч создаётся заново на каждый старт.
  * Симуляция идёт фиксированным Тиком, экран обновляется чаще и сглаживает
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
@@ -9,7 +10,9 @@
 import { createMatch, DEFAULT_BEHAVIOUR, sideFromFile, TICKS_PER_SECOND } from '@sim/index';
 import type {
   Behaviour,
+  LiveMatch,
   MatchSetup,
+  Seed,
   SideId,
   SideSetup,
   UnitId,
@@ -19,25 +22,23 @@ import type {
 import { bindTimeControls } from './app/controls.js';
 import { createPacer } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
+import { freshSeed } from './app/seed.js';
 import { bindUnitChoice } from './app/unit-choice.js';
 import opponentFile from './behaviours/opponent.json';
 import playerFile from './behaviours/player.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
+import { rememberSeed, seedFromAddress } from './ui/address.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
+import { bindOutcomeActions } from './ui/outcome.js';
+import { createPrep } from './ui/prep.js';
 
 /**
  * Предел матча — двадцать минут. Матч кончается разрушением Цитадели;
  * предел нужен только затем, чтобы равный матч не шёл вечно.
  */
 const MATCH_LIMIT_TICKS = 20 * 60 * TICKS_PER_SECOND;
-
-/** Сид берётся из адреса: ?seed=123 — так матч можно переиграть заново. */
-function seedFromLocation(): number {
-  const asked = Number(new URLSearchParams(window.location.search).get('seed'));
-  return Number.isInteger(asked) && asked >= 0 ? asked : 1;
-}
 
 /** За кого играет человек. Выбор Стороны появится вместе с меню матча. */
 const PLAYER_SIDE: SideId = 'A';
@@ -48,6 +49,12 @@ if (!canvas) throw new Error('Не найден холст #stage');
 
 const renderer = createCanvasRenderer(canvas, arena, PLAYER_SIDE);
 const hud = createHud(PLAYER_SIDE);
+const prep = createPrep((seed) => startMatch(seed));
+const outcome = bindOutcomeActions({
+  replay: () => startMatch(seed),
+  edit: () => openPrep(),
+  newSeed: () => startMatch(freshSeed(seed)),
+});
 
 /**
  * Сторона из файла в src/behaviours. Файлы правит человек, поэтому
@@ -60,32 +67,47 @@ function loadSide(id: SideId, raw: unknown, file: string, fallback: string): Sid
     return sideFromFile(id, raw, arena);
   } catch (error) {
     const problem = error instanceof Error ? error.message : String(error);
-    hud.warn(`Файл ${file} отвергнут — ${problem}. ${fallback}`);
+    const message = `Файл ${file} отвергнут — ${problem}. ${fallback}`;
+    hud.warn(message);
+    prep.warn(message);
     return { id };
   }
 }
 
-const seed = seedFromLocation();
 // Противник — такая же Сторона из такого же файла, только со списком Волн:
 // Юнитов он выпускает сам, отдельного кода для него нет (ADR-0003).
-const setup: MatchSetup = {
+const playerSide = loadSide(
+  PLAYER_SIDE,
+  playerFile,
+  'player.json',
+  'Юниты игрока действуют по Поведению по умолчанию.',
+);
+const opponentSide = loadSide(
+  OPPONENT_SIDE,
+  opponentFile,
+  'opponent.json',
+  'Противник не выпускает Юнитов, пока файл не исправлен.',
+);
+
+/**
+ * Матч получает копии Сторон: что бы ни случилось с Поведением на
+ * Подготовке после старта, идущий матч оно не задевает.
+ */
+const setupFor = (seed: Seed): MatchSetup => ({
   seed,
   map: arena,
-  sides: [
-    loadSide(PLAYER_SIDE, playerFile, 'player.json', 'Юниты игрока действуют по Поведению по умолчанию.'),
-    loadSide(
-      OPPONENT_SIDE,
-      opponentFile,
-      'opponent.json',
-      'Противник не выпускает Юнитов, пока файл не исправлен.',
-    ),
-  ],
+  sides: [structuredClone(playerSide), structuredClone(opponentSide)],
   releases: [],
   maxTicks: MATCH_LIMIT_TICKS,
-};
+});
+
+/** Подготовка или матч. На Подготовке время стоит и ввод матча молчит. */
+let phase: 'prep' | 'match' = 'prep';
+let seed: Seed = seedFromAddress();
+let setup: MatchSetup = setupFor(seed);
+let match: LiveMatch = createMatch(setup);
 
 const pacer = createPacer(TICKS_PER_SECOND);
-const match = createMatch(setup);
 /** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */
 let chosenKind: UnitKind = 'scout';
 
@@ -96,13 +118,14 @@ let selectedUnit: UnitId | null = null;
 const behaviourOf = (side: SideId): Behaviour =>
   setup.sides.find((entry) => entry.id === side)?.behaviour ?? DEFAULT_BEHAVIOUR;
 const inspector = createInspector(behaviourOf);
+const inMatch = (): boolean => phase === 'match' && !match.finished;
 
 const pointer = bindPointer(canvas, renderer, {
   onRelease(roadId) {
-    match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
+    if (inMatch()) match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
   },
   onSelect(unit) {
-    selectedUnit = unit;
+    if (phase === 'match') selectedUnit = unit;
   },
   selected: () => selectedUnit,
 });
@@ -111,13 +134,36 @@ let previous: WorldSnapshot = match.snapshot();
 let current: WorldSnapshot = match.snapshot();
 let lastFrameMs = performance.now();
 
+/** Новый матч с теми же Сторонами. Сид попадает в адрес — матч можно повторить. */
+function startMatch(next: Seed): void {
+  seed = next;
+  rememberSeed(seed);
+  setup = setupFor(seed);
+  match = createMatch(setup);
+  previous = match.snapshot();
+  current = previous;
+  selectedUnit = null;
+  pacer.paused = false;
+  phase = 'match';
+  document.body.dataset['phase'] = phase;
+  prep.hide();
+}
+
+function openPrep(): void {
+  phase = 'prep';
+  document.body.dataset['phase'] = phase;
+  selectedUnit = null;
+  prep.show(seed, behaviourOf(PLAYER_SIDE), behaviourOf(OPPONENT_SIDE));
+}
+
 function fit(): void {
   renderer.resize(window.innerWidth, window.innerHeight);
 }
 
 function frame(nowMs: number): void {
-  const due = pacer.advance(nowMs - lastFrameMs);
+  const delta = nowMs - lastFrameMs;
   lastFrameMs = nowMs;
+  const due = phase === 'match' ? pacer.advance(delta) : 0;
 
   // Смерти копятся за все Тики кадра: на восьмикратной скорости их
   // в одном кадре несколько, и ни одна не должна пропасть.
@@ -141,10 +187,10 @@ function frame(nowMs: number): void {
     current = next;
   }
 
-  // Когда матч кончился или стоит на паузе, сглаживать нечего: иначе доля
-  // кадра продолжает бегать от нуля к единице, и картинка вечно дёргается
-  // между двумя разными снимками.
-  const still = match.finished || pacer.paused;
+  // Когда матч кончился, стоит на паузе или ещё не начат, сглаживать
+  // нечего: иначе доля кадра продолжает бегать от нуля к единице, и
+  // картинка вечно дёргается между двумя разными снимками.
+  const still = phase === 'prep' || match.finished || pacer.paused;
   if (still) previous = current;
   const alpha = still ? 0 : pacer.alpha;
 
@@ -160,7 +206,7 @@ function frame(nowMs: number): void {
     alpha,
     matchMs,
     realMs: nowMs,
-    highlightedRoad: pointer.hovered,
+    highlightedRoad: inMatch() ? pointer.hovered : null,
     selectedUnit,
   });
 
@@ -178,14 +224,17 @@ function frame(nowMs: number): void {
     incomePerSecond: purse?.incomePerSecond ?? 0,
     chosenKind,
   });
-  hud.announce(match.finished ? { winner: match.winner, tick: current.tick } : null);
+  const ended = phase === 'match' && match.finished;
+  hud.announce(ended ? { winner: match.winner, tick: current.tick } : null);
+  outcome.show(ended);
   window.requestAnimationFrame(frame);
 }
 
 fit();
-bindTimeControls(pacer);
+bindTimeControls(pacer, inMatch);
 bindUnitChoice((kind) => {
   chosenKind = kind;
-});
+}, inMatch);
 window.addEventListener('resize', fit);
+openPrep();
 window.requestAnimationFrame(frame);
