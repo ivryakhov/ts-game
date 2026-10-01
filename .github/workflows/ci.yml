@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Запуски на одной ветке идут по очереди целиком (проверки + деплой), иначе
+# более старый push мог бы выкатиться на Pages позже нового. Ожидающий запуск
+# вытесняется более новым, поэтому на сайт попадает последний коммит main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -18,3 +25,22 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build
+      # Сборка с main уходит на GitHub Pages в job deploy ниже.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
