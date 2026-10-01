@@ -252,6 +252,7 @@ function frame(nowMs: number): void {
   if (!selected) selectedUnit = null;
   inspector.show(selected, current);
   const purse = current.ether.find((entry) => entry.side === PLAYER_SIDE);
+  const foe = current.ether.find((entry) => entry.side !== PLAYER_SIDE);
   hud.update({
     tick: current.tick,
     speed: pacer.speed,
@@ -259,6 +260,7 @@ function frame(nowMs: number): void {
     seed,
     ether: purse?.amount ?? 0,
     incomePerSecond: purse?.incomePerSecond ?? 0,
+    foeIncomePerSecond: foe?.incomePerSecond ?? 0,
     chosenKind,
   });
   const ended = phase === 'match' && match.finished;

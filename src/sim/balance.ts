@@ -153,4 +153,6 @@ export const OBELISK_STATS = {
   damagePerTick: perTick(8),
   /** Дальность удара по прямой от центра: достаёт идущих по Дороге. */
   range: 110,
+  /** Доход владельцу в секунду — сверх базового дохода Стороны. */
+  incomePerSecond: 1.5,
 } as const;

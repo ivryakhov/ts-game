@@ -17,6 +17,8 @@ export interface Hud {
     seed: number;
     ether: number;
     incomePerSecond: number;
+    /** Доход противника в секунду — чтобы видеть, кто выигрывает экономику. */
+    foeIncomePerSecond: number;
     chosenKind: UnitKind;
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
@@ -48,6 +50,7 @@ export function createHud(playerSide: SideId): Hud {
   const outcome = element('hud-outcome');
   const outcomeText = element('hud-outcome-text');
   const ether = element('hud-ether');
+  const foeIncome = element('hud-foe-income');
   const kinds = element('hud-kinds');
   const warning = element('hud-warning');
 
@@ -65,7 +68,8 @@ export function createHud(playerSide: SideId): Hud {
       speed.textContent = state.paused ? `×${state.speed} пауза` : `×${state.speed}`;
       speed.classList.toggle('hud__paused', state.paused);
       seed.textContent = String(state.seed);
-      ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond}/с)`;
+      ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond.toFixed(1)}/с)`;
+      foeIncome.textContent = `+${state.foeIncomePerSecond.toFixed(1)}/с`;
 
       for (const { kind, slot } of slots) {
         slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);
