@@ -7,7 +7,7 @@
 
 **Блокируется:** 17 — Редактор Правил.
 
-**Статус:** ready-for-agent
+**Статус:** ready-for-agent · **Задача:** [ivryakhov/ts-game#11](https://github.com/ivryakhov/ts-game/issues/11)
 
 - [ ] Поведение игрока сохраняется в браузере (`neon-arcana:behaviour`, формат `player.json` без Волн) после каждой правки, если черновик без ошибок
 - [ ] При запуске берётся сохранение, а без него — `player.json`
