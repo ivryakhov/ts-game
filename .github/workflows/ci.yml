@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Запуски на одной ветке идут по очереди целиком (проверки + деплой), иначе
+# более старый push мог бы выкатиться на Pages позже нового. Ожидающий запуск
+# вытесняется более новым, поэтому на сайт попадает последний коммит main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -31,9 +38,6 @@ jobs:
     permissions:
       pages: write
       id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
