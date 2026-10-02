@@ -1,0 +1,20 @@
+{
+  "name": "Раш · Лёгкий",
+  "description": "Разведчики по двое рано и часто по обходным Дорогам; бросаются на ближайшего.",
+  "scout": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "tank": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "ranger": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "waves": [
+    {"road": "north", "units": ["scout", "scout"]},
+    {"road": "south", "units": ["scout", "scout"]}
+  ]
+}

@@ -16,3 +16,14 @@ export function rememberSeed(seed: Seed): void {
   url.searchParams.set('seed', String(seed));
   window.history.replaceState(null, '', url);
 }
+
+/** Противник в адресе: ?opponent=rush-easy. Без него — противник по умолчанию. */
+export function opponentFromAddress(): string | null {
+  return new URLSearchParams(window.location.search).get('opponent');
+}
+
+export function rememberOpponent(id: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set('opponent', id);
+  window.history.replaceState(null, '', url);
+}

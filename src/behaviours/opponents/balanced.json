@@ -1,0 +1,28 @@
+{
+  "name": "Сбалансированный",
+  "description": "Всех типов понемногу и по всем трём Дорогам, раненых бережёт.",
+  "scout": [
+    {"when": {"kind": "hp-below", "percent": 35}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-weakest"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "tank": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "obelisk-in-range"}, "do": {"kind": "siege-obelisk"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "ranger": [
+    {"when": {"kind": "hp-below", "percent": 50}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-most-dangerous"}},
+    {"when": {"kind": "obelisk-in-range"}, "do": {"kind": "siege-obelisk"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "waves": [
+    {"road": "short", "units": ["tank", "ranger", "ranger"]},
+    {"road": "north", "units": ["scout", "scout", "scout", "scout"]},
+    {"road": "short", "units": ["tank", "tank", "ranger", "ranger"]},
+    {"road": "south", "units": ["tank", "ranger", "ranger"]}
+  ]
+}

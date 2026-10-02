@@ -1,0 +1,34 @@
+{
+  "name": "Черепаха",
+  "description": "Копит армию у своей Цитадели и выходит одной большой Волной; врага у ворот встречает всеми.",
+  "scout": [
+    {"when": [{"kind": "enemy-at-home"}, {"kind": "enemy-in-range"}], "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "enemy-at-home"}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": [{"kind": "at-home"}, {"kind": "allies-nearby", "compare": "fewer", "count": 7}], "do": {"kind": "hold"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "tank": [
+    {"when": [{"kind": "enemy-at-home"}, {"kind": "enemy-in-range"}], "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "enemy-at-home"}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": [{"kind": "at-home"}, {"kind": "allies-nearby", "compare": "fewer", "count": 7}], "do": {"kind": "hold"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "ranger": [
+    {"when": [{"kind": "enemy-at-home"}, {"kind": "enemy-in-range"}], "do": {"kind": "attack-most-dangerous"}},
+    {"when": {"kind": "enemy-at-home"}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "hp-below", "percent": 40}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-most-dangerous"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": [{"kind": "at-home"}, {"kind": "allies-nearby", "compare": "fewer", "count": 7}], "do": {"kind": "hold"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "waves": [
+    {"road": "short", "units": ["tank", "tank"]},
+    {"road": "short", "units": ["ranger", "ranger", "ranger"]},
+    {"road": "short", "units": ["tank", "ranger", "ranger", "scout"]}
+  ]
+}

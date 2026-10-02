@@ -1,0 +1,23 @@
+{
+  "name": "Раш · Средний",
+  "description": "Разведчики тройками по всем трём Дорогам, добивают слабейших и отходят лечиться.",
+  "scout": [
+    {"when": {"kind": "hp-below", "percent": 30}, "do": {"kind": "retreat"}},
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-weakest"}},
+    {"when": [{"kind": "at-home"}, {"kind": "hp-below", "percent": 100}], "do": {"kind": "retreat"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "tank": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "ranger": [
+    {"when": {"kind": "enemy-in-range"}, "do": {"kind": "attack-nearest"}},
+    {"when": {"kind": "always"}, "do": {"kind": "advance"}}
+  ],
+  "waves": [
+    {"road": "north", "units": ["scout", "scout", "scout"]},
+    {"road": "south", "units": ["scout", "scout", "scout"]},
+    {"road": "short", "units": ["scout", "scout", "scout"]}
+  ]
+}
