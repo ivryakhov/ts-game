@@ -2,6 +2,7 @@
 export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export { sideFromFile } from './side-file.js';
+export { parseBehaviour, parseRules } from './rule-parse.js';
 export {
   KILLER_KINDS,
   type DamageDealt,
@@ -17,8 +18,6 @@ export {
   DEFAULT_BEHAVIOUR,
   conditionsOf,
   isFallback,
-  parseBehaviour,
-  parseRules,
   type Action,
   type Behaviour,
   type Condition,

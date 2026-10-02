@@ -15,7 +15,7 @@ import {
   type DraftError,
   type DraftRules,
 } from '../app/draft.js';
-import { describeAction, UNIT_TITLES } from './rule-text.js';
+import { describeAction, UNIT_GENITIVE_PLURAL, UNIT_TITLES } from './rule-text.js';
 
 /**
  * Редактор Правил одного типа: строки «если [Условие ▾][N] и … —
@@ -44,6 +44,7 @@ interface ConditionOption {
 const CONDITION_LABELS: Readonly<Record<Selectable, readonly (readonly [string, string])[]>> = {
   'hp-below': [['hp-below', 'здоровье ниже']],
   'enemy-in-range': [['enemy-in-range', 'враг в радиусе']],
+  'enemy-kind-in-range': [['enemy-kind-in-range', 'вижу врага типа']],
   'at-home': [['at-home', 'у своей Цитадели']],
   'allies-nearby': [
     ['allies-nearby:fewer', 'своих рядом меньше'],
@@ -82,6 +83,21 @@ const NUMBER_FIELD: Partial<Record<ConditionKind, readonly [string, string]>> = 
   'allies-nearby': ['count', ''],
   'enemies-in-skirmish': ['above', ''],
 };
+
+/**
+ * Выбор типа у Условия: у «вижу врага типа» он обязателен, у «своих рядом»
+ * — нет, и пустой пункт значит своих любого типа.
+ */
+const UNIT_FIELD: Partial<Record<ConditionKind, readonly (readonly [string, string])[]>> = {
+  'enemy-kind-in-range': UNIT_KINDS.map((kind) => [kind, UNIT_TITLES[kind]] as const),
+  'allies-nearby': [['', 'любых'], ...UNIT_KINDS.map((kind) => [kind, UNIT_GENITIVE_PLURAL[kind]] as const)],
+};
+
+/** Условие с выбранным типом; пустой выбор убирает тип совсем. */
+function withUnit(condition: DraftCondition, unit: string): DraftCondition {
+  const { unit: _unit, ...rest } = condition;
+  return unit === '' ? (rest as DraftCondition) : { ...rest, unit };
+}
 
 const actionLabel = (kind: (typeof ACTION_KINDS)[number]): string =>
   kind === 'attack-kind' ? 'бить тип' : describeAction(freshAction(kind));
@@ -164,6 +180,17 @@ export function createRuleEditor(
       });
       group.append(input);
       if (suffix) group.append(suffix);
+    }
+
+    const units = UNIT_FIELD[condition.kind];
+    if (units) {
+      group.append(
+        select(units, String(condition['unit'] ?? ''), (unit) => {
+          // Число могли поправить после отрисовки — берём Условие из черновика.
+          const current = rules[index]?.when[at];
+          if (current) commit(setCondition(rules, index, at, withUnit(current, unit)));
+        }),
+      );
     }
 
     if (count > 1) group.append(button('✕', 'убрать Условие', () => commit(removeCondition(rules, index, at))));
