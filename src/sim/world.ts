@@ -120,7 +120,7 @@ export function createWorld(setup: MatchSetup): World {
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
 
-  collectIncome(world.purses);
+  collectIncome(world.purses, world.obelisks);
   for (const action of world.schedule.get(world.tick) ?? []) applyRelease(world, action, events);
   for (const action of callWaves(world.waveCycles, world.purses)) {
     applyRelease(world, action, events);
@@ -270,6 +270,6 @@ export function snapshot(world: World): WorldSnapshot {
     }),
     citadels: citadelSnapshots(world.citadels),
     obelisks: obeliskSnapshots(world.obelisks),
-    ether: etherSnapshots(world.purses),
+    ether: etherSnapshots(world.purses, world.obelisks),
   };
 }
