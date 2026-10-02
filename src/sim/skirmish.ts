@@ -6,7 +6,9 @@ import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
 /**
  * Стычка — столкновение враждебных Юнитов на поле. Юнит, которому Правило
  * велит атаковать, бьёт врага, до которого дотянулся, а если не дотянулся
- * ни до кого, но видит врага, — идёт к нему, сходя с Дороги.
+ * ни до кого, но видит врагов, — идёт, сходя с Дороги, к тому из них,
+ * кого выбрало его Действие: слабейшему, самому опасному, заданного типа
+ * или ближайшему.
  *
  * Ближний бьёт только вплотную: тела не налезают друг на друга, поэтому
  * дотянуться сквозь чужую или свою спину нельзя — надо подойти. Сколько
@@ -35,7 +37,7 @@ export interface SkirmishPlan {
   readonly targets: ReadonlyMap<UnitId, UnitId>;
   /**
    * К кому идёт атакующий, не дотянувшийся ни до кого: он сходит с Дороги
-   * и сближается с ближайшим замеченным врагом.
+   * и сближается с врагом, которого его Действие выбрало среди видимых.
    */
   readonly chase: ReadonlyMap<UnitId, UnitId>;
 }
@@ -96,14 +98,14 @@ export function planSkirmish(units: readonly Unit[]): SkirmishPlan {
     // Драться хочет не каждый: Правило могло велеть идти, стоять или бежать.
     if (!isAttack(attacker.intent)) continue;
 
-    const seen = enemiesInSight(attacker, units);
+    const seen = focusOf(attacker, enemiesInSight(attacker, units));
     const reachable = seen.filter((enemy) => distanceTo(attacker, enemy) <= reachOf(attacker));
     const target = pickTarget(attacker, reachable);
 
     if (!target) {
-      // Никого не достать, но кого-то видно — идём к ближайшему.
-      const nearest = seen[0];
-      if (nearest) chase.set(attacker.id, nearest.id);
+      // Никого не достать, но кого-то видно — идём к тому, кого выбрало Действие.
+      const goal = pickTarget(attacker, seen);
+      if (goal) chase.set(attacker.id, goal.id);
       continue;
     }
 
@@ -124,7 +126,22 @@ export function planSkirmish(units: readonly Unit[]): SkirmishPlan {
 }
 
 /**
- * Цель по Действию атакующего — только среди тех, до кого он дотянулся.
+ * Ближний, которому велено бить заданный тип, пока видит такого врага,
+ * других не замечает: иначе Разведчик, задев плечом Танка на пути
+ * к Стрелкам, так и остался бы бить Танка. Не видно таких — бьёт кого
+ * достанет. Стрелок не сужает выбор: пока он кого-то достаёт, он бьёт
+ * с места и не уходит к дальней цели.
+ */
+function focusOf(attacker: Unit, seen: Unit[]): Unit[] {
+  const intent = attacker.intent;
+  if (intent.kind !== 'attack-kind' || statsOf(attacker).ranged) return seen;
+  const ofKind = seen.filter((enemy) => enemy.kind === intent.unit);
+  return ofKind.length > 0 ? ofKind : seen;
+}
+
+/**
+ * Цель по Действию атакующего среди кандидатов: тех, до кого он
+ * дотянулся, — для удара, или всех видимых — для сближения.
  * При равенстве главного признака — ближайший, при равном расстоянии —
  * вышедший раньше: выбор всегда однозначен.
  */

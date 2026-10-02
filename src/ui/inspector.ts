@@ -4,7 +4,7 @@ import { describeAction, describeRule, UNIT_TITLES } from './rule-text.js';
 /**
  * Панель выделенного Юнита: его Поведение целиком, в порядке приоритета,
  * с подсвеченным Правилом, которое он исполняет прямо сейчас, и тем,
- * кого он бьёт.
+ * кого он бьёт или к кому идёт.
  *
  * Без неё система Правил неиграбельна: игрок пишет Правила вслепую
  * и не может понять, почему Юнит поступил так, а не иначе (ADR-0002).
@@ -21,16 +21,18 @@ function element(id: string): HTMLElement {
 }
 
 /**
- * Что бьёт Юнит. «Бить тип», когда такого типа в досягаемости нет, бьёт
- * ближайшего — и это сказано прямо, чтобы игрок не гадал, почему Стрелок,
- * которому велено бить Танков, бьёт Разведчика.
+ * Кого бьёт Юнит или, не доставая никого, к кому идёт. «Бить тип», когда
+ * такого типа рядом нет, берёт ближайшего — и это сказано прямо, чтобы
+ * игрок не гадал, почему Стрелок, которому велено бить Танков, бьёт
+ * Разведчика.
  */
-function describeAim(action: Action, aim: UnitSnapshot): string {
+function describeAim(action: Action, aim: UnitSnapshot, striking: boolean): string {
   const whom = `${UNIT_TITLES[aim.kind]} (${Math.ceil(aim.hp)}/${aim.maxHp})`;
   if (action.kind === 'attack-kind' && aim.kind !== action.unit) {
-    return `${describeAction(action)} — таких рядом нет, бьёт ближайшего: ${whom}`;
+    const fallback = striking ? 'бьёт ближайшего' : 'идёт к ближайшему';
+    return `${describeAction(action)} — таких рядом нет, ${fallback}: ${whom}`;
   }
-  return `${describeAction(action)}: ${whom}`;
+  return striking ? `${describeAction(action)}: ${whom}` : `${describeAction(action)} — идёт к: ${whom}`;
 }
 
 export function createInspector(behaviourOf: (side: SideId) => Behaviour): Inspector {
@@ -50,10 +52,12 @@ export function createInspector(behaviourOf: (side: SideId) => Behaviour): Inspe
       }
 
       const behaviour = behaviourOf(unit.side)[unit.kind];
-      const aim = unit.target === null ? undefined : world.units.find((other) => other.id === unit.target);
+      const striking = unit.target !== null;
+      const aimId = unit.target ?? unit.chasing;
+      const aim = aimId === null ? undefined : world.units.find((other) => other.id === aimId);
       // В ключ входит всё, что попадает в текст, — иначе надпись застывает,
       // когда меняется, скажем, только здоровье цели.
-      const key = `${unit.id}:${unit.rule}:${Math.ceil(unit.hp)}:${aim?.id ?? '-'}:${Math.ceil(aim?.hp ?? 0)}`;
+      const key = `${unit.id}:${unit.rule}:${Math.ceil(unit.hp)}:${striking}:${aim?.id ?? '-'}:${Math.ceil(aim?.hp ?? 0)}`;
       if (key === shown) return;
       shown = key;
 
@@ -75,7 +79,7 @@ export function createInspector(behaviourOf: (side: SideId) => Behaviour): Inspe
       if (!active) {
         throw new Error(`Панель: у ${unit.kind} нет Правила №${unit.rule + 1} — Поведение разошлось с матчем`);
       }
-      target.textContent = aim ? describeAim(active.do, aim) : 'цели нет';
+      target.textContent = aim ? describeAim(active.do, aim, striking) : 'цели нет';
     },
   };
 }

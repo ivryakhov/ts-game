@@ -20,6 +20,7 @@ export function applyPlan(
   for (const unit of units) {
     unit.state = plan.states.get(unit.id) ?? 'moving';
     unit.target = plan.targets.get(unit.id) ?? null;
+    unit.chasing = plan.chase.get(unit.id) ?? null;
 
     const incoming = plan.damage.get(unit.id);
     if (!incoming) continue;
