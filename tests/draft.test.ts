@@ -1,14 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { CONDITION_KINDS, parseBehaviour, type Condition } from '@sim/index';
+import { ACTION_KINDS, CONDITION_KINDS, parseBehaviour, parseRules, type Condition } from '@sim/index';
 import {
   addCondition,
   addRule,
   checkRules,
   draftFromBehaviour,
+  freshAction,
+  freshCondition,
   moveRule,
   rawBehaviour,
+  rawRules,
   removeCondition,
   removeRule,
+  setAction,
   setCondition,
   type DraftRules,
 } from '../src/app/draft.js';
@@ -84,5 +88,30 @@ describe('черновик Правил', () => {
   it('одиночное Условие называется нулевым', () => {
     const rules = setCondition(scout, 0, 0, { kind: 'hp-below', percent: 120 });
     expect(checkRules(rules)).toMatchObject({ rule: 0, condition: 0 });
+  });
+});
+
+describe('Обелиск в редакторе (тикет 25)', () => {
+  it('новые слова есть в списках: Условие — и для «+ и», Действие — и для «иначе»', () => {
+    expect(kinds).toContain('obelisk-in-range');
+    expect(ACTION_KINDS).toContain('siege-obelisk');
+    // Числа у Условия нет: в черновик оно встаёт одним видом.
+    expect(freshCondition('obelisk-in-range')).toEqual({ kind: 'obelisk-in-range' });
+  });
+
+  it('«чужой Обелиск в радиусе и своих рядом больше 1 → бить Обелиск» проходит разбор файла и уходит в матч как есть', () => {
+    let rules = setCondition(scout, 0, 0, freshCondition('obelisk-in-range'));
+    rules = setCondition(addCondition(rules, 0, kinds), 0, 1, freshCondition('allies-nearby', 'more'));
+    rules = setCondition(rules, 0, 1, { kind: 'allies-nearby', compare: 'more', count: 1 });
+    rules = setAction(rules, 0, freshAction('siege-obelisk'));
+    rules = setAction(rules, rules.length - 1, freshAction('siege-obelisk'));
+
+    expect(checkRules(rules)).toBeNull();
+    const parsed = parseRules(rawRules(rules), 'scout');
+    expect(parsed[0]).toEqual({
+      when: [{ kind: 'obelisk-in-range' }, { kind: 'allies-nearby', compare: 'more', count: 1 }],
+      do: { kind: 'siege-obelisk' },
+    });
+    expect(parsed.at(-1)).toEqual({ when: { kind: 'always' }, do: { kind: 'siege-obelisk' } });
   });
 });

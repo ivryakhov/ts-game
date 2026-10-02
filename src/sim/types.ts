@@ -212,6 +212,7 @@ export interface UnitSnapshot {
 export interface EtherSnapshot {
   readonly side: SideId;
   readonly amount: number;
+  /** Полный доход в секунду: базовый и прибавка за свои Обелиски. */
   readonly incomePerSecond: number;
 }
 
