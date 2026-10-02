@@ -50,6 +50,11 @@ export interface Frame {
   readonly realMs: number;
   /** Чьи Цитадели получили урон с прошлого кадра. */
   readonly citadelHits: ReadonlySet<SideId>;
+  /**
+   * Какие Обелиски пали с прошлого кадра — сменили владельца или встали
+   * ничьими. Копятся за все Тики кадра, как и смерти.
+   */
+  readonly obelisksTaken: ReadonlySet<string>;
   /** Дорога под курсором — её подсвечивают как выбранную. */
   readonly highlightedRoad: string | null;
   /** Юнит, которого игрок выделил, чтобы разобрать его Поведение. */

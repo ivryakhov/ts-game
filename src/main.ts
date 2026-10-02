@@ -206,11 +206,13 @@ function frame(nowMs: number): void {
   // в одном кадре несколько, и ни одна не должна пропасть.
   const deaths = new Set<UnitId>();
   const citadelHits = new Set<SideId>();
+  const obelisksTaken = new Set<string>();
   for (let tick = 0; tick < due && !match.finished; tick += 1) {
     previous = current;
     const lastEvents = match.step();
     for (const event of lastEvents) {
       if (event.kind === 'unit-died') deaths.add(event.unitId);
+      if (event.kind === 'obelisk-taken') obelisksTaken.add(event.obeliskId);
     }
     for (const event of lastEvents) {
       if (event.kind === 'deploy-refused' && event.side === PLAYER_SIDE) hud.refuse();
@@ -240,6 +242,7 @@ function frame(nowMs: number): void {
     current,
     deaths,
     citadelHits,
+    obelisksTaken,
     alpha,
     matchMs,
     realMs: nowMs,
@@ -252,6 +255,7 @@ function frame(nowMs: number): void {
   if (!selected) selectedUnit = null;
   inspector.show(selected, current);
   const purse = current.ether.find((entry) => entry.side === PLAYER_SIDE);
+  const foe = current.ether.find((entry) => entry.side !== PLAYER_SIDE);
   hud.update({
     tick: current.tick,
     speed: pacer.speed,
@@ -259,6 +263,7 @@ function frame(nowMs: number): void {
     seed,
     ether: purse?.amount ?? 0,
     incomePerSecond: purse?.incomePerSecond ?? 0,
+    foeIncomePerSecond: foe?.incomePerSecond ?? 0,
     chosenKind,
   });
   const ended = phase === 'match' && match.finished;

@@ -1,5 +1,6 @@
 import { approachOf } from './skirmish.js';
 import { besiegedBy, reachOfStructure, type Structure } from './structure.js';
+import { obeliskInSight } from './obelisk.js';
 import { BODY_RADIUS } from './balance.js';
 import { isAttack } from './rules.js';
 import { separate } from './crowd.js';
@@ -200,8 +201,18 @@ function planFor(
     return plan(planStep(world, unit, quarry, approachOf(unit), manner), 'moving', 'waiting');
   }
 
-  // Дошедший до чужой Цитадели никуда больше не идёт: он принимается
-  // за неё и стоит у стен, пока его не убьют или Правило не уведёт.
+  // «Бить Обелиск»: видя чужой Обелиск, Юнит сходит с Дороги к месту
+  // у его стены, обходя всех, — как атакующий к врагу. Не видя ни одного,
+  // идёт вперёд, как по «идти вперёд».
+  const obelisk = unit.intent.kind === 'siege-obelisk' ? obeliskInSight(world.obelisks, unit) : null;
+  if (obelisk && !reachesFoe(world, unit)) {
+    const manner = { overtake: true, bypassEnemies: true };
+    const step = planStep(world, unit, wallSlot(world, unit, obelisk), 0, manner);
+    return { ...plan(step, 'moving', 'waiting'), storming: true };
+  }
+
+  // Дошедший до чужого строения никуда больше не идёт: он принимается
+  // за него и стоит у стен, пока его не убьют или Правило не уведёт.
   if (reachesFoe(world, unit)) return plan(null, 'sieging');
 
   // Идущий вперёд держится Дороги, своих не обгоняет, а упёршись
@@ -233,7 +244,9 @@ export function moveUnits(
     }
     unit.state = step ? moved : stuck;
     // Своего, который идёт, не обгоняют; стоящего — обходят.
-    unit.marching = walking && (unit.intent.kind === 'advance' || isAttack(unit.intent));
+    unit.marching =
+      walking &&
+      (unit.intent.kind === 'advance' || unit.intent.kind === 'siege-obelisk' || isAttack(unit.intent));
   }
 
   separate(world);
@@ -259,8 +272,10 @@ export function moveUnits(
     unit.travelled = unit.forward ? along : length - along;
 
     const arrived = unit.state === 'sieging';
-    if (arrived && !unit.arrived) {
-      unit.arrivedAt = world.tick;
+    // Событие — только о дошедших до чужой Цитадели; у Обелиска лишь
+    // запоминается, кто встал у стены первым.
+    if (arrived && !unit.arrived) unit.arrivedAt = world.tick;
+    if (arrived && !unit.arrived && besiegedBy(world, unit)?.kind === 'citadel') {
       events.push({
         kind: 'unit-arrived',
         tick: world.tick,

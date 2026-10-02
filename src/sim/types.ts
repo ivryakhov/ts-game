@@ -137,6 +137,14 @@ export type MatchEvent =
       readonly side: SideId;
     }
   | {
+      /** Сбитый Обелиск встал за новым владельцем или снова ничьим. */
+      readonly kind: 'obelisk-taken';
+      readonly tick: number;
+      readonly obeliskId: string;
+      /** null — при равном уроне Обелиск встал ничьим. */
+      readonly owner: SideId | null;
+    }
+  | {
       readonly kind: 'unit-died';
       readonly tick: number;
       readonly unitId: UnitId;
@@ -204,6 +212,7 @@ export interface UnitSnapshot {
 export interface EtherSnapshot {
   readonly side: SideId;
   readonly amount: number;
+  /** Полный доход в секунду: базовый и прибавка за свои Обелиски. */
   readonly incomePerSecond: number;
 }
 

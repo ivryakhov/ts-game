@@ -24,7 +24,7 @@ import { collectIncome, createPurses, etherSnapshots, payForUnit, type Purse } f
 import { planSkirmish } from './skirmish.js';
 import { DEFAULT_BEHAVIOUR, type Behaviour } from './rules.js';
 import { moveUnits } from './movement.js';
-import { batter, besiegedBy } from './structure.js';
+import { siege } from './structure.js';
 import { createObelisks, obeliskSnapshots, obelisksFire, type Obelisk } from './obelisk.js';
 import { callWaves, type WaveCycle } from './waves.js';
 import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
@@ -120,7 +120,7 @@ export function createWorld(setup: MatchSetup): World {
 export function advance(world: World, _rng: Rng, events: MatchEvent[]): void {
   world.tick += 1;
 
-  collectIncome(world.purses);
+  collectIncome(world.purses, world.obelisks);
   for (const action of world.schedule.get(world.tick) ?? []) applyRelease(world, action, events);
   for (const action of callWaves(world.waveCycles, world.purses)) {
     applyRelease(world, action, events);
@@ -154,6 +154,7 @@ function decide(world: World): void {
   const besieged = new Set(world.sides.filter((side) => underTheWalls(world, side).length > 0));
   const around = surroundingsOf(
     world.units,
+    world.obelisks,
     (roadId) => roadOf(world, roadId).metrics.length,
     (side) => besieged.has(side),
   );
@@ -193,23 +194,6 @@ function holdTheWalls(world: World, events: MatchEvent[]): void {
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
   const shot = obelisksFire(world.obelisks, world.units, world.tick, events);
   if (shot.size > 0) world.units = world.units.filter((unit) => !shot.has(unit.id));
-}
-
-/** Дошедшие до чужого строения бьют его, пока оно стоит. Павшая Цитадель — поражение. */
-function siege(world: World, events: MatchEvent[]): void {
-  const besiegers = world.units
-    .filter((unit) => unit.state === 'sieging')
-    .flatMap((unit) => {
-      const target = besiegedBy(world, unit);
-      return target ? [{ unit, target }] : [];
-    });
-  if (besiegers.length === 0) return;
-
-  for (const fallen of batter(besiegers)) {
-    if (fallen.kind !== 'citadel' || fallen.owner === null) continue;
-    events.push({ kind: 'citadel-destroyed', tick: world.tick, side: fallen.owner });
-    world.defeated = fallen.owner;
-  }
 }
 
 /**
@@ -286,6 +270,6 @@ export function snapshot(world: World): WorldSnapshot {
     }),
     citadels: citadelSnapshots(world.citadels),
     obelisks: obeliskSnapshots(world.obelisks),
-    ether: etherSnapshots(world.purses),
+    ether: etherSnapshots(world.purses, world.obelisks),
   };
 }

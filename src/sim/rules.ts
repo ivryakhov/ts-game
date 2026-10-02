@@ -26,7 +26,9 @@ export type Condition =
   /** Достаю чужую Цитадель со своего места. */
   | { readonly kind: 'enemy-citadel-in-range' }
   /** Враг подошёл к моей Цитадели на удар её стен — где бы я сам ни стоял. */
-  | { readonly kind: 'enemy-at-home' };
+  | { readonly kind: 'enemy-at-home' }
+  /** Вижу ничей или вражеский Обелиск (ADR-0006). */
+  | { readonly kind: 'obelisk-in-range' };
 
 /** Что Юнит делает в этот Тик. */
 export type Action =
@@ -40,7 +42,12 @@ export type Action =
   /** Бить врага с наибольшим уроном. */
   | { readonly kind: 'attack-most-dangerous' }
   /** Бить врага заданного типа, а если такого нет — ближайшего. */
-  | { readonly kind: 'attack-kind'; readonly unit: UnitKind };
+  | { readonly kind: 'attack-kind'; readonly unit: UnitKind }
+  /**
+   * Бить ближайший видимый чужой Обелиск, а не видя ни одного — идти
+   * вперёд. Не из семейства «атаковать»: Обелиск не враг (ADR-0006).
+   */
+  | { readonly kind: 'siege-obelisk' };
 
 /** Действия, при которых Юнит бьёт, — все, кроме идти, отступать и стоять. */
 export type AttackAction = Extract<
@@ -92,6 +99,7 @@ export const CONDITION_KINDS = [
   'enemy-ahead',
   'enemy-citadel-in-range',
   'enemy-at-home',
+  'obelisk-in-range',
 ] as const;
 export const ACTION_KINDS = [
   'advance',
@@ -101,6 +109,7 @@ export const ACTION_KINDS = [
   'attack-weakest',
   'attack-most-dangerous',
   'attack-kind',
+  'siege-obelisk',
 ] as const;
 
 /**
@@ -145,6 +154,7 @@ function parseCondition(raw: unknown, where: string): Condition {
     case 'enemy-citadel-in-range':
     case 'at-home':
     case 'enemy-at-home':
+    case 'obelisk-in-range':
       onlyKeys(raw, ['kind'], where);
       return { kind };
     case 'allies-nearby': {
@@ -208,6 +218,7 @@ function parseAction(raw: unknown, where: string): Action {
     case 'attack-nearest':
     case 'attack-weakest':
     case 'attack-most-dangerous':
+    case 'siege-obelisk':
       onlyKeys(raw, ['kind'], where);
       return { kind };
     case 'attack-kind': {

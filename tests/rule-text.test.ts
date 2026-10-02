@@ -14,5 +14,8 @@ describe('Правило человеческим языком', () => {
   it('одно Условие и «иначе» — как прежде', () => {
     expect(describeRule({ when: { kind: 'at-home' }, do: { kind: 'hold' } })).toBe('если у своей Цитадели — стоять');
     expect(describeRule({ when: { kind: 'always' }, do: { kind: 'advance' } })).toBe('иначе — идти вперёд');
+    expect(describeRule({ when: { kind: 'obelisk-in-range' }, do: { kind: 'siege-obelisk' } })).toBe(
+      'если чужой Обелиск в радиусе — бить Обелиск',
+    );
   });
 });

@@ -1,5 +1,7 @@
 import { BODY_RADIUS, CITADEL_STATS, MELEE_GAP } from './balance.js';
-import type { Point, SideId } from './types.js';
+import type { Citadel } from './citadel.js';
+import { changeHands, obeliskInSight, type Obelisk } from './obelisk.js';
+import type { MatchEvent, Point, SideId } from './types.js';
 import { statsOf, type Unit } from './unit.js';
 import type { World } from './world.js';
 
@@ -26,18 +28,22 @@ export interface Structure {
   hp: number;
 }
 
+/** Строение мира — одно из двух. */
+export type Building = Citadel | Obelisk;
+
 /** Все строения мира в постоянном порядке: от него зависит порядок событий. */
-export function structuresOf(world: World): readonly Structure[] {
+export function structuresOf(world: World): readonly Building[] {
   return [...world.citadels.values(), ...world.obelisks];
 }
 
 /**
  * Стоит ли строение стеной против Юнита этой Стороны: внутрь не зайти.
- * Своё строение препятствием не считается — из Цитадели Юниты выходят
- * и в неё же отступают лечиться.
+ * Своя Цитадель препятствием не считается — из неё Юниты выходят и в неё
+ * же отступают лечиться. Сквозь Обелиск не проходит никто, даже владелец.
  */
 export function isWallAgainst(structure: Structure, side: SideId): structure is Structure & { at: Point } {
-  return structure.owner !== side && structure.hp > 0 && structure.at !== null;
+  const foreign = structure.kind === 'obelisk' || structure.owner !== side;
+  return foreign && structure.hp > 0 && structure.at !== null;
 }
 
 /**
@@ -49,38 +55,59 @@ export function reachOfStructure(unit: Unit, structure: Pick<Structure, 'radius'
 }
 
 /**
- * Какое строение осаждает Юнит: чужую Цитадель в конце своей Дороги,
- * а не любую чужую — иначе при трёх Сторонах один Юнит доставал бы
- * всех врагов разом.
+ * Какое строение осаждает Юнит. С Действием «бить Обелиск» — ближайший
+ * видимый чужой Обелиск. Иначе, и когда такого не видно, — чужую Цитадель
+ * в конце своей Дороги, а не любую чужую: при трёх Сторонах один Юнит
+ * доставал бы всех врагов разом.
  */
-export function besiegedBy(world: World, unit: Unit): Structure | null {
+export function besiegedBy(world: World, unit: Unit): Building | null {
+  if (unit.intent.kind === 'siege-obelisk') {
+    const obelisk = obeliskInSight(world.obelisks, unit);
+    if (obelisk) return obelisk;
+  }
   const road = world.roads.get(unit.roadId);
   const foeSide = unit.forward ? road?.to : road?.from;
   return (foeSide && world.citadels.get(foeSide)) || null;
 }
 
 /**
- * Урон, нанесённый осаждающими. Каждый бьёт своё строение, пока оно
- * стоит и пока оно не его Стороны.
+ * Осада: дошедшие до чужого строения бьют его. Павшая Цитадель —
+ * поражение её Стороны; павший Обелиск переходит из рук в руки.
  *
  * Осаждающие бьют слабее, чем в Стычке: до строения доходит лишь доля
  * урона. Иначе прорвавшаяся Волна решала бы матч, а удерживать Дорогу
  * не имело бы смысла.
- *
- * Возвращает строения, павшие в этом Тике, в порядке падения.
  */
-export function batter(besiegers: readonly { unit: Unit; target: Structure }[]): Structure[] {
-  const fallen: Structure[] = [];
+export function siege(world: World, events: MatchEvent[]): void {
+  const fallen: Building[] = [];
+  /** Урон по Обелискам за этот Тик, по Сторонам: его берёт нанёсший больше. */
+  const dealt = new Map<Obelisk, Map<SideId, number>>();
 
-  for (const { unit, target } of besiegers) {
-    if (target.hp <= 0 || target.owner === unit.side) continue;
+  for (const unit of world.units) {
+    if (unit.state !== 'sieging') continue;
+    const target = besiegedBy(world, unit);
+    if (!target || target.owner === unit.side) continue;
+    // Павшая Цитадель ударов больше не принимает. Обелиск принимает их
+    // до конца Тика: урон ложится разом, и важен весь урон Тика.
+    if (target.kind === 'citadel' && target.hp <= 0) continue;
 
-    target.hp -= statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
-    if (target.hp > 0) continue;
-
-    target.hp = 0;
-    fallen.push(target);
+    const blow = statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
+    target.hp -= blow;
+    if (target.kind === 'obelisk') {
+      const bySide = dealt.get(target) ?? new Map<SideId, number>();
+      bySide.set(unit.side, (bySide.get(unit.side) ?? 0) + blow);
+      dealt.set(target, bySide);
+    }
+    if (target.hp <= 0 && !fallen.includes(target)) fallen.push(target);
   }
 
-  return fallen;
+  for (const structure of fallen) {
+    if (structure.kind === 'obelisk') {
+      changeHands(structure, dealt.get(structure) ?? new Map(), world.tick, events);
+      continue;
+    }
+    structure.hp = 0;
+    events.push({ kind: 'citadel-destroyed', tick: world.tick, side: structure.owner });
+    world.defeated = structure.owner;
+  }
 }

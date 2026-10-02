@@ -53,6 +53,7 @@ const CONDITION_LABELS: Readonly<Record<Selectable, readonly (readonly [string, 
   'enemy-ahead': [['enemy-ahead', 'враг впереди']],
   'enemy-citadel-in-range': [['enemy-citadel-in-range', 'чужая Цитадель в радиусе']],
   'enemy-at-home': [['enemy-at-home', 'враг у своей Цитадели']],
+  'obelisk-in-range': [['obelisk-in-range', 'чужой Обелиск в радиусе']],
 };
 
 const SELECTABLE = CONDITION_KINDS.filter((kind): kind is Selectable => kind !== 'always');

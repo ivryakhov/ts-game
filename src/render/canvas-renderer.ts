@@ -10,7 +10,7 @@ import {
 } from './visual-contract.js';
 import type { Frame, Renderer } from './renderer.js';
 import { drawCitadel } from './citadels.js';
-import { drawObelisk } from './obelisks.js';
+import { createObeliskFlashes, drawObelisk } from './obelisks.js';
 import { createOverlays } from './overlays.js';
 import { createFading } from './fading.js';
 import { drawUnit, hindsight } from './units.js';
@@ -53,6 +53,7 @@ export function createCanvasRenderer(
     y: (y - view.offsetY) / view.scale,
   });
 
+  const flashes = createObeliskFlashes();
   const overlays = createOverlays({
     context,
     map,
@@ -212,9 +213,11 @@ export function createCanvasRenderer(
           frame.current.citadels.find((health) => health.side === citadel.side),
         );
       }
+      flashes.note(frame.obelisksTaken, frame.matchMs);
       for (const obelisk of map.obelisks) {
         const state = frame.current.obelisks.find((candidate) => candidate.id === obelisk.id);
         drawObelisk(context, toScreen(obelisk.at), view.scale, state);
+        flashes.draw(context, obelisk.id, toScreen(obelisk.at), state?.owner ?? null, frame.matchMs, view.scale);
       }
 
       const seen = hindsight(frame.previous);

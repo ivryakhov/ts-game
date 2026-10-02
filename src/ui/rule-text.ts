@@ -42,6 +42,8 @@ export function describeCondition(condition: Condition): string {
       return 'чужая Цитадель в радиусе';
     case 'enemy-at-home':
       return 'враг у своей Цитадели';
+    case 'obelisk-in-range':
+      return 'чужой Обелиск в радиусе';
   }
 }
 
@@ -61,6 +63,8 @@ export function describeAction(action: Action): string {
       return 'бить самого опасного';
     case 'attack-kind':
       return `бить ${UNIT_ACCUSATIVE[action.unit]}`;
+    case 'siege-obelisk':
+      return 'бить Обелиск';
   }
 }
 

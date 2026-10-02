@@ -1,6 +1,5 @@
 import { BODY_RADIUS } from './balance.js';
 import { wallsAgainst } from './crowd.js';
-import { isAttack } from './rules.js';
 import type { Point } from './types.js';
 import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
 import type { World } from './world.js';
@@ -145,8 +144,8 @@ function aheadOf(unit: Unit, heading: number, obstacles: readonly Obstacle[]): O
  */
 function isMarchingAlly(unit: Unit, obstacle: Obstacle): boolean {
   const other = obstacle.unit;
-  if (!other || other.side !== unit.side || !other.marching) return false;
-  return other.intent.kind === 'advance' || isAttack(other.intent);
+  // Какие Намерения считаются ходом в колонне, решает moveUnits, ставя marching.
+  return other !== undefined && other.side === unit.side && other.marching;
 }
 
 /**

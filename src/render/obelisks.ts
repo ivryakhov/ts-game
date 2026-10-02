@@ -66,3 +66,38 @@ export function drawObelisk(
   if (state) drawHealthBar(context, center, color, state.maxHp === 0 ? 0 : state.hp / state.maxHp, scale);
   context.restore();
 }
+
+/**
+ * Вспышки перехода: Обелиск пал — от него расходится кольцо в цвете
+ * нового владельца. Падения приходят с кадром, собранные за все его Тики:
+ * по двум последним снимкам переход на первом из нескольких Тиков кадра
+ * не виден.
+ */
+export function createObeliskFlashes() {
+  const since = new Map<string, number>();
+  let lastMs = 0;
+
+  return {
+    note(taken: ReadonlySet<string>, matchMs: number): void {
+      // Время матча пошло назад — начался новый матч, старые вспышки не его.
+      if (matchMs < lastMs) since.clear();
+      lastMs = matchMs;
+      for (const id of taken) since.set(id, matchMs);
+    },
+
+    draw(context: CanvasRenderingContext2D, id: string, center: Point, owner: SideId | null, matchMs: number, scale: number): void {
+      const start = since.get(id);
+      if (start === undefined) return;
+      const age = (matchMs - start) / OBELISK.flashMs;
+      if (age < 0 || age > 1) return;
+
+      context.save();
+      context.strokeStyle = withAlpha(obeliskColor(owner), 1 - age);
+      context.lineWidth = OBELISK.ringWidth * 2 * scale;
+      context.beginPath();
+      context.arc(center.x, center.y, (OBELISK.radius + OBELISK.flashRadius * age) * scale, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+    },
+  };
+}

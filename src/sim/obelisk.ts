@@ -2,7 +2,7 @@ import { OBELISK_RADIUS, OBELISK_STATS } from './balance.js';
 import { wallOrder, type InReach } from './citadel.js';
 import type { Structure } from './structure.js';
 import type { MatchEvent, ObeliskSnapshot, ObeliskSpec, Point, SideId, UnitId } from './types.js';
-import { compareDistance, distanceTo, type Unit } from './unit.js';
+import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
 
 /**
  * Обелиск — строение у обочины обходной Дороги (ADR-0006). Он отбивается
@@ -94,6 +94,40 @@ function targetsOf(obelisk: Obelisk, units: readonly Unit[]): Unit[] {
     if (!picked.has(unit.side)) picked.set(unit.side, unit);
   }
   return [...picked.values()];
+}
+
+/**
+ * Ближайший чужой — ничей или вражеский — Обелиск, которого Юнит видит,
+ * той же меркой Обзора, что врагов. Из равноудалённых — первый на карте.
+ */
+export function obeliskInSight(obelisks: readonly Obelisk[], unit: Unit): Obelisk | null {
+  let nearest: { obelisk: Obelisk; distance: number } | null = null;
+  for (const obelisk of obelisks) {
+    if (obelisk.owner === unit.side) continue;
+    const distance = distanceTo(unit, obelisk.at);
+    if (distance > statsOf(unit).sight) continue;
+    if (!nearest || compareDistance(distance, nearest.distance) < 0) nearest = { obelisk, distance };
+  }
+  return nearest?.obelisk ?? null;
+}
+
+/**
+ * Сбитый Обелиск переходит к Стороне, нанёсшей в этот Тик больше урона;
+ * при равном уроне встаёт снова ничьим (ADR-0006). В обоих случаях —
+ * с половиной наибольшего здоровья, и сам он не лечится.
+ */
+export function changeHands(
+  obelisk: Obelisk,
+  dealt: ReadonlyMap<SideId, number>,
+  tick: number,
+  events: MatchEvent[],
+): void {
+  const ranked = [...dealt.entries()].sort((left, right) => right[1] - left[1]);
+  const [first, second] = ranked;
+  const tie = first && second && Math.abs(first[1] - second[1]) < 1e-9;
+  obelisk.owner = first && !tie ? first[0] : null;
+  obelisk.hp = obelisk.maxHp / 2;
+  events.push({ kind: 'obelisk-taken', tick, obeliskId: obelisk.id, owner: obelisk.owner });
 }
 
 export function obeliskSnapshots(obelisks: readonly Obelisk[]): readonly ObeliskSnapshot[] {

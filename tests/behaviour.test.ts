@@ -50,6 +50,20 @@ describe('матч принимает корректное Поведение', 
     const extra = { when: { kind: 'enemy-at-home', range: 200 }, do: { kind: 'retreat' } };
     expect(withBehaviour({ ...valid, tank: [extra, ALWAYS_ADVANCE] })).toThrow(/tank\[0\]\.when/);
   });
+
+  it('«чужой Обелиск в радиусе» и «бить Обелиск» — без параметров, в том числе в «И»', () => {
+    const take = { when: { kind: 'obelisk-in-range' }, do: { kind: 'siege-obelisk' } };
+    const together = {
+      when: [{ kind: 'obelisk-in-range' }, { kind: 'allies-nearby', compare: 'more', count: 1 }],
+      do: { kind: 'siege-obelisk' },
+    };
+    expect(withBehaviour({ ...valid, tank: [take, together, ALWAYS_ADVANCE] })).not.toThrow();
+
+    const extraWhen = { when: [{ kind: 'at-home' }, { kind: 'obelisk-in-range', id: 'north' }], do: { kind: 'hold' } };
+    expect(withBehaviour({ ...valid, ranger: [extraWhen, ALWAYS_ADVANCE] })).toThrow(/ranger\[0\]\.when\[1\]/);
+    const extraDo = { when: { kind: 'obelisk-in-range' }, do: { kind: 'siege-obelisk', id: 'north' } };
+    expect(withBehaviour({ ...valid, scout: [extraDo, ALWAYS_ADVANCE] })).toThrow(/scout\[0\]\.do/);
+  });
 });
 
 describe('матч принимает полный словарь', () => {

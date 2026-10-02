@@ -42,6 +42,9 @@ export const OBELISK = {
   healthWidth: 44,
   healthHeight: 5,
   healthGap: 12,
+  /** Вспышка при переходе: кольцо расходится от ромба и гаснет. */
+  flashMs: 700,
+  flashRadius: 60,
 } as const;
 
 /** Вспышка экрана, когда бьют Цитадель игрока. */
