@@ -13,6 +13,7 @@ import type {
 } from '@sim/index';
 import opponentFile from '../src/behaviours/opponent.json';
 import playerFile from '../src/behaviours/player.json';
+import { arena } from '../src/maps/arena.js';
 import { army, matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
@@ -219,5 +220,49 @@ describe('противник из игры', () => {
 
     expect(result.winner).toBe('B');
     expect(result.endReason).toBe('citadel-destroyed');
+  });
+
+  it('на арене с Обелисками противник берёт Цитадель игрока, который ничего не выпускает', () => {
+    const result = runMatch(
+      matchSetup({
+        map: arena,
+        sides: [sideFromFile('A', playerFile, arena), sideFromFile('B', opponentFile, arena)],
+        maxTicks: GAME_LIMIT,
+      }),
+    );
+
+    expect(result.winner).toBe('B');
+    expect(result.endReason).toBe('citadel-destroyed');
+  });
+
+  it('его Волна по южной Дороге по пути берёт южный Обелиск', () => {
+    // Против пустой Цитадели матч кончается раньше, чем до южной Волны
+    // доходит очередь, — поэтому выпускаем её одну, с Правилами бота.
+    const bot = sideFromFile('B', opponentFile, arena);
+    const south = bot.waves?.filter((wave) => wave.road === 'south') ?? [];
+    const result = runMatch(
+      matchSetup({ map: arena, sides: [{ id: 'A' }, { ...bot, waves: south }], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
+    );
+    const taken = result.events.filter((event) => event.kind === 'obelisk-taken');
+
+    expect(south).toHaveLength(1);
+    expect(taken).toContainEqual(expect.objectContaining({ obeliskId: 'south', owner: 'B' }));
+    expect(taken.every((event) => event.kind === 'obelisk-taken' && event.obeliskId === 'south')).toBe(true);
+  });
+
+  it('файлы бота на обеих Сторонах арены с Обелисками дают зеркальный матч', () => {
+    const side = (id: SideId): SideSetup => sideFromFile(id, opponentFile, arena);
+    const result = runMatch(
+      matchSetup({ map: arena, sides: [side('A'), side('B')], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
+    );
+    const bySide = (id: SideId) => ({
+      citadel: result.finalState.citadels.find((citadel) => citadel.side === id)?.hp,
+      ether: result.finalState.ether.find((purse) => purse.side === id)?.amount,
+      deployed: deployedBy(result, id).length,
+      died: result.events.filter((event) => event.kind === 'unit-died' && event.side === id).length,
+    });
+
+    expect(bySide('A').deployed).toBeGreaterThan(0);
+    expect(bySide('A')).toEqual(bySide('B'));
   });
 });
