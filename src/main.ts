@@ -191,8 +191,9 @@ let lastFrameMs = performance.now();
 let announced = false;
 
 /** Новый матч с теми же Сторонами. Сид попадает в адрес — матч можно повторить. */
-function startMatch(next: Seed, replay: PlayedMatch | null = null): void {
-  if (!replay) log.beginLive(next);
+function startMatch(next: Seed, replay: PlayedMatch | null = null, against = opponent): void {
+  opponent = against;
+  if (!replay) log.beginLive(next, opponent?.id ?? null);
   seed = next;
   rememberSeed(seed);
   if (opponent) rememberOpponent(opponent.id);
@@ -208,10 +209,10 @@ function startMatch(next: Seed, replay: PlayedMatch | null = null): void {
   prep.hide();
 }
 
-/** Тот же матч: Сид и Выпуски последнего живого матча, Правила — текущие. */
+/** Тот же матч: Сид, противник и Выпуски последнего живого, Правила — текущие. */
 function repeatReleases(): void {
   const played = log.beginReplay();
-  if (played) startMatch(played.seed, played);
+  if (played) startMatch(played.seed, played, pickOpponent(roster.opponents, played.opponent));
 }
 
 function openPrep(): void {

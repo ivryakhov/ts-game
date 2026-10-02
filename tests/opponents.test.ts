@@ -68,11 +68,25 @@ describe('уровни сложности', () => {
   });
 });
 
+describe('характеры', () => {
+  it('«Черепаха» не выпускает одиночек: вытолкнутые из ворот возвращаются ждать армию', () => {
+    // Сид 7: второй выпуск толкотнёй выдавливает Танков из круга дома.
+    const result = runMatch(
+      matchSetup({ seed: 7, map: arena, sides: [{ id: 'A' }, as('turtle', 'B')], maxTicks: 1200 }),
+    );
+    const turtles = result.finalState.units.filter((unit) => unit.side === 'B');
+
+    expect(turtles.length).toBeGreaterThanOrEqual(5);
+    for (const unit of turtles) expect(unit.progress).toBeGreaterThan(0.9);
+  });
+});
+
 describe('разбор набора противников', () => {
-  const files = { balanced, broken: { ...balanced, name: '' } };
+  const files = { balanced: JSON.stringify(balanced), broken: JSON.stringify({ ...balanced, name: '' }) };
+  const list = (...ids: string[]): string => JSON.stringify(ids);
 
   it('испорченный файл отвергается с местом ошибки, остальные доступны', () => {
-    const read = readOpponents(['balanced', 'broken', 'missing'], files, arena, 'B');
+    const read = readOpponents(list('balanced', 'broken', 'missing'), files, arena, 'B');
 
     expect(read.opponents.map((opponent) => opponent.id)).toEqual(['balanced']);
     expect(read.problems).toEqual([
@@ -82,8 +96,18 @@ describe('разбор набора противников', () => {
   });
 
   it('файл вне индекса не теряется молча', () => {
-    expect(readOpponents(['balanced'], files, arena, 'B').problems).toEqual([
+    expect(readOpponents(list('balanced'), files, arena, 'B').problems).toEqual([
       expect.stringContaining('opponents/broken.json не указан'),
+    ]);
+  });
+
+  it('синтаксическая ошибка JSON отвергает только свой файл', () => {
+    const read = readOpponents(list('balanced', 'comma'), { ...files, comma: '{"name": "Запятая",}' }, arena, 'B');
+
+    expect(read.opponents.map((opponent) => opponent.id)).toEqual(['balanced']);
+    expect(read.problems[0]).toMatch(/^Файл opponents\/comma\.json отвергнут — /);
+    expect(readOpponents('[', files, arena, 'B').problems).toEqual([
+      expect.stringMatching(/^Файл opponents\/index\.json отвергнут — /),
     ]);
   });
 

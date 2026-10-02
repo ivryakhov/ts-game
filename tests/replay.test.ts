@@ -104,18 +104,18 @@ describe('журнал Выпусков', () => {
     const log = createReleaseLog();
     expect(log.beginReplay()).toBeNull();
 
-    log.beginLive(5);
+    log.beginLive(5, 'turtle');
     log.record(release(3));
     log.record(release(9));
     log.finish(outcome(100));
 
-    expect(log.beginReplay()).toEqual({ seed: 5, releases: [release(3), release(9)], outcome: outcome(100) });
+    expect(log.beginReplay()).toEqual({ seed: 5, opponent: 'turtle', releases: [release(3), release(9)], outcome: outcome(100) });
     expect(log.replaying).toBe(true);
   });
 
   it('повтор ничего не пишет: и повтор повтора сравнивается с тем же оригиналом', () => {
     const log = createReleaseLog();
-    log.beginLive(5);
+    log.beginLive(5, 'turtle');
     log.record(release(3));
     log.finish(outcome(100));
 
@@ -123,21 +123,21 @@ describe('журнал Выпусков', () => {
     log.record(release(50));
     log.finish(outcome(200));
 
-    expect(log.beginReplay()).toEqual({ seed: 5, releases: [release(3)], outcome: outcome(100) });
+    expect(log.beginReplay()).toEqual({ seed: 5, opponent: 'turtle', releases: [release(3)], outcome: outcome(100) });
   });
 
   it('новый живой матч после повтора снова пишет и становится оригиналом', () => {
     const log = createReleaseLog();
-    log.beginLive(5);
+    log.beginLive(5, 'turtle');
     log.finish(outcome(100));
     log.beginReplay();
 
-    log.beginLive(6);
+    log.beginLive(6, null);
     expect(log.replaying).toBe(false);
     log.record(release(7));
     log.finish(outcome(300));
 
-    expect(log.last).toEqual({ seed: 6, releases: [release(7)], outcome: outcome(300) });
+    expect(log.last).toEqual({ seed: 6, opponent: null, releases: [release(7)], outcome: outcome(300) });
   });
 });
 

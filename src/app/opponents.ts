@@ -1,4 +1,3 @@
-import index from '../behaviours/opponents/index.json';
 import { opponentFromFile, type GameMap, type SideId, type SideSetup } from '@sim/index';
 
 /**
@@ -24,17 +23,25 @@ export interface OpponentRoster {
 }
 
 /**
- * Читает противников в порядке индекса. Испорченный файл не лишает игру
- * остальных: он попадает в список проблем с местом ошибки.
+ * Читает противников в порядке индекса. Испорченный файл — даже с
+ * синтаксической ошибкой JSON — не лишает игру остальных: он попадает
+ * в список проблем с местом ошибки.
  *
- * `files` — содержимое файлов по имени без расширения.
+ * `indexText` и `files` — текст файлов; `files` — по имени без расширения.
  */
 export function readOpponents(
-  index: unknown,
-  files: Readonly<Record<string, unknown>>,
+  indexText: string,
+  files: Readonly<Record<string, string>>,
   map: GameMap,
   side: SideId,
 ): OpponentRoster {
+  const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+  let index: unknown;
+  try {
+    index = JSON.parse(indexText);
+  } catch (error) {
+    return { opponents: [], problems: [`Файл opponents/index.json отвергнут — ${reason(error)}.`] };
+  }
   if (!Array.isArray(index) || !index.every((id) => typeof id === 'string')) {
     return { opponents: [], problems: ['Файл opponents/index.json отвергнут — ожидался список имён файлов.'] };
   }
@@ -46,11 +53,10 @@ export function readOpponents(
       continue;
     }
     try {
-      const file = opponentFromFile(side, files[id], map);
+      const file = opponentFromFile(side, JSON.parse(files[id] ?? ''), map);
       opponents.push({ id, name: file.name, description: file.description, side: file.side });
     } catch (error) {
-      const problem = error instanceof Error ? error.message : String(error);
-      problems.push(`Файл opponents/${id}.json отвергнут — ${problem}.`);
+      problems.push(`Файл opponents/${id}.json отвергнут — ${reason(error)}.`);
     }
   }
   for (const id of Object.keys(files)) {
@@ -59,14 +65,18 @@ export function readOpponents(
   return { opponents, problems };
 }
 
-/** Противники, лежащие в игре: файлы собирает сборщик. */
+/**
+ * Противники, лежащие в игре: файлы собирает сборщик — текстом, а не
+ * модулями JSON, иначе одна лишняя запятая роняет сборку целиком.
+ */
 export function loadOpponents(map: GameMap, side: SideId): OpponentRoster {
-  const modules = import.meta.glob(['../behaviours/opponents/*.json', '!../behaviours/opponents/index.json'], {
+  const modules = import.meta.glob<string>('../behaviours/opponents/*.json', {
     eager: true,
+    query: '?raw',
     import: 'default',
   });
-  const files = Object.fromEntries(
-    Object.entries(modules).map(([path, raw]) => [path.replace(/^.*\//, '').replace(/\.json$/, ''), raw]),
+  const { index = '', ...files } = Object.fromEntries(
+    Object.entries(modules).map(([path, text]) => [path.replace(/^.*\//, '').replace(/\.json$/, ''), text]),
   );
   return readOpponents(index, files, map, side);
 }
