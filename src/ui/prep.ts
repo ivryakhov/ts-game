@@ -1,11 +1,13 @@
-import { parseBehaviour, UNIT_KINDS, type Behaviour, type Rule, type Seed, type UnitKind } from '@sim/index';
+import { DEFAULT_BEHAVIOUR, parseBehaviour, UNIT_KINDS, type Behaviour, type Seed, type UnitKind } from '@sim/index';
 import { checkRules, draftFromBehaviour, draftRules, rawBehaviour, type Draft, type DraftError } from '../app/draft.js';
+import type { Opponent } from '../app/opponents.js';
 import type { Preset } from '../app/presets.js';
 import { parseSeed } from '../app/seed.js';
 import { bindBehaviourFiles, offerDownload } from './behaviour-files.js';
 import { presetPicker } from './preset-picker.js';
 import { createRuleEditor } from './rule-editor.js';
-import { describeRule, UNIT_TITLES } from './rule-text.js';
+import { opponentView } from './opponent-view.js';
+import { UNIT_TITLES } from './rule-text.js';
 import { describeStats } from './stats-text.js';
 
 /**
@@ -22,7 +24,7 @@ export interface Prep {
    * Открыть Подготовку с этим Сидом. Черновик игрока остаётся прежним.
    * `canRepeat` — есть ли прошлый матч, который можно повторить.
    */
-  show(seed: Seed, opponent: Behaviour, canRepeat: boolean): void;
+  show(seed: Seed, opponent: string | null, canRepeat: boolean): void;
   /** Заменить черновик игрока целиком. `file` — Поведение из player.json, Заготовка «Из файла». */
   setPlayer(player: Behaviour, file: Behaviour): void;
   hide(): void;
@@ -55,26 +57,12 @@ function block<K extends keyof HTMLElementTagNameMap>(
   return made;
 }
 
-/** Правила теми же словами, что в панели выделенного Юнита, — по порядку. */
-function ruleList(rules: readonly Rule[]): HTMLOListElement {
-  const list = block('ol', 'prep__rules');
-  list.append(...rules.map((rule) => block('li', 'prep__rule', describeRule(rule))));
-  return list;
-}
-
 function statsCard(kind: UnitKind): HTMLDListElement {
   const card = block('dl', 'prep__card');
   for (const line of describeStats(kind)) {
     card.append(block('dt', 'prep__stat-label', line.label), block('dd', 'prep__stat-value', line.value));
   }
   return card;
-}
-
-function opponentView(behaviour: Behaviour): HTMLElement[] {
-  return [
-    block('p', 'prep__note', 'Правила противника — только чтение. В матче их видно и в панели выделенного Юнита.'),
-    ...UNIT_KINDS.flatMap((kind) => [block('h3', 'prep__kind', UNIT_TITLES[kind]), ruleList(behaviour[kind])]),
-  ];
 }
 
 export interface PrepOptions {
@@ -84,10 +72,13 @@ export interface PrepOptions {
   onRepeat(player: Behaviour): void;
   /** Игрок поправил Правила, и черновик без ошибок. */
   onEdit(player: Behaviour): void;
+  /** Игрок выбрал другого противника. */
+  onOpponent(id: string): void;
   readonly presets: readonly Preset[];
+  readonly opponents: readonly Opponent[];
 }
 
-export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions): Prep {
+export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opponents }: PrepOptions): Prep {
   const panel = element('prep');
   const tabs = element('prep-tabs');
   const body = element('prep-body');
@@ -96,10 +87,21 @@ export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions):
   const seedError = element('prep-seed-error');
   const start = element<HTMLButtonElement>('prep-start');
   const repeat = element<HTMLButtonElement>('prep-repeat');
+  const picker = element<HTMLSelectElement>('prep-opponent');
+  picker.append(
+    ...opponents.map((entry) => {
+      const option = block('option', '', entry.name);
+      option.value = entry.id;
+      option.title = entry.description;
+      return option;
+    }),
+  );
+  picker.disabled = opponents.length === 0;
   let canRepeat = false;
 
   let active: Tab = UNIT_KINDS[0] ?? 'opponent';
-  let opponent: Behaviour | null = null;
+  let opponent: Opponent | null = null;
+  let shown = false;
   let draft: Draft | null = null;
   let file: Behaviour | null = null;
   const errors = new Map<UnitKind, DraftError>();
@@ -144,10 +146,10 @@ export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions):
   };
 
   const render = (): void => {
-    if (!opponent || !draft) return;
+    if (!shown || !draft) return;
     for (const { tab, button } of buttons) button.classList.toggle('prep__tab--active', tab === active);
     editor = null;
-    body.replaceChildren(...(active === 'opponent' ? opponentView(opponent) : playerView(active, draft)));
+    body.replaceChildren(...(active === 'opponent' ? opponentView(opponent, DEFAULT_BEHAVIOUR) : playerView(active, draft)));
     check();
   };
 
@@ -187,6 +189,12 @@ export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions):
     },
   });
 
+  picker.addEventListener('change', () => {
+    opponent = opponents.find((entry) => entry.id === picker.value) ?? null;
+    if (opponent) onOpponent(opponent.id);
+    render();
+  });
+
   seedInput.addEventListener('input', checkSeed);
   seedInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') begin();
@@ -198,8 +206,10 @@ export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions):
   });
 
   return {
-    show(seed, shownOpponent, repeatable): void {
-      opponent = shownOpponent;
+    show(seed, opponentId, repeatable): void {
+      shown = true;
+      opponent = opponents.find((entry) => entry.id === opponentId) ?? null;
+      if (opponent) picker.value = opponent.id;
       canRepeat = repeatable;
       seedInput.value = String(seed);
       panel.hidden = false;

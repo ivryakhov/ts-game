@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ECONOMY, runMatch, sideFromFile, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
+import { ECONOMY, opponentFromFile, runMatch, sideFromFile, TICKS_PER_SECOND, UNIT_STATS } from '@sim/index';
 import type {
   Behaviour,
   MatchEvent,
@@ -11,7 +11,7 @@ import type {
   UnitKind,
   Wave,
 } from '@sim/index';
-import opponentFile from '../src/behaviours/opponent.json';
+import opponentFile from '../src/behaviours/opponents/balanced.json';
 import playerFile from '../src/behaviours/player.json';
 import { arena } from '../src/maps/arena.js';
 import { army, matchSetup, arenaWithoutObelisks } from './match-setup.js';
@@ -144,7 +144,7 @@ describe('противник не получает скрытых преимущ
   });
 
   it('одинаковые файлы на обеих Сторонах дают зеркальный матч: форы нет ни у кого', () => {
-    const side = (id: SideId): SideSetup => sideFromFile(id, opponentFile, arenaWithoutObelisks);
+    const side = (id: SideId): SideSetup => opponentFromFile(id, opponentFile, arenaWithoutObelisks).side;
     const result = runMatch(
       matchSetup({ map: arenaWithoutObelisks, sides: [side('A'), side('B')], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
     );
@@ -213,7 +213,7 @@ describe('противник из игры', () => {
     const result = runMatch(
       matchSetup({
         map: arenaWithoutObelisks,
-        sides: [sideFromFile('A', playerFile, arenaWithoutObelisks), sideFromFile('B', opponentFile, arenaWithoutObelisks)],
+        sides: [sideFromFile('A', playerFile, arenaWithoutObelisks), opponentFromFile('B', opponentFile, arenaWithoutObelisks).side],
         maxTicks: GAME_LIMIT,
       }),
     );
@@ -226,7 +226,7 @@ describe('противник из игры', () => {
     const result = runMatch(
       matchSetup({
         map: arena,
-        sides: [sideFromFile('A', playerFile, arena), sideFromFile('B', opponentFile, arena)],
+        sides: [sideFromFile('A', playerFile, arena), opponentFromFile('B', opponentFile, arena).side],
         maxTicks: GAME_LIMIT,
       }),
     );
@@ -238,7 +238,7 @@ describe('противник из игры', () => {
   it('его Волна по южной Дороге по пути берёт южный Обелиск', () => {
     // Против пустой Цитадели матч кончается раньше, чем до южной Волны
     // доходит очередь, — поэтому выпускаем её одну, с Правилами бота.
-    const bot = sideFromFile('B', opponentFile, arena);
+    const bot = opponentFromFile('B', opponentFile, arena).side;
     const south = bot.waves?.filter((wave) => wave.road === 'south') ?? [];
     const result = runMatch(
       matchSetup({ map: arena, sides: [{ id: 'A' }, { ...bot, waves: south }], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
@@ -251,7 +251,7 @@ describe('противник из игры', () => {
   });
 
   it('файлы бота на обеих Сторонах арены с Обелисками дают зеркальный матч', () => {
-    const side = (id: SideId): SideSetup => sideFromFile(id, opponentFile, arena);
+    const side = (id: SideId): SideSetup => opponentFromFile(id, opponentFile, arena).side;
     const result = runMatch(
       matchSetup({ map: arena, sides: [side('A'), side('B')], maxTicks: 3 * 60 * TICKS_PER_SECOND }),
     );

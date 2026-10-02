@@ -23,18 +23,18 @@ import type {
 import { bindTimeControls } from './app/controls.js';
 import { createPacer, STARTING_SPEED } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
+import { loadOpponents, pickOpponent } from './app/opponents.js';
 import { parsePresets, type Preset } from './app/presets.js';
 import { createReleaseLog, outcomeOf, type PlayedMatch } from './app/replay.js';
 import { freshSeed } from './app/seed.js';
 import { playTicks } from './app/ticks.js';
 
 import { bindUnitChoice } from './app/unit-choice.js';
-import opponentFile from './behaviours/opponent.json';
 import playerFile from './behaviours/player.json';
 import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
-import { rememberSeed, seedFromAddress } from './ui/address.js';
+import { opponentFromAddress, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
@@ -66,6 +66,10 @@ try {
   presetsProblem = `Файл presets.json отвергнут — ${error instanceof Error ? error.message : String(error)}.`;
 }
 
+const roster = loadOpponents(arena, OPPONENT_SIDE);
+/** С кем играет человек: выбор на Подготовке, запомненный в адресе. */
+let opponent = pickOpponent(roster.opponents, opponentFromAddress());
+
 const prep = createPrep({
   onStart(next, behaviour) {
     playerBehaviour = behaviour;
@@ -76,8 +80,14 @@ const prep = createPrep({
     repeatReleases();
   },
   onEdit: writeSaved,
+  onOpponent(id) {
+    opponent = pickOpponent(roster.opponents, id);
+    rememberOpponent(id);
+  },
   presets,
+  opponents: roster.opponents,
 });
+for (const problem of roster.problems) prep.warn(problem);
 if (presetsProblem) prep.warn(presetsProblem);
 const review = createMatchReview(PLAYER_SIDE);
 const outcome = bindOutcomeActions({
@@ -105,20 +115,10 @@ function loadSide(id: SideId, raw: unknown, file: string, fallback: string): Sid
   }
 }
 
+const playerSide = loadSide(PLAYER_SIDE, playerFile, 'player.json', 'Юниты игрока действуют по Поведению по умолчанию.');
 // Противник — такая же Сторона из такого же файла, только со списком Волн:
 // Юнитов он выпускает сам, отдельного кода для него нет (ADR-0003).
-const playerSide = loadSide(
-  PLAYER_SIDE,
-  playerFile,
-  'player.json',
-  'Юниты игрока действуют по Поведению по умолчанию.',
-);
-const opponentSide = loadSide(
-  OPPONENT_SIDE,
-  opponentFile,
-  'opponent.json',
-  'Противник не выпускает Юнитов, пока файл не исправлен.',
-);
+const opponentSide = (): SideSetup => opponent?.side ?? { id: OPPONENT_SIDE };
 
 /**
  * Поведение игрока — то, с которым начат последний матч: с Подготовки,
@@ -143,7 +143,7 @@ prep.setPlayer(playerBehaviour, fileBehaviour);
 const setupFor = (seed: Seed, releases: readonly ScheduledRelease[] = []): MatchSetup => ({
   seed,
   map: arena,
-  sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide)],
+  sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide())],
   releases: [...releases],
   maxTicks: MATCH_LIMIT_TICKS,
 });
@@ -191,10 +191,12 @@ let lastFrameMs = performance.now();
 let announced = false;
 
 /** Новый матч с теми же Сторонами. Сид попадает в адрес — матч можно повторить. */
-function startMatch(next: Seed, replay: PlayedMatch | null = null): void {
-  if (!replay) log.beginLive(next);
+function startMatch(next: Seed, replay: PlayedMatch | null = null, against = opponent): void {
+  opponent = against;
+  if (!replay) log.beginLive(next, opponent?.id ?? null);
   seed = next;
   rememberSeed(seed);
+  if (opponent) rememberOpponent(opponent.id);
   setup = setupFor(seed, replay?.releases);
   match = createMatch(setup);
   announced = false;
@@ -207,17 +209,17 @@ function startMatch(next: Seed, replay: PlayedMatch | null = null): void {
   prep.hide();
 }
 
-/** Тот же матч: Сид и Выпуски последнего живого матча, Правила — текущие. */
+/** Тот же матч: Сид, противник и Выпуски последнего живого, Правила — текущие. */
 function repeatReleases(): void {
   const played = log.beginReplay();
-  if (played) startMatch(played.seed, played);
+  if (played) startMatch(played.seed, played, pickOpponent(roster.opponents, played.opponent));
 }
 
 function openPrep(): void {
   phase = 'prep';
   document.body.dataset['phase'] = phase;
   selectedUnit = null;
-  prep.show(seed, behaviourOf(OPPONENT_SIDE), log.last !== null);
+  prep.show(seed, opponent?.id ?? null, log.last !== null);
 }
 
 function fit(): void {
