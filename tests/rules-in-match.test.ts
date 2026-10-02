@@ -203,7 +203,13 @@ describe('Поведение из файла', () => {
     const actions = [deploy(1, 'A'), deploy(1, 'B')];
     const inCode = everyone([FLEE_BELOW(40), FIGHT, ADVANCE]);
 
-    expect(duel(fromFile, actions, 400)).toEqual(duel(inCode, actions, 400));
+    // Разбор считает Правила каждого типа, а у Танка и Стрелка их здесь
+    // разное число, — сравнивается сам матч.
+    const play = (behaviour: Behaviour) => {
+      const { stats, ...match } = duel(behaviour, actions, 400);
+      return { ...match, rngDraws: stats.rngDraws };
+    };
+    expect(play(fromFile)).toEqual(play(inCode));
   });
 
   it('без заданного Поведения Юниты ведут себя как прежде', () => {

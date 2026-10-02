@@ -39,6 +39,7 @@ import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
 import { createPrep } from './ui/prep.js';
+import { createMatchReview } from './ui/review.js';
 import { readSaved, writeSaved } from './ui/saved.js';
 
 /**
@@ -78,6 +79,7 @@ const prep = createPrep({
   presets,
 });
 if (presetsProblem) prep.warn(presetsProblem);
+const review = createMatchReview(PLAYER_SIDE);
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
   repeat: () => repeatReleases(),
@@ -278,6 +280,7 @@ function frame(nowMs: number): void {
   if (now && !announced) {
     announced = true;
     log.finish(now);
+    review.fill(match.result().stats.sides, setup.sides);
   }
   hud.announce(now && { now, original: log.replaying ? (log.last?.outcome ?? null) : null });
   outcome.show(ended);

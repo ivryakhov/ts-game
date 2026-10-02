@@ -2,6 +2,13 @@
 export { createMatch, runMatch, type LiveMatch } from './match.js';
 export { measureRoad, roadPolyline, type RoadMetrics } from './geometry.js';
 export { sideFromFile } from './side-file.js';
+export {
+  KILLER_KINDS,
+  type DamageDealt,
+  type KillerKind,
+  type KindReview,
+  type SideReview,
+} from './review.js';
 export { FileError, filePart, isRecord } from './parse.js';
 export type { Wave } from './waves.js';
 export {

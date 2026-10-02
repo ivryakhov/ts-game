@@ -29,6 +29,13 @@ export interface Incoming {
   lastAttacker: UnitId;
 }
 
+/** Один удар Стычки: кто, кого и с какой силой. Нужен разбору матча. */
+export interface Blow {
+  readonly attacker: Unit;
+  readonly target: UnitId;
+  readonly amount: number;
+}
+
 /** Что делать с Юнитами в этот Тик. */
 export interface SkirmishPlan {
   readonly states: ReadonlyMap<UnitId, UnitState>;
@@ -40,6 +47,8 @@ export interface SkirmishPlan {
    * и сближается с врагом, которого его Действие выбрало среди видимых.
    */
   readonly chase: ReadonlyMap<UnitId, UnitId>;
+  /** Все удары Тика в порядке ходов атакующих. */
+  readonly blows: readonly Blow[];
 }
 
 /**
@@ -93,6 +102,7 @@ export function planSkirmish(units: readonly Unit[]): SkirmishPlan {
   const damage = new Map<UnitId, Incoming>();
   const targets = new Map<UnitId, UnitId>();
   const chase = new Map<UnitId, UnitId>();
+  const blows: Blow[] = [];
 
   for (const attacker of units) {
     // Драться хочет не каждый: Правило могло велеть идти, стоять или бежать.
@@ -113,6 +123,7 @@ export function planSkirmish(units: readonly Unit[]): SkirmishPlan {
     targets.set(attacker.id, target.id);
 
     const blow = statsOf(attacker).damagePerTick;
+    blows.push({ attacker, target: target.id, amount: blow });
     const incoming = damage.get(target.id);
     if (incoming) {
       incoming.damage += blow;
@@ -122,7 +133,7 @@ export function planSkirmish(units: readonly Unit[]): SkirmishPlan {
     damage.set(target.id, { damage: blow, lastAttacker: attacker.id });
   }
 
-  return { states, damage, targets, chase };
+  return { states, damage, targets, chase, blows };
 }
 
 /**

@@ -137,6 +137,24 @@
       .hud__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
       .hud__actions[hidden] { display: none; }
 
+      .hud__outcome { z-index: 5; box-sizing: border-box; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; }
+      .review { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--edge); font-size: 12px; text-align: left; }
+      .review[hidden] { display: none; }
+      .review__tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
+      .review__tab--active { border-color: rgba(34, 211, 238, 0.7); box-shadow: 0 0 12px rgba(34, 211, 238, 0.25); }
+      .review__scroll { overflow-x: auto; }
+      .review__table { border-collapse: collapse; margin: 0 0 10px; }
+      .review__table .review__caption { caption-side: top; }
+      .review__caption, .review__note { margin: 8px 0 4px; color: var(--ink-dim); text-align: left; }
+      .review__head { padding: 2px 8px; color: var(--ink-dim); font-weight: 400; white-space: nowrap; }
+      .review__kind { padding: 2px 8px; text-align: left; font-weight: 400; }
+      .review__cell { padding: 2px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+      .review__rules { margin: 0 0 6px; padding-left: 26px; }
+      .review__rule { padding: 1px 0; }
+      .review__rule--idle { color: #fca5a5; }
+      .review__use { color: var(--ink-dim); }
+      .review__rule--idle .review__use { color: inherit; }
+
       .button {
         font: inherit;
         font-size: 14px;
@@ -266,6 +284,13 @@
           <button type="button" class="button" id="outcome-repeat" title="Тот же Сид и те же Выпуски, Правила — текущие">Повторить мои Выпуски</button>
           <button type="button" class="button" id="outcome-edit">Изменить Правила</button>
           <button type="button" class="button" id="outcome-new-seed">Новый Сид</button>
+        </div>
+        <div class="review" id="outcome-review" hidden>
+          <div class="review__tabs">
+            <button type="button" class="button review__tab" id="review-mine">я</button>
+            <button type="button" class="button review__tab" id="review-theirs">противник</button>
+          </div>
+          <div id="review-body"></div>
         </div>
       </div>
       <div class="inspector" id="inspector" hidden>

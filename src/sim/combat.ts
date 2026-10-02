@@ -1,6 +1,6 @@
 import type { SkirmishPlan } from './skirmish.js';
 import type { MatchEvent, UnitId } from './types.js';
-import type { Unit } from './unit.js';
+import { deathOf, type Unit } from './unit.js';
 
 /**
  * Применение решения Стычки: урон, смерти, новые состояния.
@@ -29,14 +29,7 @@ export function applyPlan(
     if (unit.hp > 0) continue;
 
     fallen.add(unit.id);
-    events.push({
-      kind: 'unit-died',
-      tick,
-      unitId: unit.id,
-      side: unit.side,
-      roadId: unit.roadId,
-      killer: { kind: 'unit', unitId: incoming.lastAttacker },
-    });
+    events.push(deathOf(unit, tick, { kind: 'unit', unitId: incoming.lastAttacker }));
   }
 
   return fallen;

@@ -26,6 +26,7 @@ function element(id: string): HTMLElement {
 
 export function bindOutcomeActions(handlers: OutcomeHandlers): OutcomeActions {
   const box = element('outcome-actions');
+  const review = element('outcome-review');
 
   const bind = (id: string, act: () => void): void => {
     const button = element(id);
@@ -45,6 +46,7 @@ export function bindOutcomeActions(handlers: OutcomeHandlers): OutcomeActions {
   return {
     show(visible): void {
       box.hidden = !visible;
+      review.hidden = !visible;
     },
   };
 }

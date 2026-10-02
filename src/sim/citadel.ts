@@ -1,7 +1,7 @@
 import { CITADEL_RADIUS, CITADEL_STATS } from './balance.js';
 import type { Structure } from './structure.js';
 import type { CitadelSnapshot, MatchEvent, Point, SideId, UnitId } from './types.js';
-import { compareDistance, type Unit } from './unit.js';
+import { compareDistance, deathOf, type Unit } from './unit.js';
 
 /**
  * Цитадель — главное строение Стороны. Её разрушение означает поражение,
@@ -92,14 +92,7 @@ export function defend(
     if (target.unit.hp > 0) continue;
 
     fallen.add(target.unit.id);
-    events.push({
-      kind: 'unit-died',
-      tick,
-      unitId: target.unit.id,
-      side: target.unit.side,
-      roadId: target.unit.roadId,
-      killer: { kind: 'citadel', side: citadel.side },
-    });
+    events.push(deathOf(target.unit, tick, { kind: 'citadel', side: citadel.side }));
   }
 
   return fallen;

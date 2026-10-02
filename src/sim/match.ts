@@ -1,4 +1,5 @@
 import { validateRelease, validateReleases, validateMap } from './map-validation.js';
+import { reviewMatch } from './review.js';
 import { createRng } from './rng.js';
 import { validateSide } from './side-file.js';
 import type {
@@ -110,7 +111,7 @@ export function createMatch(setup: MatchSetup): LiveMatch {
         endReason,
         events,
         finalState: snapshot(world),
-        stats: { rngDraws: rng.draws },
+        stats: { rngDraws: rng.draws, sides: reviewMatch(world.sides, world.ledger, events) },
       };
     },
   };

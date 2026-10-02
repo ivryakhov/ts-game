@@ -2,7 +2,7 @@ import { OBELISK_RADIUS, OBELISK_STATS } from './balance.js';
 import { wallOrder, type InReach } from './citadel.js';
 import type { Structure } from './structure.js';
 import type { MatchEvent, ObeliskSnapshot, ObeliskSpec, Point, SideId, UnitId } from './types.js';
-import { compareDistance, distanceTo, statsOf, type Unit } from './unit.js';
+import { compareDistance, deathOf, distanceTo, statsOf, type Unit } from './unit.js';
 
 /**
  * Обелиск — строение у обочины обходной Дороги (ADR-0006). Он отбивается
@@ -63,14 +63,7 @@ export function obelisksFire(
       if (unit.hp > 0) continue;
 
       fallen.add(unit.id);
-      events.push({
-        kind: 'unit-died',
-        tick,
-        unitId: unit.id,
-        side: unit.side,
-        roadId: unit.roadId,
-        killer: { kind: 'obelisk', obeliskId: obelisk.id },
-      });
+      events.push(deathOf(unit, tick, { kind: 'obelisk', obeliskId: obelisk.id }));
     }
   }
 
