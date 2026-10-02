@@ -7,6 +7,7 @@
 
 import type { UnitKind } from './balance.js';
 import type { Behaviour } from './rules.js';
+import type { SideReview } from './review.js';
 import type { Wave } from './waves.js';
 
 export type { UnitKind };
@@ -150,6 +151,11 @@ export type MatchEvent =
       readonly unitId: UnitId;
       readonly side: SideId;
       readonly roadId: string;
+      readonly unit: UnitKind;
+      /** Номер Правила, которое он исполнял в момент гибели. */
+      readonly rule: number;
+      /** Где он погиб. */
+      readonly at: Point;
       readonly killer: Killer;
     };
 
@@ -256,6 +262,8 @@ export interface WorldSnapshot {
 export interface MatchStats {
   /** Сколько раз симуляция обращалась к случайности. */
   readonly rngDraws: number;
+  /** Разбор матча по каждой Стороне, в порядке Сторон настройки. */
+  readonly sides: readonly SideReview[];
 }
 
 export interface MatchResult {

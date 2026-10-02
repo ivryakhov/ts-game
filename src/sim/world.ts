@@ -27,6 +27,7 @@ import { moveUnits } from './movement.js';
 import { siege } from './structure.js';
 import { createObelisks, obeliskSnapshots, obelisksFire, type Obelisk } from './obelisk.js';
 import { callWaves, type WaveCycle } from './waves.js';
+import { createLedger, noteBlows, noteRule, type Ledger } from './review.js';
 import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
 /**
@@ -54,6 +55,8 @@ export interface World {
   /** Выпуски, разложенные по Тикам, на которые они назначены. */
   readonly schedule: Map<number, ScheduledRelease[]>;
   nextUnitId: number;
+  /** Счётчики для разбора матча; на сам матч не влияют. */
+  readonly ledger: Ledger;
 }
 
 /** Дорога, готовая к работе: промеры плюс то, чьи Цитадели она соединяет. */
@@ -75,15 +78,16 @@ export function createWorld(setup: MatchSetup): World {
   const placeOf = (side: SideId): Point | null =>
     setup.map.citadels.find((citadel) => citadel.side === side)?.at ?? null;
 
+  const behaviours = new Map(
+    setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
+  );
   const world: World = {
     tick: 0,
     sides,
     units: [],
     citadels: createCitadels(sides, placeOf),
     obelisks: createObelisks(setup.map.obelisks),
-    behaviours: new Map(
-      setup.sides.map((side) => [side.id, side.behaviour ?? DEFAULT_BEHAVIOUR]),
-    ),
+    behaviours,
     purses: createPurses(sides),
     waveCycles: setup.sides.flatMap((side) =>
       side.waves ? [{ side: side.id, waves: side.waves, next: 0 }] : [],
@@ -97,6 +101,7 @@ export function createWorld(setup: MatchSetup): World {
     ),
     schedule: new Map(),
     nextUnitId: 1,
+    ledger: createLedger(behaviours),
   };
 
   for (const action of setup.releases) schedule(world, action);
@@ -166,6 +171,7 @@ function decide(world: World): void {
     const decision = choose(behaviour, unit, surroundings);
     unit.intent = decision.action;
     unit.rule = decision.rule;
+    noteRule(world.ledger, unit);
   }
 }
 
@@ -205,6 +211,8 @@ function holdTheWalls(world: World, events: MatchEvent[]): void {
  */
 function fight(world: World, events: MatchEvent[]): ReadonlyMap<UnitId, UnitId> {
   const plan = planSkirmish(world.units);
+  const hp = new Map(world.units.map((unit) => [unit.id, unit.hp]));
+  noteBlows(world.ledger, plan.blows, (id) => hp.get(id) ?? 0);
   const fallen = applyPlan(world.units, plan, world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
   return plan.chase;

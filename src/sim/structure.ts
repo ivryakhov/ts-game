@@ -2,6 +2,7 @@ import { BODY_RADIUS, CITADEL_STATS, MELEE_GAP } from './balance.js';
 import type { Citadel } from './citadel.js';
 import { changeHands, obeliskInSight, type Obelisk } from './obelisk.js';
 import type { MatchEvent, Point, SideId } from './types.js';
+import { noteDamage } from './review.js';
 import { statsOf, type Unit } from './unit.js';
 import type { World } from './world.js';
 
@@ -92,6 +93,7 @@ export function siege(world: World, events: MatchEvent[]): void {
     if (target.kind === 'citadel' && target.hp <= 0) continue;
 
     const blow = statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
+    noteDamage(world.ledger, unit, target.kind === 'citadel' ? 'citadel' : 'obelisks', blow, target.hp);
     target.hp -= blow;
     if (target.kind === 'obelisk') {
       const bySide = dealt.get(target) ?? new Map<SideId, number>();

@@ -1,7 +1,7 @@
 import { CITADEL_STATS, UNIT_STATS, type UnitKind, type UnitStats } from './balance.js';
 import type { Action } from './rules.js';
 import type { RoadMetrics } from './geometry.js';
-import type { Point, SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
+import type { Killer, MatchEvent, Point, SideId, UnitId, UnitSnapshot, UnitState } from './types.js';
 
 /**
  * Юнит в симуляции. Положение — точка на поле: Юнит идёт вдоль своей
@@ -156,5 +156,20 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     chasing: unit.chasing,
     hp: unit.hp,
     maxHp: unit.maxHp,
+  };
+}
+
+/** Событие гибели Юнита: кто он, на каком Правиле и где погиб, кто убил. */
+export function deathOf(unit: Unit, tick: number, killer: Killer): MatchEvent {
+  return {
+    kind: 'unit-died',
+    tick,
+    unitId: unit.id,
+    side: unit.side,
+    roadId: unit.roadId,
+    unit: unit.kind,
+    rule: unit.rule,
+    at: { x: unit.x, y: unit.y },
+    killer,
   };
 }
