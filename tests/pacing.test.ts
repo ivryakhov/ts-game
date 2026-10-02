@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createMatch, TICKS_PER_SECOND } from '@sim/index';
 import type { MatchResult, MatchSetup } from '@sim/index';
-import { createPacer, type Speed } from '../src/app/pacer.js';
+import { createPacer, SPEEDS, STARTING_SPEED, type Speed } from '../src/app/pacer.js';
 import { matchSetup, arenaWithoutObelisks } from './match-setup.js';
 
 /**
@@ -45,8 +45,7 @@ const setup = (): MatchSetup =>
 /** Прогоняет матч кадрами заданной длительности при заданной скорости. */
 function play(frameMs: number, speed: Speed, modelSeconds: number): MatchResult {
   const match = createMatch(setup());
-  const pacer = createPacer(TICKS_PER_SECOND);
-  while (pacer.speed < speed) pacer.faster();
+  const pacer = createPacer(TICKS_PER_SECOND, speed);
 
   const frames = Math.ceil((modelSeconds * 1000) / frameMs);
   for (let frame = 0; frame < frames; frame += 1) {
@@ -105,6 +104,67 @@ describe('темп воспроизведения', () => {
 
     expect(match.result().ticks).toBe(expected);
     expect(match.result()).toEqual(steady.result());
+  });
+});
+
+describe('начальный темп в игре', () => {
+  it('медленнее обычного: за секунду проходит половина Тиков', () => {
+    const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
+
+    expect(pacer.speed).toBe(0.5);
+    expect(pacer.advance(1000)).toBe(TICKS_PER_SECOND / 2);
+  });
+
+  it('с него темп переключается по одной ступени: вверх до ×8, вниз до ×0.5 и не дальше', () => {
+    const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
+    const up: number[] = [];
+    for (let step = 0; step < SPEEDS.length; step += 1) {
+      pacer.faster();
+      up.push(pacer.speed);
+    }
+    const down: number[] = [];
+    for (let step = 0; step < SPEEDS.length; step += 1) {
+      pacer.slower();
+      down.push(pacer.speed);
+    }
+
+    expect(up).toEqual([1, 2, 4, 8, 8]);
+    expect(down).toEqual([4, 2, 1, 0.5, 0.5]);
+  });
+
+  it('каждый новый матч снова начинается с него, без паузы и без накопленного времени', () => {
+    const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
+    for (let step = 0; step < SPEEDS.length; step += 1) pacer.faster();
+    pacer.advance(30);
+    pacer.paused = true;
+
+    pacer.restart();
+
+    expect(pacer.speed).toBe(STARTING_SPEED);
+    expect(pacer.paused).toBe(false);
+    expect(pacer.alpha).toBe(0);
+  });
+
+  it('доля кадра на нём растёт вдвое медленнее: полТика за 50 мс, целый Тик за 100 мс', () => {
+    const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
+
+    expect(pacer.advance(50)).toBe(0);
+    expect(pacer.alpha).toBeCloseTo(0.5);
+    expect(pacer.advance(50)).toBe(1);
+    expect(pacer.alpha).toBeCloseTo(0);
+  });
+
+  it('смена скорости посреди Тика не теряет и не пересчитывает уже прошедшее время', () => {
+    const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
+    pacer.advance(50);
+    pacer.faster();
+
+    expect(pacer.advance(25)).toBe(1);
+    expect(pacer.alpha).toBeCloseTo(0);
+  });
+
+  it('не влияет на исход: замедленный матч проживает те же Тики, что обычный за вдвое меньшее время', () => {
+    expect(play(16, 0.5, 20)).toEqual(play(16, 1, 10));
   });
 });
 
