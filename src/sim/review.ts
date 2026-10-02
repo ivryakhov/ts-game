@@ -80,36 +80,35 @@ interface Dealer {
   readonly kind: UnitKind;
 }
 
-/**
- * Записать урон. Берётся только снятое здоровье: добивающий удар сверх
- * остатка не считается, иначе урон по Цитадели разошёлся бы с её HP.
- */
-export function noteDamage(
-  ledger: Ledger,
-  dealer: Dealer,
-  into: keyof DamageDealt,
-  blow: number,
-  hpBefore: number,
-): void {
-  const tally = ledger.damage.get(dealer.side)?.[dealer.kind];
-  if (tally) tally[into] += Math.min(blow, Math.max(0, hpBefore));
+/** Удар по цели: кто бил и с какой силой. */
+export interface Hit<T> {
+  readonly attacker: Dealer;
+  readonly target: T;
+  readonly amount: number;
 }
 
 /**
- * Записать удары Стычки. Урон ложится разом, поэтому остаток здоровья
- * цели убывает от удара к удару в порядке ходов: кто добил сверх
- * остатка, тому лишнее не засчитано.
+ * Записать удары одного Тика. Урон ложится разом, поэтому засчитывается
+ * только снятое здоровье — не больше остатка цели перед Тиком, — и делится
+ * между ударами пропорционально их силе. Порядок ударов ничего не решает:
+ * иначе первый в списке Юнитов забирал бы весь остаток, и разбор матча
+ * с одинаковыми Правилами переставал бы быть зеркальным. И урон по
+ * Цитадели не расходится с её снятым HP.
  */
-export function noteBlows(
+export function noteHits<T>(
   ledger: Ledger,
-  blows: readonly { readonly attacker: Dealer; readonly target: UnitId; readonly amount: number }[],
-  hpOf: (id: UnitId) => number,
+  into: keyof DamageDealt,
+  hits: readonly Hit<T>[],
+  hpBefore: (target: T) => number,
 ): void {
-  const left = new Map<UnitId, number>();
-  for (const blow of blows) {
-    const before = left.get(blow.target) ?? hpOf(blow.target);
-    noteDamage(ledger, blow.attacker, 'units', blow.amount, before);
-    left.set(blow.target, before - blow.amount);
+  const total = new Map<T, number>();
+  for (const hit of hits) total.set(hit.target, (total.get(hit.target) ?? 0) + hit.amount);
+  for (const hit of hits) {
+    const sum = total.get(hit.target) ?? 0;
+    const tally = ledger.damage.get(hit.attacker.side)?.[hit.attacker.kind];
+    if (!tally || sum <= 0) continue;
+    const taken = Math.min(sum, Math.max(0, hpBefore(hit.target)));
+    tally[into] += (hit.amount * taken) / sum;
   }
 }
 

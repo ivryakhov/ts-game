@@ -2,7 +2,7 @@ import { BODY_RADIUS, CITADEL_STATS, MELEE_GAP } from './balance.js';
 import type { Citadel } from './citadel.js';
 import { changeHands, obeliskInSight, type Obelisk } from './obelisk.js';
 import type { MatchEvent, Point, SideId } from './types.js';
-import { noteDamage } from './review.js';
+import { noteHits, type Hit } from './review.js';
 import { statsOf, type Unit } from './unit.js';
 import type { World } from './world.js';
 
@@ -83,6 +83,9 @@ export function siege(world: World, events: MatchEvent[]): void {
   const fallen: Building[] = [];
   /** Урон по Обелискам за этот Тик, по Сторонам: его берёт нанёсший больше. */
   const dealt = new Map<Obelisk, Map<SideId, number>>();
+  /** Удары Тика и здоровье строений до них — для разбора матча. */
+  const hits: Hit<Building>[] = [];
+  const before = new Map<Building, number>();
 
   for (const unit of world.units) {
     if (unit.state !== 'sieging') continue;
@@ -93,7 +96,8 @@ export function siege(world: World, events: MatchEvent[]): void {
     if (target.kind === 'citadel' && target.hp <= 0) continue;
 
     const blow = statsOf(unit).damagePerTick * CITADEL_STATS.damageShare;
-    noteDamage(world.ledger, unit, target.kind === 'citadel' ? 'citadel' : 'obelisks', blow, target.hp);
+    if (!before.has(target)) before.set(target, target.hp);
+    hits.push({ attacker: unit, target, amount: blow });
     target.hp -= blow;
     if (target.kind === 'obelisk') {
       const bySide = dealt.get(target) ?? new Map<SideId, number>();
@@ -102,6 +106,10 @@ export function siege(world: World, events: MatchEvent[]): void {
     }
     if (target.hp <= 0 && !fallen.includes(target)) fallen.push(target);
   }
+
+  const hpBefore = (structure: Building) => before.get(structure) ?? 0;
+  noteHits(world.ledger, 'citadel', hits.filter((hit) => hit.target.kind === 'citadel'), hpBefore);
+  noteHits(world.ledger, 'obelisks', hits.filter((hit) => hit.target.kind === 'obelisk'), hpBefore);
 
   for (const structure of fallen) {
     if (structure.kind === 'obelisk') {

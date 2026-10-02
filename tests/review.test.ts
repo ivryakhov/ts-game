@@ -152,6 +152,29 @@ describe('зеркальность разбора', () => {
   });
 });
 
+describe('зеркальность урона по Обелиску', () => {
+  it('одновременные удары обеих Сторон делят остаток здоровья поровну', () => {
+    const TAKE: Rule = { when: { kind: 'obelisk-in-range' }, do: { kind: 'siege-obelisk' } };
+    const same = everyone([TAKE, ADVANCE]);
+    const result = runMatch(
+      matchSetup({
+        map: arena,
+        sides: [
+          { id: 'A', behaviour: same },
+          { id: 'B', behaviour: same },
+        ],
+        releases: [...army(['tank'], 'A', 'north'), ...army(['tank'], 'B', 'north')],
+        maxTicks: 900,
+      }),
+    );
+    const dealt = (side: SideId) => review(result, side).kinds.tank.damage.obelisks;
+
+    expect(result.events.some((event) => event.kind === 'obelisk-taken')).toBe(true);
+    expect(dealt('A')).toBeGreaterThan(0);
+    expect(dealt('A')).toBe(dealt('B'));
+  });
+});
+
 describe('разбор на итоге матча', () => {
   it('Правила подписаны текстом редактора, несработавшие отмечены', () => {
     const behaviour = everyone([FIGHT, FLEE, ADVANCE]);

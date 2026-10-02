@@ -27,7 +27,7 @@ import { moveUnits } from './movement.js';
 import { siege } from './structure.js';
 import { createObelisks, obeliskSnapshots, obelisksFire, type Obelisk } from './obelisk.js';
 import { callWaves, type WaveCycle } from './waves.js';
-import { createLedger, noteBlows, noteRule, type Ledger } from './review.js';
+import { createLedger, noteHits, noteRule, type Ledger } from './review.js';
 import { createUnit, distanceTo, isAtHome, unitSnapshot, type Unit } from './unit.js';
 
 /**
@@ -212,7 +212,7 @@ function holdTheWalls(world: World, events: MatchEvent[]): void {
 function fight(world: World, events: MatchEvent[]): ReadonlyMap<UnitId, UnitId> {
   const plan = planSkirmish(world.units);
   const hp = new Map(world.units.map((unit) => [unit.id, unit.hp]));
-  noteBlows(world.ledger, plan.blows, (id) => hp.get(id) ?? 0);
+  noteHits(world.ledger, 'units', plan.blows, (id) => hp.get(id) ?? 0);
   const fallen = applyPlan(world.units, plan, world.tick, events);
   if (fallen.size > 0) world.units = world.units.filter((unit) => !fallen.has(unit.id));
   return plan.chase;
