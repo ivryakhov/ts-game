@@ -266,7 +266,8 @@ export function snapshot(world: World): WorldSnapshot {
     // из снимка убирается: ссылаться на Юнита, которого уже нет, незачем.
     units: world.units.map((unit) => {
       const shown = unitSnapshot(unit, roadOf(world, unit.roadId).metrics);
-      return shown.target !== null && !alive.has(shown.target) ? { ...shown, target: null } : shown;
+      const living = (id: UnitId | null) => (id !== null && alive.has(id) ? id : null);
+      return { ...shown, target: living(shown.target), chasing: living(shown.chasing) };
     }),
     citadels: citadelSnapshots(world.citadels),
     obelisks: obeliskSnapshots(world.obelisks),
