@@ -20,7 +20,7 @@ import type {
   WorldSnapshot,
 } from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
-import { createPacer } from './app/pacer.js';
+import { createPacer, STARTING_SPEED } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
 import { parsePresets, type Preset } from './app/presets.js';
 import { freshSeed } from './app/seed.js';
@@ -144,7 +144,7 @@ let seed: Seed = seedFromAddress();
 let setup: MatchSetup = setupFor(seed);
 let match: LiveMatch = createMatch(setup);
 
-const pacer = createPacer(TICKS_PER_SECOND);
+const pacer = createPacer(TICKS_PER_SECOND, STARTING_SPEED);
 /** Какой тип Юнита уйдёт по следующему клику. Переключается клавишами 1-3. */
 let chosenKind: UnitKind = 'scout';
 
