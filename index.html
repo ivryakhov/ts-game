@@ -34,6 +34,20 @@
         text-shadow: 0 0 18px rgba(34, 211, 238, 0.35);
       }
 
+      .hud__replay {
+        position: absolute;
+        top: 58px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 10px;
+        font-size: 12px;
+        color: #f0abfc;
+        border: 1px solid rgba(240, 171, 252, 0.5);
+        border-radius: 999px;
+        background: var(--panel);
+      }
+      .hud__replay[hidden] { display: none; }
+
       .hud__panel {
         position: absolute;
         left: 18px;
@@ -135,6 +149,7 @@
 
       /* На Подготовке времени нет: часы, Эфир и темп не нужны. */
       body[data-phase="prep"] .hud__clock,
+      body[data-phase="prep"] .hud__replay,
       body[data-phase="prep"] .hud__panel,
       body[data-phase="prep"] .hud__warning { display: none; }
 
@@ -235,10 +250,12 @@
 
     <div class="hud">
       <div class="hud__clock" id="hud-clock">00:00</div>
+      <div class="hud__replay" id="hud-replay" hidden>повтор · Выпуски идут сами, клики по Дороге выключены</div>
       <div class="hud__outcome" id="hud-outcome">
         <div id="hud-outcome-text"></div>
         <div class="hud__actions" id="outcome-actions" hidden>
           <button type="button" class="button button--main" id="outcome-replay">Переиграть</button>
+          <button type="button" class="button" id="outcome-repeat" title="Тот же Сид и те же Выпуски, Правила — текущие">Повторить мои Выпуски</button>
           <button type="button" class="button" id="outcome-edit">Изменить Правила</button>
           <button type="button" class="button" id="outcome-new-seed">Новый Сид</button>
         </div>
@@ -275,6 +292,7 @@
         <label>Сид <input class="prep__seed-input" id="prep-seed" type="text" inputmode="numeric" autocomplete="off" /></label>
         <span class="prep__error" id="prep-seed-error" hidden>Сид — целое неотрицательное число</span>
         <button type="button" class="button button--main prep__start" id="prep-start">Начать матч</button>
+        <button type="button" class="button" id="prep-repeat" title="Сид и Выпуски прошлого матча, Правила — с этого экрана">Повторить мои Выпуски</button>
       </footer>
     </section>
 

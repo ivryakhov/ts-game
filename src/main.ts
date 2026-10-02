@@ -12,6 +12,7 @@ import type {
   Behaviour,
   LiveMatch,
   MatchSetup,
+  ScheduledRelease,
   Seed,
   SideId,
   SideSetup,
@@ -23,7 +24,9 @@ import { bindTimeControls } from './app/controls.js';
 import { createPacer, STARTING_SPEED } from './app/pacer.js';
 import { bindPointer } from './app/pointer.js';
 import { parsePresets, type Preset } from './app/presets.js';
+import { createReleaseLog, outcomeOf, type PlayedMatch } from './app/replay.js';
 import { freshSeed } from './app/seed.js';
+import { playTicks } from './app/ticks.js';
 
 import { bindUnitChoice } from './app/unit-choice.js';
 import opponentFile from './behaviours/opponent.json';
@@ -67,12 +70,17 @@ const prep = createPrep({
     playerBehaviour = behaviour;
     startMatch(next);
   },
+  onRepeat(behaviour) {
+    playerBehaviour = behaviour;
+    repeatReleases();
+  },
   onEdit: writeSaved,
   presets,
 });
 if (presetsProblem) prep.warn(presetsProblem);
 const outcome = bindOutcomeActions({
   replay: () => startMatch(seed),
+  repeat: () => repeatReleases(),
   edit: () => openPrep(),
   newSeed: () => startMatch(freshSeed(seed)),
 });
@@ -130,13 +138,16 @@ prep.setPlayer(playerBehaviour, fileBehaviour);
  * Матч получает копии Сторон: что бы ни случилось с Поведением на
  * Подготовке после старта, идущий матч оно не задевает.
  */
-const setupFor = (seed: Seed): MatchSetup => ({
+const setupFor = (seed: Seed, releases: readonly ScheduledRelease[] = []): MatchSetup => ({
   seed,
   map: arena,
   sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide)],
-  releases: [],
+  releases: [...releases],
   maxTicks: MATCH_LIMIT_TICKS,
 });
+
+/** Выпуски игрока в живых матчах — для повтора того же матча. */
+const log = createReleaseLog();
 
 /** Подготовка или матч. На Подготовке время стоит и ввод матча молчит. */
 let phase: 'prep' | 'match' = 'prep';
@@ -156,10 +167,14 @@ const behaviourOf = (side: SideId): Behaviour =>
   setup.sides.find((entry) => entry.id === side)?.behaviour ?? DEFAULT_BEHAVIOUR;
 const inspector = createInspector(behaviourOf);
 const inMatch = (): boolean => phase === 'match' && !match.finished;
+/** Матч, где игрок сам выпускает Юнитов: в повторе они выходят по журналу. */
+const playing = (): boolean => inMatch() && !log.replaying;
 
 const pointer = bindPointer(canvas, renderer, {
   onRelease(roadId) {
-    if (inMatch()) match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
+    if (!playing()) return;
+    const release = match.deploy({ side: PLAYER_SIDE, kind: 'deploy', roadId, unit: chosenKind });
+    if (release) log.record(release);
   },
   onSelect(unit) {
     if (phase === 'match') selectedUnit = unit;
@@ -170,13 +185,17 @@ const pointer = bindPointer(canvas, renderer, {
 let previous: WorldSnapshot = match.snapshot();
 let current: WorldSnapshot = match.snapshot();
 let lastFrameMs = performance.now();
+/** Исход этого матча уже записан в журнал. */
+let announced = false;
 
 /** Новый матч с теми же Сторонами. Сид попадает в адрес — матч можно повторить. */
-function startMatch(next: Seed): void {
+function startMatch(next: Seed, replay: PlayedMatch | null = null): void {
+  if (!replay) log.beginLive(next);
   seed = next;
   rememberSeed(seed);
-  setup = setupFor(seed);
+  setup = setupFor(seed, replay?.releases);
   match = createMatch(setup);
+  announced = false;
   previous = match.snapshot();
   current = previous;
   selectedUnit = null;
@@ -186,11 +205,17 @@ function startMatch(next: Seed): void {
   prep.hide();
 }
 
+/** Тот же матч: Сид и Выпуски последнего живого матча, Правила — текущие. */
+function repeatReleases(): void {
+  const played = log.beginReplay();
+  if (played) startMatch(played.seed, played);
+}
+
 function openPrep(): void {
   phase = 'prep';
   document.body.dataset['phase'] = phase;
   selectedUnit = null;
-  prep.show(seed, behaviourOf(OPPONENT_SIDE));
+  prep.show(seed, behaviourOf(OPPONENT_SIDE), log.last !== null);
 }
 
 function fit(): void {
@@ -202,29 +227,10 @@ function frame(nowMs: number): void {
   lastFrameMs = nowMs;
   const due = phase === 'match' ? pacer.advance(delta) : 0;
 
-  // Смерти копятся за все Тики кадра: на восьмикратной скорости их
-  // в одном кадре несколько, и ни одна не должна пропасть.
-  const deaths = new Set<UnitId>();
-  const citadelHits = new Set<SideId>();
-  const obelisksTaken = new Set<string>();
-  for (let tick = 0; tick < due && !match.finished; tick += 1) {
-    previous = current;
-    const lastEvents = match.step();
-    for (const event of lastEvents) {
-      if (event.kind === 'unit-died') deaths.add(event.unitId);
-      if (event.kind === 'obelisk-taken') obelisksTaken.add(event.obeliskId);
-    }
-    for (const event of lastEvents) {
-      if (event.kind === 'deploy-refused' && event.side === PLAYER_SIDE) hud.refuse();
-    }
-
-    const next = match.snapshot();
-    for (const citadel of current.citadels) {
-      const after = next.citadels.find((candidate) => candidate.side === citadel.side);
-      if (after && after.hp < citadel.hp) citadelHits.add(citadel.side);
-    }
-    current = next;
-  }
+  const played = playTicks(match, due, { previous, current }, PLAYER_SIDE);
+  ({ previous, current } = played);
+  if (played.refused) hud.refuse();
+  const { deaths, citadelHits, obelisksTaken } = played;
 
   // Когда матч кончился, стоит на паузе или ещё не начат, сглаживать
   // нечего: иначе доля кадра продолжает бегать от нуля к единице, и
@@ -265,9 +271,15 @@ function frame(nowMs: number): void {
     incomePerSecond: purse?.incomePerSecond ?? 0,
     foeIncomePerSecond: foe?.incomePerSecond ?? 0,
     chosenKind,
+    replaying: phase === 'match' && log.replaying,
   });
   const ended = phase === 'match' && match.finished;
-  hud.announce(ended ? { winner: match.winner, tick: current.tick } : null);
+  const now = ended ? outcomeOf(match.winner, current) : null;
+  if (now && !announced) {
+    announced = true;
+    log.finish(now);
+  }
+  hud.announce(now && { now, original: log.replaying ? (log.last?.outcome ?? null) : null });
   outcome.show(ended);
   window.requestAnimationFrame(frame);
 }
@@ -276,7 +288,7 @@ fit();
 bindTimeControls(pacer, inMatch);
 bindUnitChoice((kind) => {
   chosenKind = kind;
-}, inMatch);
+}, playing);
 window.addEventListener('resize', fit);
 openPrep();
 window.requestAnimationFrame(frame);

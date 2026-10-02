@@ -7,6 +7,7 @@ import type {
   MatchEvent,
   MatchResult,
   MatchSetup,
+  ScheduledRelease,
   SideId,
   WorldSnapshot,
 } from './types.js';
@@ -33,8 +34,11 @@ export interface LiveMatch {
    *
    * Негодное действие отвергается здесь же: бросок из середины Тика
    * навсегда остановил бы цикл кадров в браузере.
+   *
+   * Возвращает Выпуск с назначенным Тиком — его можно записать и подать
+   * в другой матч расписанием; после конца матча — null.
    */
-  deploy(action: UnscheduledRelease): void;
+  deploy(action: UnscheduledRelease): ScheduledRelease | null;
   readonly finished: boolean;
   /** Победитель, когда матч окончен; иначе null. */
   readonly winner: SideId | null;
@@ -83,11 +87,12 @@ export function createMatch(setup: MatchSetup): LiveMatch {
 
     snapshot: () => snapshot(world),
 
-    deploy(action: UnscheduledRelease): void {
-      if (ended) return;
+    deploy(action: UnscheduledRelease): ScheduledRelease | null {
+      if (ended) return null;
       const scheduled = { ...action, tick: world.tick + 1 };
       validateRelease(scheduled, setup.map, setup.maxTicks);
       schedule(world, scheduled);
+      return scheduled;
     },
 
     get finished(): boolean {
