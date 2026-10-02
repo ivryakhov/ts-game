@@ -185,7 +185,11 @@ export function createRuleEditor(
     const units = UNIT_FIELD[condition.kind];
     if (units) {
       group.append(
-        select(units, String(condition['unit'] ?? ''), (unit) => commit(setCondition(rules, index, at, withUnit(condition, unit)))),
+        select(units, String(condition['unit'] ?? ''), (unit) => {
+          // Число могли поправить после отрисовки — берём Условие из черновика.
+          const current = rules[index]?.when[at];
+          if (current) commit(setCondition(rules, index, at, withUnit(current, unit)));
+        }),
       );
     }
 
