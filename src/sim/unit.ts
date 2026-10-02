@@ -43,6 +43,8 @@ export interface Unit {
   rule: number;
   /** Кого он бьёт в этот Тик; выставляется Стычкой. */
   target: UnitId | null;
+  /** К кому он идёт, никого не доставая; выставляется Стычкой. */
+  chasing: UnitId | null;
   /**
    * Достаёт ли Юнит чужую Цитадель и бьёт ли её. Сбрасывается, как только
    * он от неё отошёл.
@@ -124,6 +126,7 @@ export function createUnit(
     intent: { kind: 'advance' },
     rule: 0,
     target: null,
+    chasing: null,
     arrived: false,
     arrivedAt: null,
     hp: stats.maxHp,
@@ -150,6 +153,7 @@ export function unitSnapshot(unit: Unit, road: RoadMetrics): UnitSnapshot {
     healing: unit.healing,
     rule: unit.rule,
     target: unit.target,
+    chasing: unit.chasing,
     hp: unit.hp,
     maxHp: unit.maxHp,
   };

@@ -204,6 +204,11 @@ export interface UnitSnapshot {
   readonly rule: number;
   /** Кого он бьёт в этот Тик; null — никого. */
   readonly target: UnitId | null;
+  /**
+   * К кому он идёт, никого не доставая: врага, которого выбрало его
+   * Действие среди видимых. null — ни к кому.
+   */
+  readonly chasing: UnitId | null;
   readonly hp: number;
   readonly maxHp: number;
 }
