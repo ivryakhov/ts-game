@@ -35,10 +35,6 @@
       }
 
       .hud__replay {
-        position: absolute;
-        top: 58px;
-        left: 50%;
-        transform: translateX(-50%);
         padding: 2px 10px;
         font-size: 12px;
         color: #f0abfc;
@@ -70,12 +66,21 @@
       .hud__kind--broke { opacity: 0.4; }
       .hud__paused { color: #fbbf24; }
 
-      .hud__warning {
+      /* Плашка повтора и предупреждения — друг под другом, а не друг на друге. */
+      .hud__notices {
         position: absolute;
-        top: 64px;
+        top: 58px;
         left: 50%;
         transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        width: max-content;
         max-width: min(720px, 90vw);
+      }
+
+      .hud__warning {
         padding: 10px 16px;
         color: #fca5a5;
         background: rgba(40, 10, 16, 0.85);
@@ -250,7 +255,10 @@
 
     <div class="hud">
       <div class="hud__clock" id="hud-clock">00:00</div>
-      <div class="hud__replay" id="hud-replay" hidden>повтор · Выпуски идут сами, клики по Дороге выключены</div>
+      <div class="hud__notices">
+        <div class="hud__replay" id="hud-replay" hidden>повтор · Выпуски идут сами, клики по Дороге выключены</div>
+        <div class="hud__warning" id="hud-warning" hidden></div>
+      </div>
       <div class="hud__outcome" id="hud-outcome">
         <div id="hud-outcome-text"></div>
         <div class="hud__actions" id="outcome-actions" hidden>
@@ -260,7 +268,6 @@
           <button type="button" class="button" id="outcome-new-seed">Новый Сид</button>
         </div>
       </div>
-      <div class="hud__warning" id="hud-warning" hidden></div>
       <div class="inspector" id="inspector" hidden>
         <div class="inspector__title" id="inspector-title"></div>
         <ol class="inspector__rules" id="inspector-rules"></ol>
