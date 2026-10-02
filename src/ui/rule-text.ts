@@ -22,6 +22,13 @@ const UNIT_ACCUSATIVE: Readonly<Record<UnitKind, string>> = {
   ranger: 'Стрелка',
 };
 
+/** Сколько своих этого типа — в родительном падеже множественного числа. */
+export const UNIT_GENITIVE_PLURAL: Readonly<Record<UnitKind, string>> = {
+  scout: 'Разведчиков',
+  tank: 'Танков',
+  ranger: 'Стрелков',
+};
+
 export function describeCondition(condition: Condition): string {
   switch (condition.kind) {
     case 'always':
@@ -30,10 +37,14 @@ export function describeCondition(condition: Condition): string {
       return `здоровье ниже ${condition.percent}%`;
     case 'enemy-in-range':
       return 'враг в радиусе';
+    case 'enemy-kind-in-range':
+      return `вижу ${UNIT_ACCUSATIVE[condition.unit]}`;
     case 'at-home':
       return 'у своей Цитадели';
     case 'allies-nearby':
-      return `своих рядом ${condition.compare === 'fewer' ? 'меньше' : 'больше'} ${condition.count}`;
+      return `своих ${condition.unit ? `${UNIT_GENITIVE_PLURAL[condition.unit]} ` : ''}рядом ${
+        condition.compare === 'fewer' ? 'меньше' : 'больше'
+      } ${condition.count}`;
     case 'enemies-in-skirmish':
       return `врагов в Стычке больше ${condition.above}`;
     case 'enemy-ahead':

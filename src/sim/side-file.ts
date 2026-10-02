@@ -1,6 +1,6 @@
 import { UNIT_KINDS } from './balance.js';
 import { filePart, isRecord } from './parse.js';
-import { parseBehaviour } from './rules.js';
+import { parseBehaviour } from './rule-parse.js';
 import type { GameMap, SideId, SideSetup } from './types.js';
 import { parseWaves } from './waves.js';
 

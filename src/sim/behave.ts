@@ -4,7 +4,7 @@ import { enemiesInSight } from './skirmish.js';
 import { reachOfStructure } from './structure.js';
 import { obeliskInSight, type Obelisk } from './obelisk.js';
 import { distanceTo, healthPercent, isAtHome, positionOn, type Unit } from './unit.js';
-import type { SideId } from './types.js';
+import type { SideId, UnitKind } from './types.js';
 
 /**
  * Исполнение Правил: каждый Тик каждый Юнит перебирает Правила своего типа
@@ -20,10 +20,14 @@ import type { SideId } from './types.js';
 export interface Surroundings {
   /** Видит ли Юнит врага — того, к кому готов сойти с Дороги. */
   readonly enemyInReach: boolean;
+  /** Каких типов враги среди тех, кого он видит. */
+  readonly enemyKinds: ReadonlySet<UnitKind>;
   /** Стоит ли Юнит у своей Цитадели — там, где она его лечит. */
   readonly atHome: boolean;
   /** Сколько своих рядом, не считая его самого. */
   readonly alliesNearby: number;
+  /** То же по типам: сколько своих Разведчиков, Танков и Стрелков рядом. */
+  readonly alliesNearbyByKind: Readonly<Record<UnitKind, number>>;
   /** Сколько врагов он видит, не считая отступающих. */
   readonly enemiesInSkirmish: number;
   /** Есть ли враг впереди по Дороге — на любом расстоянии. */
@@ -46,10 +50,12 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
       return around.enemyInReach;
     case 'at-home':
       return around.atHome;
-    case 'allies-nearby':
-      return condition.compare === 'fewer'
-        ? around.alliesNearby < condition.count
-        : around.alliesNearby > condition.count;
+    case 'enemy-kind-in-range':
+      return around.enemyKinds.has(condition.unit);
+    case 'allies-nearby': {
+      const allies = condition.unit ? around.alliesNearbyByKind[condition.unit] : around.alliesNearby;
+      return condition.compare === 'fewer' ? allies < condition.count : allies > condition.count;
+    }
     case 'enemies-in-skirmish':
       return around.enemiesInSkirmish > condition.above;
     case 'enemy-ahead':
@@ -103,7 +109,9 @@ export function surroundingsOf(
           other.side === unit.side &&
           other.id !== unit.id &&
           distanceTo(unit, other) <= NEARBY_RANGE,
-      ).length;
+      );
+      const alliesNearbyByKind = { scout: 0, tank: 0, ranger: 0 };
+      for (const ally of allies) alliesNearbyByKind[ally.kind] += 1;
 
       // «Впереди» — по направлению движения Юнита вдоль его Дороги.
       const length = roadLength(unit.roadId);
@@ -119,8 +127,10 @@ export function surroundingsOf(
         unit.id,
         {
           enemyInReach: seen.length > 0,
+          enemyKinds: new Set(seen.map((enemy) => enemy.kind)),
           atHome: isAtHome(unit),
-          alliesNearby: allies,
+          alliesNearby: allies.length,
+          alliesNearbyByKind,
           // Отступающие из Стычки вышли — их не считают, хоть они и видны.
           enemiesInSkirmish: seen.filter((enemy) => enemy.intent.kind !== 'retreat').length,
           enemyAhead: ahead,
