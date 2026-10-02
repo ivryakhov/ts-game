@@ -18,8 +18,11 @@ import { describeStats } from './stats-text.js';
  * Разметка лежит в index.html, здесь — заполнение и кнопки.
  */
 export interface Prep {
-  /** Открыть Подготовку с этим Сидом. Черновик игрока остаётся прежним. */
-  show(seed: Seed, opponent: Behaviour): void;
+  /**
+   * Открыть Подготовку с этим Сидом. Черновик игрока остаётся прежним.
+   * `canRepeat` — есть ли прошлый матч, который можно повторить.
+   */
+  show(seed: Seed, opponent: Behaviour, canRepeat: boolean): void;
   /** Заменить черновик игрока целиком. `file` — Поведение из player.json, Заготовка «Из файла». */
   setPlayer(player: Behaviour, file: Behaviour): void;
   hide(): void;
@@ -77,12 +80,14 @@ function opponentView(behaviour: Behaviour): HTMLElement[] {
 export interface PrepOptions {
   /** Матч начинается с Сидом и Поведением игрока — уже разобранным. */
   onStart(seed: Seed, player: Behaviour): void;
+  /** Повтор прошлого матча — его Сид и Выпуски, но Правила с этого экрана. */
+  onRepeat(player: Behaviour): void;
   /** Игрок поправил Правила, и черновик без ошибок. */
   onEdit(player: Behaviour): void;
   readonly presets: readonly Preset[];
 }
 
-export function createPrep({ onStart, onEdit, presets }: PrepOptions): Prep {
+export function createPrep({ onStart, onRepeat, onEdit, presets }: PrepOptions): Prep {
   const panel = element('prep');
   const tabs = element('prep-tabs');
   const body = element('prep-body');
@@ -90,6 +95,8 @@ export function createPrep({ onStart, onEdit, presets }: PrepOptions): Prep {
   const seedInput = element<HTMLInputElement>('prep-seed');
   const seedError = element('prep-seed-error');
   const start = element<HTMLButtonElement>('prep-start');
+  const repeat = element<HTMLButtonElement>('prep-repeat');
+  let canRepeat = false;
 
   let active: Tab = UNIT_KINDS[0] ?? 'opponent';
   let opponent: Behaviour | null = null;
@@ -160,6 +167,8 @@ export function createPrep({ onStart, onEdit, presets }: PrepOptions): Prep {
     const seed = parseSeed(seedInput.value);
     seedError.hidden = seed !== null;
     start.disabled = seed === null || errors.size > 0;
+    repeat.disabled = !canRepeat || errors.size > 0;
+    repeat.hidden = !canRepeat;
     return seed;
   }
 
@@ -183,10 +192,15 @@ export function createPrep({ onStart, onEdit, presets }: PrepOptions): Prep {
     if (event.key === 'Enter') begin();
   });
   start.addEventListener('click', begin);
+  repeat.addEventListener('click', () => {
+    const behaviour = current();
+    if (canRepeat && behaviour) onRepeat(behaviour);
+  });
 
   return {
-    show(seed, shownOpponent): void {
+    show(seed, shownOpponent, repeatable): void {
       opponent = shownOpponent;
+      canRepeat = repeatable;
       seedInput.value = String(seed);
       panel.hidden = false;
       render();

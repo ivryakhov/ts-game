@@ -2,6 +2,7 @@ import { TICKS_PER_SECOND, UNIT_KINDS, UNIT_STATS } from '@sim/index';
 import type { SideId, UnitKind } from '@sim/index';
 import { UNIT_TITLES } from './rule-text.js';
 import type { Speed } from '../app/pacer.js';
+import type { Outcome } from '../app/replay.js';
 
 /**
  * Надпись поверх поля: время матча, темп и Сид.
@@ -20,13 +21,18 @@ export interface Hud {
     /** Доход противника в секунду — чтобы видеть, кто выигрывает экономику. */
     foeIncomePerSecond: number;
     chosenKind: UnitKind;
+    /** Идёт повтор: Выпуски идут сами, клики по Дороге не действуют. */
+    replaying: boolean;
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
   /** Показать ошибку, которую игрок должен исправить сам. Ошибки копятся, а не заменяют друг друга. */
   warn(message: string): void;
-  /** Объявить исход глазами игрока. Победитель null означает, что время вышло вничью. */
-  announce(outcome: { winner: SideId | null; tick: number } | null): void;
+  /**
+   * Объявить исход глазами игрока. Победитель null означает, что время
+   * вышло вничью. У повтора рядом стоит исход оригинала.
+   */
+  announce(outcome: { now: Outcome; original: Outcome | null } | null): void;
 }
 
 function element(id: string): HTMLElement {
@@ -43,6 +49,14 @@ export function formatMatchTime(tick: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Исход одной строкой: кто взял верх, когда и сколько осталось от Цитаделей. */
+export function describeOutcome(outcome: Outcome, playerSide: SideId): string {
+  const verdict = outcome.winner === null ? 'ничья' : outcome.winner === playerSide ? 'победа' : 'поражение';
+  const hp = (mine: boolean) =>
+    Math.ceil(outcome.citadels.find((citadel) => (citadel.side === playerSide) === mine)?.hp ?? 0);
+  return `${verdict}, ${formatMatchTime(outcome.tick)}, Цитадели: ваша ${hp(true)}, врага ${hp(false)}`;
+}
+
 export function createHud(playerSide: SideId): Hud {
   const clock = element('hud-clock');
   const speed = element('hud-speed');
@@ -53,6 +67,7 @@ export function createHud(playerSide: SideId): Hud {
   const foeIncome = element('hud-foe-income');
   const kinds = element('hud-kinds');
   const warning = element('hud-warning');
+  const replay = element('hud-replay');
 
   const slots = UNIT_KINDS.map((kind, index) => {
     const slot = document.createElement('span');
@@ -70,6 +85,7 @@ export function createHud(playerSide: SideId): Hud {
       seed.textContent = String(state.seed);
       ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond.toFixed(1)}/с)`;
       foeIncome.textContent = `+${state.foeIncomePerSecond.toFixed(1)}/с`;
+      replay.hidden = !state.replaying;
 
       for (const { kind, slot } of slots) {
         slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);
@@ -96,12 +112,23 @@ export function createHud(playerSide: SideId): Hud {
       outcome.classList.toggle('hud__outcome--shown', result !== null);
       if (!result) return;
 
-      const headline =
-        result.winner === null ? 'Время вышло' : result.winner === playerSide ? 'Победа' : 'Поражение';
-      const detail = document.createElement('small');
-      const who = result.winner === null ? 'ничья' : `победила Сторона ${result.winner}`;
-      detail.textContent = `${who}, матч длился ${formatMatchTime(result.tick)}`;
-      outcomeText.replaceChildren(headline, detail);
+      const { now, original } = result;
+      const headline = now.winner === null ? 'Время вышло' : now.winner === playerSide ? 'Победа' : 'Поражение';
+      const line = (text: string) => {
+        const small = document.createElement('small');
+        small.textContent = text;
+        return small;
+      };
+      if (!original) {
+        const who = now.winner === null ? 'ничья' : `победила Сторона ${now.winner}`;
+        outcomeText.replaceChildren(headline, line(`${who}, матч длился ${formatMatchTime(now.tick)}`));
+        return;
+      }
+      outcomeText.replaceChildren(
+        headline,
+        line(`повтор: ${describeOutcome(now, playerSide)}`),
+        line(`оригинал: ${describeOutcome(original, playerSide)}`),
+      );
     },
   };
 }
