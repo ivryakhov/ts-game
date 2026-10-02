@@ -33,6 +33,11 @@ export interface Pacer {
   /** Следующая скорость вверх или вниз по списку; на краях ничего не меняется. */
   faster(): void;
   slower(): void;
+  /**
+   * Новый матч: начальная скорость, без паузы и без накопленного времени.
+   * Тот же объект, а не новый — на него уже подписаны клавиши.
+   */
+  restart(): void;
   /** Доля пути от последнего Тика к следующему — для сглаживания. */
   readonly alpha: number;
 }
@@ -40,7 +45,8 @@ export interface Pacer {
 export function createPacer(ticksPerSecond: number, start: Speed = 1): Pacer {
   const tickMs = 1000 / ticksPerSecond;
   let accumulated = 0;
-  let speedIndex = SPEEDS.indexOf(start);
+  const startIndex = SPEEDS.indexOf(start);
+  let speedIndex = startIndex;
 
   const shift = (step: number): void => {
     speedIndex = Math.min(SPEEDS.length - 1, Math.max(0, speedIndex + step));
@@ -55,6 +61,12 @@ export function createPacer(ticksPerSecond: number, start: Speed = 1): Pacer {
 
     faster: () => shift(1),
     slower: () => shift(-1),
+
+    restart(): void {
+      speedIndex = startIndex;
+      accumulated = 0;
+      this.paused = false;
+    },
 
     advance(deltaMs: number): number {
       if (this.paused) return 0;

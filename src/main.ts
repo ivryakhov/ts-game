@@ -180,7 +180,7 @@ function startMatch(next: Seed): void {
   previous = match.snapshot();
   current = previous;
   selectedUnit = null;
-  pacer.paused = false;
+  pacer.restart();
   phase = 'match';
   document.body.dataset['phase'] = phase;
   prep.hide();
