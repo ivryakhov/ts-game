@@ -1,4 +1,4 @@
-import type { ObeliskSnapshot, Point, SideId, WorldSnapshot } from '@sim/index';
+import type { ObeliskSnapshot, Point, SideId } from '@sim/index';
 import { OBELISK, SIDE_COLORS, withAlpha } from './visual-contract.js';
 
 /**
@@ -68,25 +68,21 @@ export function drawObelisk(
 }
 
 /**
- * Вспышки перехода: Обелиск сменил владельца — от него расходится кольцо
- * в новом цвете. Переход виден по двум соседним снимкам, поэтому рендеру
- * не нужны события матча.
+ * Вспышки перехода: Обелиск пал — от него расходится кольцо в цвете
+ * нового владельца. Падения приходят с кадром, собранные за все его Тики:
+ * по двум последним снимкам переход на первом из нескольких Тиков кадра
+ * не виден.
  */
 export function createObeliskFlashes() {
   const since = new Map<string, number>();
-  /** Тик, по которому переходы уже отмечены: кадров на Тик несколько. */
-  let notedTick = -1;
+  let lastMs = 0;
 
   return {
-    note(previous: WorldSnapshot, current: WorldSnapshot, matchMs: number): void {
-      if (current.tick === notedTick) return;
-      notedTick = current.tick;
-      for (const state of current.obelisks) {
-        const before = previous.obelisks.find((obelisk) => obelisk.id === state.id);
-        // Встал ничьим после равного урона — владелец тот же, а здоровье подскочило.
-        const changed = before && (before.owner !== state.owner || state.hp > before.hp);
-        if (changed) since.set(state.id, matchMs);
-      }
+    note(taken: ReadonlySet<string>, matchMs: number): void {
+      // Время матча пошло назад — начался новый матч, старые вспышки не его.
+      if (matchMs < lastMs) since.clear();
+      lastMs = matchMs;
+      for (const id of taken) since.set(id, matchMs);
     },
 
     draw(context: CanvasRenderingContext2D, id: string, center: Point, owner: SideId | null, matchMs: number, scale: number): void {

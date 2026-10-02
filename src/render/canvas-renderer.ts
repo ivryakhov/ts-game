@@ -214,7 +214,7 @@ export function createCanvasRenderer(
           frame.current.citadels.find((health) => health.side === citadel.side),
         );
       }
-      flashes.note(frame.previous, frame.current, frame.matchMs);
+      flashes.note(frame.obelisksTaken, frame.matchMs);
       for (const obelisk of map.obelisks) {
         const state = frame.current.obelisks.find((candidate) => candidate.id === obelisk.id);
         drawObelisk(context, toScreen(obelisk.at), view.scale, state);

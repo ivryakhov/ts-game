@@ -200,6 +200,17 @@ describe('слова Правил', () => {
     expect(places(everyone([SIEGE_ALWAYS]))).toEqual(places(everyone([ADVANCE])));
   });
 
+  it('Танк с «бить Обелиск» без видимого Обелиска идёт в колонне: быстрый свой его не обгоняет', () => {
+    const SIEGE_ALWAYS: Rule = { when: { kind: 'always' }, do: { kind: 'siege-obelisk' } };
+    const releases = [deploy(1, 'A', 'north', 'tank'), deploy(2, 'A', 'north', 'scout')];
+    const places = (tank: readonly Rule[]) =>
+      trace({ A: { scout: [ADVANCE], tank, ranger: [ADVANCE] }, B: everyone([ADVANCE]) }, releases, 200, arenaWithoutObelisks).map(
+        (tick) => tick.snapshot.units.map((unit) => `${unit.id}:${unit.x}:${unit.y}`).join('|'),
+      );
+
+    expect(places([SIEGE_ALWAYS])).toEqual(places([ADVANCE]));
+  });
+
   it('с «враг в радиусе → бить ближайшего · иначе → идти вперёд» Юнит проходит мимо ничейного Обелиска, не останавливаясь', () => {
     const arrival = (map: typeof arena) =>
       runMatch(
