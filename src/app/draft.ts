@@ -93,6 +93,8 @@ export function freshCondition(kind: Condition['kind'], compare: 'fewer' | 'more
       return { kind, compare, count: 2 };
     case 'enemies-in-skirmish':
       return { kind, above: 2 };
+    case 'enemy-closer-than':
+      return { kind, distance: 60 };
     case 'enemy-kind-in-range':
       return { kind, unit: UNIT_KINDS[0] ?? 'scout' };
     default:

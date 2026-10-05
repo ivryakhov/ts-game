@@ -1,4 +1,4 @@
-import { UNIT_KINDS, type UnitKind } from './balance.js';
+import { UNIT_KINDS, UNIT_STATS, type UnitKind } from './balance.js';
 import { filePart, isRecord } from './parse.js';
 import {
   ACTION_KINDS,
@@ -34,6 +34,16 @@ function parseCount(value: unknown, where: string): number {
   return value;
 }
 
+/** Дальше Обзора не видит никто — такой порог ничем не отличался бы от «враг в радиусе». */
+const FARTHEST_SIGHT = Math.max(...UNIT_KINDS.map((kind) => UNIT_STATS[kind].sight));
+
+function parseDistance(value: unknown, where: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > FARTHEST_SIGHT) {
+    throw fail(where, `ожидалось расстояние от 0 до ${FARTHEST_SIGHT} (Обзор), а не ${String(value)}`);
+  }
+  return value;
+}
+
 function parseUnit(value: unknown, where: string): UnitKind {
   if (typeof value !== 'string' || !(UNIT_KINDS as readonly string[]).includes(value)) {
     throw fail(where, `неизвестный тип «${String(value)}»; есть: ${UNIT_KINDS.join(', ')}`);
@@ -58,6 +68,9 @@ function parseCondition(raw: unknown, where: string): Condition {
     case 'enemy-kind-in-range':
       onlyKeys(raw, ['kind', 'unit'], where);
       return { kind, unit: parseUnit(raw['unit'], `${where}.unit`) };
+    case 'enemy-closer-than':
+      onlyKeys(raw, ['kind', 'distance'], where);
+      return { kind, distance: parseDistance(raw['distance'], `${where}.distance`) };
     case 'allies-nearby': {
       onlyKeys(raw, ['kind', 'compare', 'count', 'unit'], where);
       const compare = raw['compare'];
