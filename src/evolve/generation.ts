@@ -10,6 +10,13 @@ import { mutateSome } from './mutate.js';
 
 /** Сколько лучших переходит в следующее Поколение без изменений. */
 export const ELITE = 2;
+
+/**
+ * Элита Поколения этого размера: не больше ELITE и всегда на одного меньше
+ * размера. Иначе Поколение из двух целиком занято элитой, детей нет,
+ * и эволюция вечно переоценивает одних и тех же.
+ */
+export const eliteOf = (size: number): number => Math.max(0, Math.min(ELITE, size - 1));
 /** Из скольких случайных выбирается родитель. */
 export const TOURNAMENT = 3;
 /** Доля детей от двух родителей; остальные — мутанты одного. */
@@ -56,7 +63,7 @@ export function crossover(rng: Rng, a: Candidate, b: Candidate): Candidate {
 /** Следующее Поколение того же размера. */
 export function nextGeneration(rng: Rng, scored: readonly Scored[], roads: readonly string[]): Candidate[] {
   const elite = ranking(scored)
-    .slice(0, ELITE)
+    .slice(0, eliteOf(scored.length))
     .map((index) => (scored[index] as Scored).candidate);
   const children = Array.from({ length: Math.max(0, scored.length - elite.length) }, () => {
     const parent = tournament(rng, scored);

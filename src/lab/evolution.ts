@@ -1,7 +1,7 @@
 import { createRng, type GameMap } from '@sim/index';
 import type { Candidate } from '../evolve/candidate.js';
 import { candidateSide, totalOf, type Bout } from '../evolve/exam.js';
-import { ELITE, firstGeneration, nextGeneration } from '../evolve/generation.js';
+import { eliteOf, firstGeneration, nextGeneration } from '../evolve/generation.js';
 import type { BoutRequest } from './protocol.js';
 import type { Runner } from './runner.js';
 import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
@@ -99,6 +99,14 @@ export function createEvolution(
   /** Номер запуска: остановленный прогон, доигрывая, не трогает следующего. */
   let launch = 0;
 
+  /** Остановить прогон: доигрывающие ответы его больше не трогают. */
+  function halt(): void {
+    state.phase = 'stopped';
+    launch += 1;
+    runner.stop();
+    onChange();
+  }
+
   /** Экзамен Поколения. false — прогон остановлен или сменился. */
   async function examine(mine: number, settings: Settings, generation: number): Promise<boolean> {
     const count = settings.examiners.length;
@@ -121,17 +129,25 @@ export function createEvolution(
         state.done += 1;
         onChange();
       },
+      // Несыгранный матч — не ноль Оценки: неполный Экзамен поставил бы
+      // упавшего Претендента выше честно проигравших. Матч детерминирован,
+      // повтор упадёт так же, поэтому прогон останавливается до отбора.
       (job, problem) => {
-        warn(job < 0 ? `Экзамен прерван — ${problem}` : `Матч Экзамена не сыгран — ${problem}`);
-        if (mine === launch) state.done += 1;
+        if (mine !== launch) return;
+        const what = job < 0 ? 'Worker Экзамена упал' : 'матч Экзамена не сыгран';
+        warn(`Прогон остановлен в Поколении ${state.generation}: ${what} — ${problem}. Неполный Экзамен в отбор не идёт.`);
+        halt();
       },
     );
-    return mine === launch && state.phase !== 'stopped';
+    return mine === launch;
   }
 
   return {
     async start(settings) {
       const mine = (launch += 1);
+      // Пауза прошлого прогона могла пережить его конец: доиграв два
+      // последних матча, он кончился, а очередь так и стоит.
+      runner.resume();
       const rng = createRng(settings.seed);
       let candidates = firstGeneration(rng, settings.size, roads, settings.ready);
       let origins = (index: number): Origin =>
@@ -147,7 +163,7 @@ export function createEvolution(
         state.history.push(recordOf(generation + 1, state.entries));
         const scored = state.entries.map((entry) => ({ candidate: entry.candidate, score: scoreOfEntry(entry) }));
         candidates = nextGeneration(rng, scored, roads);
-        origins = (index) => (index < ELITE ? 'elite' : 'child');
+        origins = (index) => (index < eliteOf(settings.size) ? 'elite' : 'child');
       }
       state.phase = 'done';
       onChange();
@@ -168,11 +184,7 @@ export function createEvolution(
     },
 
     stop() {
-      if (state.phase !== 'running' && state.phase !== 'paused') return;
-      state.phase = 'stopped';
-      launch += 1;
-      runner.stop();
-      onChange();
+      if (state.phase === 'running' || state.phase === 'paused') halt();
     },
 
     get state() {

@@ -9,6 +9,7 @@ import type { Candidate } from '../evolve/candidate.js';
 import { loadOpponents } from '../app/opponents.js';
 import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
+import { ELITE } from '../evolve/generation.js';
 import { createEvolution, type Settings } from './evolution.js';
 import { createRunner } from './runner.js';
 import { details, historyTable, leaderboard, ranked, summary } from './view.js';
@@ -20,7 +21,8 @@ function element<T extends HTMLElement = HTMLElement>(id: string): T {
 }
 
 const roster = loadOpponents(arena, 'B');
-const SIZE = { min: 2, max: 128, start: 32 } as const;
+/** Меньше — и всё Поколение займёт элита: детям места не останется. */
+const SIZE = { min: ELITE + 1, max: 128, start: 32 } as const;
 const GENERATIONS = { min: 1, max: 1000, start: 30 } as const;
 
 const pickers = element('lab-opponents');
