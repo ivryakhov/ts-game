@@ -5,7 +5,7 @@ import type { Bout } from '../src/evolve/exam.js';
 import { nextGeneration } from '../src/evolve/generation.js';
 import { createEvolution, type Settings } from '../src/lab/evolution.js';
 import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
-import { createRunner, type WorkerLike } from '../src/lab/runner.js';
+import { createRunner, threadCount, type WorkerLike } from '../src/lab/runner.js';
 import { arena } from '../src/maps/arena.js';
 
 /**
@@ -27,13 +27,16 @@ const bout = (request: BoutRequest, score: number): Bout => ({
   ruleTicks: { scout: [], tank: [], ranger: [] },
 });
 
-/** Worker, который отвечает на задание в следующей задаче; `answer` решает, что ответить. */
-function fakeWorker(answer: (request: BoutRequest) => WorkerReply): WorkerLike {
+/**
+ * Worker, который отвечает на задание в следующей задаче; `answer` решает,
+ * что ответить, `delay` — через сколько миллисекунд.
+ */
+function fakeWorker(answer: (request: BoutRequest) => WorkerReply, delay: () => number = () => 0): WorkerLike {
   const worker: WorkerLike = {
     onmessage: null,
     onerror: null,
     postMessage(request) {
-      setTimeout(() => worker.onmessage?.({ data: answer(request) } as MessageEvent<WorkerReply>), 0);
+      setTimeout(() => worker.onmessage?.({ data: answer(request) } as MessageEvent<WorkerReply>), delay());
     },
     terminate() {
       worker.onmessage = null;
@@ -117,5 +120,51 @@ describe('размер Поколения', () => {
     expect(next[0]).toBe(candidates[1]);
     expect(candidates).not.toContain(next[1]);
     expect(rng.draws).toBeGreaterThan(draws);
+  });
+});
+
+describe('пул Worker\'ов', () => {
+  /**
+   * Оценка зависит от Претендента и Противника, а не от порядка ответов:
+   * так её и считает настоящий Worker. Задержки случайны — ответы
+   * приходят вразнобой.
+   */
+  const answer = (request: BoutRequest): WorkerReply => {
+    const text = JSON.stringify(request.side) + request.opponent;
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) hash = (hash * 31 + text.charCodeAt(index)) | 0;
+    return { kind: 'bout', job: request.job, bout: bout(request, hash % 1000) };
+  };
+
+  async function evolveWith(threads: number) {
+    const runner = createRunner(() => fakeWorker(answer, () => Math.floor(Math.random() * 3)), threads);
+    const evolution = createEvolution(runner, arena, () => {}, () => {});
+    const run = evolution.start(
+      settings({
+        size: 6,
+        generations: 4,
+        seed: 17,
+        examiners: [
+          { id: 'balanced', name: 'Сбалансированный' },
+          { id: 'turtle', name: 'Черепаха' },
+        ],
+      }),
+    );
+    expect(await finishes(run)).toBe(true);
+    return { history: evolution.state.history, last: evolution.state.entries.map((entry) => entry.candidate) };
+  }
+
+  it('один и четыре потока дают те же Поколения', async () => {
+    const one = await evolveWith(1);
+    const four = await evolveWith(4);
+
+    expect(four.history).toEqual(one.history);
+    expect(four.last).toEqual(one.last);
+  });
+
+  it('Экзамену — все ядра, кроме одного, но не меньше одного', () => {
+    expect(threadCount(10)).toBe(9);
+    expect(threadCount(1)).toBe(1);
+    expect(threadCount(undefined)).toBe(1);
   });
 });
