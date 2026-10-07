@@ -36,6 +36,8 @@ export interface GenerationRecord {
   readonly wins: number;
   /** Сколько раз лучший взял Обелиск за весь Экзамен. */
   readonly obelisks: number;
+  /** Лучший Претендент Поколения — его матчи и Правила, как в конце Экзамена. */
+  readonly champion: Entry | null;
 }
 
 export interface Evolution {
@@ -78,6 +80,8 @@ function recordOf(number: number, entries: readonly Entry[]): GenerationRecord {
     mean: finite.length > 0 ? finite.reduce((sum, value) => sum + value, 0) / finite.length : Number.NaN,
     wins: totalOf(bouts).wins,
     obelisks: bouts.reduce((sum, bout) => sum + bout.obelisks, 0),
+    // Копия: Претендент Поколения не меняется, но список его матчей — изменяемый.
+    champion: best ? { ...best, bouts: [...best.bouts] } : null,
   };
 }
 

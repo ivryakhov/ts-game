@@ -10,8 +10,10 @@ import { loadOpponents } from '../app/opponents.js';
 import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
 import { ELITE } from '../evolve/generation.js';
-import { createEvolution, type Settings } from './evolution.js';
+import { createCurve } from './curve.js';
+import { createEvolution, type GenerationRecord, type Settings } from './evolution.js';
 import { createRunner, threadCount } from './runner.js';
+import { createRunMemory, readRun, type RunSettings } from './saved-run.js';
 import { details, historyTable, leaderboard, ranked, summary } from './view.js';
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -36,6 +38,7 @@ const stop = element<HTMLButtonElement>('lab-stop');
 const status = element('lab-status');
 const line = element('lab-summary');
 const history = element('lab-history');
+const curveSlot = element('lab-curve');
 const board = element('lab-board');
 const chosen = element('lab-details');
 const problems = element('lab-problems');
@@ -77,10 +80,24 @@ const elapsedSeconds = (): number =>
   Math.round((clock.spentMs + (evolution.state.phase === 'running' ? performance.now() - clock.sinceMs : 0)) / 1000);
 
 let selected: number | null = null;
+/** Поколение, чьего лучшего показывает страница; null — идущее Поколение. */
+let viewing: number | null = null;
+/**
+ * Прошлый прогон из хранилища — до первого «Старта». Его кривая, история
+ * и лучшие Поколений видны, хотя Претендентов последнего Поколения нет.
+ */
+let restored: { settings: RunSettings; history: readonly GenerationRecord[] } | null = null;
+const curve = createCurve((generation) => {
+  viewing = generation;
+  render();
+});
+curveSlot.append(curve.element);
 const runner = createRunner(undefined, threadCount(navigator.hardwareConcurrency));
 const evolution = createEvolution(runner, arena, render, warn);
 /** Секунды Экзамена каждого доигранного Поколения, без пауз. */
 const durations = new Map<number, number>();
+
+const memory = createRunMemory(warn);
 
 const PHASES = { idle: '', running: '', paused: ' · пауза', stopped: ' · остановлен', done: ' · готово' } as const;
 
@@ -96,26 +113,48 @@ function render(): void {
   else if (clock.phase !== 'running' && phase === 'running') clock.sinceMs = now;
   clock.phase = phase;
   if (phase === 'done') durations.set(generation, clock.spentMs / 1000);
-  const examined = settings?.examiners.length ?? 0;
-  status.textContent =
-    phase === 'idle'
+  memory.record(evolution.state.history, [...durations]);
+  const records = restored?.history ?? evolution.state.history;
+  const examiners = restored?.settings.examiners ?? settings?.examiners ?? [];
+  const examined = examiners.length;
+  const total = restored?.settings.generations ?? settings?.generations ?? 0;
+  status.textContent = restored
+    ? `Прошлый прогон из браузера: ${records.length} Поколений из ${total}, Сид ${restored.settings.seed}, размер ${restored.settings.size}`
+    : phase === 'idle'
       ? status.textContent
       : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с · потоков: ${runner.threads}${PHASES[phase]}`;
-  line.textContent = settings ? summary(entries, examined, generation, settings.generations) : '';
-  history.replaceChildren(...(evolution.state.history.length > 0 ? [historyTable(evolution.state.history, examined, (number) => durations.get(number))] : []));
-  history.scrollTop = history.scrollHeight;
+  line.textContent = settings && !restored ? summary(entries, examined, generation, total) : '';
+  curve.update(records, total, examined, viewing);
+  const pick = (number: number): void => {
+    viewing = number;
+    render();
+  };
+  const scrolled = history.scrollTop + history.clientHeight >= history.scrollHeight - 4;
+  history.replaceChildren(
+    ...(records.length > 0 ? [historyTable(records, examined, (number) => durations.get(number), viewing, pick)] : []),
+  );
+  // Новое Поколение видно, если читатель не листает историю выше.
+  if (scrolled || viewing === null) history.scrollTop = history.scrollHeight;
   board.replaceChildren(
     ...(entries.length === 0
       ? []
       : [
-          leaderboard(entries, examined, selected, (number) => {
+          leaderboard(entries, examined, viewing === null ? selected : null, (number) => {
             selected = number;
+            viewing = null;
             render();
           }),
         ]),
   );
+  const champion = records.find((record) => record.number === viewing)?.champion;
   const shown = entries.find((entry) => entry.number === (selected ?? ranked(entries)[0]?.number));
-  chosen.replaceChildren(...(shown && settings ? details(shown, settings.examiners) : []));
+  chosen.replaceChildren(
+    ...(champion
+      ? details(champion, examiners, `Лучший Поколения ${viewing}: Претендент №${champion.number}`)
+      : shown
+        ? details(shown, examiners)
+        : []),
+  );
   const live = phase === 'running' || phase === 'paused';
   start.disabled = live;
   pause.disabled = !live;
@@ -159,8 +198,33 @@ start.addEventListener('click', () => {
   if (!chosenSettings) return;
   clock.generation = 0;
   durations.clear();
+  restored = null;
+  viewing = null;
+  const remembered: RunSettings = {
+    size: chosenSettings.size,
+    generations: chosenSettings.generations,
+    seed: chosenSettings.seed,
+    origin: origin.value === 'ready' ? 'ready' : 'scratch',
+    examiners: chosenSettings.examiners,
+  };
+  memory.begin(remembered);
   void evolution.start(chosenSettings);
 });
 pause.addEventListener('click', () => (evolution.state.phase === 'paused' ? evolution.resume() : evolution.pause()));
 stop.addEventListener('click', () => evolution.stop());
+
+/** Прошлый прогон: поля — его настройки, кривая и история — его. */
+const previous = readRun(arena);
+if (previous && 'problem' in previous) warn(`Прошлый прогон из браузера не прочитан — ${previous.problem}.`);
+if (previous && 'run' in previous) {
+  const { settings: last, history: records, seconds } = previous.run;
+  restored = { settings: last, history: records };
+  for (const [number, spent] of seconds) durations.set(number, spent);
+  sizeInput.value = String(last.size);
+  generationsInput.value = String(last.generations);
+  seedInput.value = String(last.seed);
+  origin.value = last.origin;
+  for (const { opponent, box } of boxes) box.checked = last.examiners.some((entry) => entry.id === opponent.id);
+  viewing = records[records.length - 1]?.number ?? null;
+}
 render();

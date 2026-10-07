@@ -59,6 +59,39 @@
       .button:hover { border-color: rgba(34, 211, 238, 0.5); }
       .button--main { border-color: var(--accent); box-shadow: 0 0 12px rgba(34, 211, 238, 0.2); }
       .button:disabled { opacity: 0.4; cursor: not-allowed; }
+      /* Кривая Оценки. Цвета линий — слоты 1 и 2 эталонной палитры для тёмного фона,
+         проверены валидатором на #0a0a14: CVD ΔE 26.8, контраст ≥ 3:1. */
+      :root { --series-best: #3987e5; --series-mean: #d95926; --grid: rgba(120, 140, 220, 0.12); --zero: rgba(120, 140, 220, 0.35); }
+      .lab__curve { margin: 0 0 14px; }
+      .lab__curve[hidden] { display: none; }
+      .lab__legend { display: flex; gap: 18px; margin-bottom: 4px; color: var(--ink-dim); font-size: 12px; }
+      .lab__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .lab__key { overflow: visible; }
+      .lab__curve-frame { position: relative; outline: none; border-radius: 8px; }
+      .lab__curve-frame:focus-visible { box-shadow: 0 0 0 1px var(--accent); }
+      .lab__curve-svg { display: block; width: 100%; height: auto; }
+      .lab__grid { stroke: var(--grid); stroke-width: 1; }
+      .lab__zero { stroke: var(--zero); stroke-width: 1; }
+      .lab__axis { fill: var(--ink-dim); font-size: 11px; font-family: inherit; }
+      .lab__line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; fill: none; }
+      .lab__line--best { stroke: var(--series-best); }
+      .lab__line--mean { stroke: var(--series-mean); }
+      .lab__dot { fill: var(--series-best); stroke: #0a0a14; stroke-width: 2; }
+      .lab__dot--chosen { stroke: var(--ink); }
+      .lab__leader { stroke: var(--ink-dim); stroke-width: 1; }
+      .lab__end-label { fill: var(--ink); font-size: 12px; font-family: inherit; }
+      .lab__crosshair { stroke: var(--ink-dim); stroke-width: 1; pointer-events: none; }
+      .lab__hit { fill: transparent; cursor: pointer; }
+      .lab__tooltip {
+        position: absolute; top: 8px; z-index: 2; pointer-events: none; min-width: 150px; max-width: 100%; box-sizing: border-box;
+        padding: 6px 10px; font-size: 12px; background: rgba(10, 10, 20, 0.94);
+        border: 1px solid var(--edge); border-radius: 8px;
+      }
+      .lab__tooltip[hidden] { display: none; }
+      .lab__tooltip-title { color: var(--ink-dim); margin-bottom: 2px; }
+      .lab__tooltip-row { display: flex; align-items: center; gap: 6px; }
+      .lab__tooltip-label, .lab__tooltip-hint { color: var(--ink-dim); }
+      .lab__tooltip-hint { margin-top: 2px; font-size: 11px; }
       /* Правила и Волны словами — тем же кодом, что вкладка «Противник» на Подготовке. */
       .prep__kind { margin: 14px 0 6px; font-size: 15px; font-weight: 600; }
       .prep__note { margin: 6px 0 12px; color: var(--ink-dim); font-size: 12px; }
@@ -97,6 +130,7 @@
       </section>
       <p class="lab__status" id="lab-status"></p>
       <p class="lab__summary" id="lab-summary"></p>
+      <div id="lab-curve"></div>
       <div class="lab__scroll lab__history" id="lab-history"></div>
       <div class="lab__columns">
         <div class="lab__scroll" id="lab-board"></div>
