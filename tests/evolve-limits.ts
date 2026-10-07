@@ -1,5 +1,5 @@
 import { conditionsOf, isFallback, UNIT_KINDS, type Condition } from '@sim/index';
-import { LIMITS, type Candidate } from '../src/evolve/candidate.js';
+import { FARTHEST_SIGHT, LIMITS, type Candidate } from '../src/evolve/candidate.js';
 
 function numbersWithinLimits(condition: Condition): boolean {
   switch (condition.kind) {
@@ -9,6 +9,8 @@ function numbersWithinLimits(condition: Condition): boolean {
       return condition.count >= 0 && condition.count <= LIMITS.count;
     case 'enemies-in-skirmish':
       return condition.above >= 0 && condition.above <= LIMITS.count;
+    case 'enemy-closer-than':
+      return condition.distance >= LIMITS.distanceStep && condition.distance <= FARTHEST_SIGHT;
     default:
       return true;
   }

@@ -2,6 +2,7 @@ import { conditionsOf, UNIT_KINDS, type JointCondition, type Rng, type Rule, typ
 import {
   between,
   fallback,
+  FARTHEST_SIGHT,
   JOINT_KINDS,
   LIMITS,
   pick,
@@ -69,6 +70,11 @@ function nudged(rng: Rng, condition: JointCondition): JointCondition | null {
       return { ...condition, count: clamp(condition.count + step, 0, LIMITS.count) };
     case 'enemies-in-skirmish':
       return { ...condition, above: clamp(condition.above + step, 0, LIMITS.count) };
+    case 'enemy-closer-than':
+      return {
+        ...condition,
+        distance: clamp(condition.distance + step * LIMITS.distanceStep, LIMITS.distanceStep, FARTHEST_SIGHT),
+      };
     default:
       return null;
   }

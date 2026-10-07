@@ -1,5 +1,6 @@
 import {
   UNIT_KINDS,
+  UNIT_STATS,
   type Action,
   type Behaviour,
   type JointCondition,
@@ -35,7 +36,12 @@ export const LIMITS = {
   percentStep: 5,
   /** Наибольший счёт своих и врагов: у Цитадели помещается восемь тел (ADR-0005). */
   count: 8,
+  /** «Враг ближе N» — сеткой с этим шагом, от шага до самого дальнего Обзора. */
+  distanceStep: 10,
 } as const;
+
+/** Дальше самого дальнего Обзора врага не видно: «враг ближе» дальше него — то же, что «враг в радиусе». */
+export const FARTHEST_SIGHT = Math.max(...UNIT_KINDS.map((kind) => UNIT_STATS[kind].sight));
 
 /** Первое Поколение скромнее пределов: длинные списки пусть вырастит эволюция. */
 const FIRST = { rules: 4, waves: 3, waveUnits: 4 } as const;
@@ -45,6 +51,7 @@ export const JOINT_KINDS = [
   'hp-below',
   'enemy-in-range',
   'enemy-kind-in-range',
+  'enemy-closer-than',
   'at-home',
   'allies-nearby',
   'enemies-in-skirmish',
@@ -79,8 +86,14 @@ export const unitKind = (rng: Rng): UnitKind => pick(rng, UNIT_KINDS);
 /** Порог здоровья на сетке: 5, 10, … 100. */
 export const randomPercent = (rng: Rng): number => between(rng, 1, 100 / LIMITS.percentStep) * LIMITS.percentStep;
 
+/** Расстояние на сетке: 10, 20, … до самого дальнего Обзора. */
+export const randomDistance = (rng: Rng): number =>
+  between(rng, 1, Math.floor(FARTHEST_SIGHT / LIMITS.distanceStep)) * LIMITS.distanceStep;
+
 export function randomCondition(rng: Rng, kind: JointCondition['kind'] = pick(rng, JOINT_KINDS)): JointCondition {
   switch (kind) {
+    case 'enemy-closer-than':
+      return { kind, distance: randomDistance(rng) };
     case 'hp-below':
       return { kind, percent: randomPercent(rng) };
     case 'enemy-kind-in-range':
