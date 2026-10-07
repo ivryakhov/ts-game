@@ -8,7 +8,11 @@ import { describeReview, KIND_COLUMNS, LOSS_COLUMNS, type ReviewRow } from './re
  * подвело, и правит его, а не наугад.
  */
 export interface MatchReview {
-  fill(reviews: readonly SideReview[], sides: readonly SideSetup[]): void;
+  /**
+   * `titles` — подписи вкладок Сторон. В Показательном матче за обе
+   * играют Противники, и вкладки зовутся их именами.
+   */
+  fill(reviews: readonly SideReview[], sides: readonly SideSetup[], titles?: { mine: string; theirs: string }): void;
 }
 
 function element(id: string): HTMLElement {
@@ -83,8 +87,10 @@ export function createMatchReview(playerSide: SideId): MatchReview {
   theirs.addEventListener('click', pick(false));
 
   return {
-    fill(reviews, sides): void {
+    fill(reviews, sides, titles = { mine: 'я', theirs: 'противник' }): void {
       shown = { reviews, sides };
+      mine.textContent = titles.mine;
+      theirs.textContent = titles.theirs;
       ours = true;
       render();
     },

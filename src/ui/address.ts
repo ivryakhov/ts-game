@@ -27,3 +27,18 @@ export function rememberOpponent(id: string): void {
   url.searchParams.set('opponent', id);
   window.history.replaceState(null, '', url);
 }
+
+/**
+ * Противник за свою Сторону: ?ally=turtle — Показательный матч. Без него
+ * за свою Сторону играет человек.
+ */
+export function allyFromAddress(): string | null {
+  return new URLSearchParams(window.location.search).get('ally');
+}
+
+export function rememberAlly(id: string | null): void {
+  const url = new URL(window.location.href);
+  if (id === null) url.searchParams.delete('ally');
+  else url.searchParams.set('ally', id);
+  window.history.replaceState(null, '', url);
+}
