@@ -145,15 +145,21 @@ export function details(entry: Entry, opponents: readonly { id: string; name: st
 export function historyTable(
   history: readonly { number: number; best: number; mean: number; wins: number; obelisks: number }[],
   examined: number,
+  /** Сколько секунд Экзамена заняло Поколение, без пауз; undefined — не измерено. */
+  seconds: (generation: number) => number | undefined,
 ): HTMLTableElement {
   return table(
-    ['Поколение', 'лучшая Оценка', 'средняя', 'лучший выигрывает', 'Обелисков у лучшего'],
-    history.map((entry) => [
-      String(entry.number),
-      score(entry.best),
-      score(entry.mean),
-      `${entry.wins} из ${examined}`,
-      String(entry.obelisks),
-    ]),
+    ['Поколение', 'лучшая Оценка', 'средняя', 'лучший выигрывает', 'Обелисков у лучшего', 'время'],
+    history.map((entry) => {
+      const spent = seconds(entry.number);
+      return [
+        String(entry.number),
+        score(entry.best),
+        score(entry.mean),
+        `${entry.wins} из ${examined}`,
+        String(entry.obelisks),
+        spent === undefined ? '' : `${spent.toFixed(1)} с`,
+      ];
+    }),
   );
 }

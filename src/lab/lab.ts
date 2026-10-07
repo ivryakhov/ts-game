@@ -11,7 +11,7 @@ import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
 import { ELITE } from '../evolve/generation.js';
 import { createEvolution, type Settings } from './evolution.js';
-import { createRunner } from './runner.js';
+import { createRunner, threadCount } from './runner.js';
 import { details, historyTable, leaderboard, ranked, summary } from './view.js';
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -77,7 +77,10 @@ const elapsedSeconds = (): number =>
   Math.round((clock.spentMs + (evolution.state.phase === 'running' ? performance.now() - clock.sinceMs : 0)) / 1000);
 
 let selected: number | null = null;
-const evolution = createEvolution(createRunner(), arena, render, warn);
+const runner = createRunner(undefined, threadCount(navigator.hardwareConcurrency));
+const evolution = createEvolution(runner, arena, render, warn);
+/** Секунды Экзамена каждого доигранного Поколения, без пауз. */
+const durations = new Map<number, number>();
 
 const PHASES = { idle: '', running: '', paused: ' · пауза', stopped: ' · остановлен', done: ' · готово' } as const;
 
@@ -85,18 +88,21 @@ function render(): void {
   const { phase, settings, generation, entries, done } = evolution.state;
   const now = performance.now();
   if (generation !== clock.generation) {
+    const spent = clock.spentMs + (clock.phase === 'running' ? now - clock.sinceMs : 0);
+    if (clock.generation > 0) durations.set(clock.generation, spent / 1000);
     Object.assign(clock, { spentMs: 0, sinceMs: now, generation });
     selected = null;
   } else if (clock.phase === 'running' && phase !== 'running') clock.spentMs += now - clock.sinceMs;
   else if (clock.phase !== 'running' && phase === 'running') clock.sinceMs = now;
   clock.phase = phase;
+  if (phase === 'done') durations.set(generation, clock.spentMs / 1000);
   const examined = settings?.examiners.length ?? 0;
   status.textContent =
     phase === 'idle'
       ? status.textContent
-      : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с${PHASES[phase]}`;
+      : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с · потоков: ${runner.threads}${PHASES[phase]}`;
   line.textContent = settings ? summary(entries, examined, generation, settings.generations) : '';
-  history.replaceChildren(...(evolution.state.history.length > 0 ? [historyTable(evolution.state.history, examined)] : []));
+  history.replaceChildren(...(evolution.state.history.length > 0 ? [historyTable(evolution.state.history, examined, (number) => durations.get(number))] : []));
   history.scrollTop = history.scrollHeight;
   board.replaceChildren(
     ...(entries.length === 0
@@ -152,6 +158,7 @@ start.addEventListener('click', () => {
   const chosenSettings = settings();
   if (!chosenSettings) return;
   clock.generation = 0;
+  durations.clear();
   void evolution.start(chosenSettings);
 });
 pause.addEventListener('click', () => (evolution.state.phase === 'paused' ? evolution.resume() : evolution.pause()));
