@@ -22,6 +22,8 @@ export interface Surroundings {
   readonly enemyInReach: boolean;
   /** Каких типов враги среди тех, кого он видит. */
   readonly enemyKinds: ReadonlySet<UnitKind>;
+  /** Расстояние до ближайшего видимого врага; никого не видит — бесконечность. */
+  readonly nearestEnemy: number;
   /** Стоит ли Юнит у своей Цитадели — там, где она его лечит. */
   readonly atHome: boolean;
   /** Сколько своих рядом, не считая его самого. */
@@ -50,6 +52,8 @@ export function holds(condition: Condition, unit: Unit, around: Surroundings): b
       return around.enemyInReach;
     case 'at-home':
       return around.atHome;
+    case 'enemy-closer-than':
+      return around.nearestEnemy < condition.distance;
     case 'enemy-kind-in-range':
       return around.enemyKinds.has(condition.unit);
     case 'allies-nearby': {
@@ -128,6 +132,8 @@ export function surroundingsOf(
         {
           enemyInReach: seen.length > 0,
           enemyKinds: new Set(seen.map((enemy) => enemy.kind)),
+          // Видимые отсортированы по расстоянию — первый и есть ближайший.
+          nearestEnemy: seen[0] ? distanceTo(unit, seen[0]) : Infinity,
           atHome: isAtHome(unit),
           alliesNearby: allies.length,
           alliesNearbyByKind,

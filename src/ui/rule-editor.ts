@@ -45,6 +45,7 @@ const CONDITION_LABELS: Readonly<Record<Selectable, readonly (readonly [string, 
   'hp-below': [['hp-below', 'здоровье ниже']],
   'enemy-in-range': [['enemy-in-range', 'враг в радиусе']],
   'enemy-kind-in-range': [['enemy-kind-in-range', 'вижу врага типа']],
+  'enemy-closer-than': [['enemy-closer-than', 'враг ближе']],
   'at-home': [['at-home', 'у своей Цитадели']],
   'allies-nearby': [
     ['allies-nearby:fewer', 'своих рядом меньше'],
@@ -82,6 +83,7 @@ const NUMBER_FIELD: Partial<Record<ConditionKind, readonly [string, string]>> = 
   'hp-below': ['percent', '%'],
   'allies-nearby': ['count', ''],
   'enemies-in-skirmish': ['above', ''],
+  'enemy-closer-than': ['distance', ''],
 };
 
 /**

@@ -17,6 +17,11 @@ export type Condition =
   | { readonly kind: 'enemy-in-range' }
   /** Вижу врага этого типа — той же меркой, что «враг в радиусе». */
   | { readonly kind: 'enemy-kind-in-range'; readonly unit: UnitKind }
+  /**
+   * Ближайший видимый враг ближе distance по прямой — той же меркой, что
+   * «враг в радиусе». Выше «враг в радиусе → бить» даёт отход Стрелка.
+   */
+  | { readonly kind: 'enemy-closer-than'; readonly distance: number }
   /** Стою у своей Цитадели — там, где она лечит и куда встаёт выпущенный. */
   | { readonly kind: 'at-home' }
   /**
@@ -104,6 +109,7 @@ export const CONDITION_KINDS = [
   'hp-below',
   'enemy-in-range',
   'enemy-kind-in-range',
+  'enemy-closer-than',
   'at-home',
   'allies-nearby',
   'enemies-in-skirmish',
