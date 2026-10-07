@@ -34,7 +34,10 @@ function list(lines: readonly string[]): HTMLOListElement {
   return shown;
 }
 
-export function opponentView(opponent: Opponent | null, fallback: Behaviour): HTMLElement[] {
+const READ_ONLY = 'Правила противника — только чтение. В матче их видно и в панели выделенного Юнита.';
+
+/** `note` — подсказка под Волнами; null — без неё. */
+export function opponentView(opponent: Opponent | null, fallback: Behaviour, note: string | null = READ_ONLY): HTMLElement[] {
   const behaviour = opponent?.side.behaviour ?? fallback;
   const waves = opponent?.side.waves ?? [];
   return [
@@ -43,7 +46,7 @@ export function opponentView(opponent: Opponent | null, fallback: Behaviour): HT
     block('h3', 'prep__kind', 'Волны'),
     block('p', 'prep__note', 'Копит Эфир на очередную Волну целиком, выпускает её и идёт по списку по кругу. На поле Волны не смотрят.'),
     waves.length > 0 ? list(waves.map(describeWave)) : block('p', 'prep__note', 'Волн нет.'),
-    block('p', 'prep__note', 'Правила противника — только чтение. В матче их видно и в панели выделенного Юнита.'),
+    ...(note === null ? [] : [block('p', 'prep__note', note)]),
     ...UNIT_KINDS.flatMap((kind) => [block('h3', 'prep__kind', UNIT_TITLES[kind]), list(behaviour[kind].map(describeRule))]),
   ];
 }
