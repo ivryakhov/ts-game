@@ -114,8 +114,12 @@ export function leaderboard(
 }
 
 /** Претендент подробно: матч против каждого Противника, затем Волны и Правила словами. */
-export function details(entry: Entry, opponents: readonly { id: string; name: string }[]): HTMLElement[] {
-  const title = make('h2', 'lab__subtitle', nameOf(entry));
+export function details(
+  entry: Entry,
+  opponents: readonly { id: string; name: string }[],
+  heading: string = nameOf(entry),
+): HTMLElement[] {
+  const title = make('h2', 'lab__subtitle', heading);
   if (!entry.side) return [title, make('p', 'lab__problem', `Разбор отверг Претендента — ${entry.problem ?? 'причина неизвестна'}.`)];
   const rows = opponents.map((opponent, index) => {
     const bout = entry.bouts[index];
@@ -147,19 +151,25 @@ export function historyTable(
   examined: number,
   /** Сколько секунд Экзамена заняло Поколение, без пауз; undefined — не измерено. */
   seconds: (generation: number) => number | undefined,
+  /** Выбранное Поколение и выбор другого — клик по строке, как по точке кривой. */
+  selected: number | null,
+  onPick: (generation: number) => void,
 ): HTMLTableElement {
-  return table(
-    ['Поколение', 'лучшая Оценка', 'средняя', 'лучший выигрывает', 'Обелисков у лучшего', 'время'],
-    history.map((entry) => {
-      const spent = seconds(entry.number);
-      return [
-        String(entry.number),
-        score(entry.best),
-        score(entry.mean),
-        `${entry.wins} из ${examined}`,
-        String(entry.obelisks),
-        spent === undefined ? '' : `${spent.toFixed(1)} с`,
-      ];
-    }),
-  );
+  const shown = table(['Поколение', 'лучшая Оценка', 'средняя', 'лучший выигрывает', 'Обелисков у лучшего', 'время'], []);
+  for (const entry of history) {
+    const spent = seconds(entry.number);
+    const cells = [
+      String(entry.number),
+      score(entry.best),
+      score(entry.mean),
+      `${entry.wins} из ${examined}`,
+      String(entry.obelisks),
+      spent === undefined ? '' : `${spent.toFixed(1)} с`,
+    ];
+    const line = make('tr', entry.number === selected ? 'lab__row lab__row--selected' : 'lab__row');
+    line.append(...cells.map((text) => make('td', '', text)));
+    line.addEventListener('click', () => onPick(entry.number));
+    shown.append(line);
+  }
+  return shown;
 }
