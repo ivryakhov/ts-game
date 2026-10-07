@@ -25,6 +25,8 @@ export interface PlayedMatch {
    * выбран другой: иначе смена исхода выглядела бы делом Правил.
    */
   readonly opponent: string | null;
+  /** Кто играл за игрока; null — он сам. Повтор берёт того же. */
+  readonly ally: string | null;
   /**
    * Попытки, а не только состоявшиеся Выпуски: в повторе с другими
    * Правилами Эфира может не хватить там, где в оригинале хватило, —
@@ -48,7 +50,7 @@ export function outcomeOf(winner: SideId | null, world: WorldSnapshot): Outcome 
  */
 export interface ReleaseLog {
   /** Начался живой матч — его Выпуски пишутся заново. */
-  beginLive(seed: Seed, opponent: string | null): void;
+  beginLive(seed: Seed, lineup: { ally: string | null; opponent: string | null }): void;
   /** Начался повтор последнего живого матча. null — повторять нечего. */
   beginReplay(): PlayedMatch | null;
   /** Игрок выпустил Юнита. В повторе не пишется: там клики выключены. */
@@ -63,12 +65,12 @@ export interface ReleaseLog {
 
 export function createReleaseLog(): ReleaseLog {
   let last: PlayedMatch | null = null;
-  let live: { seed: Seed; opponent: string | null; releases: ScheduledRelease[] } | null = null;
+  let live: { seed: Seed; opponent: string | null; ally: string | null; releases: ScheduledRelease[] } | null = null;
   let replaying = false;
 
   return {
-    beginLive(seed, opponent): void {
-      live = { seed, opponent, releases: [] };
+    beginLive(seed, { ally, opponent }): void {
+      live = { seed, opponent, ally, releases: [] };
       replaying = false;
     },
 
@@ -85,7 +87,7 @@ export function createReleaseLog(): ReleaseLog {
 
     finish(outcome): void {
       if (!live) return;
-      last = { seed: live.seed, opponent: live.opponent, releases: live.releases, outcome };
+      last = { seed: live.seed, opponent: live.opponent, ally: live.ally, releases: live.releases, outcome };
       live = null;
     },
 

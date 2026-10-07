@@ -39,6 +39,8 @@ export function describeCondition(condition: Condition): string {
       return 'враг в радиусе';
     case 'enemy-kind-in-range':
       return `вижу ${UNIT_ACCUSATIVE[condition.unit]}`;
+    case 'enemy-closer-than':
+      return `враг ближе ${condition.distance}`;
     case 'at-home':
       return 'у своей Цитадели';
     case 'allies-nearby':

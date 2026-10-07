@@ -24,7 +24,7 @@ export interface Prep {
    * Открыть Подготовку с этим Сидом. Черновик игрока остаётся прежним.
    * `canRepeat` — есть ли прошлый матч, который можно повторить.
    */
-  show(seed: Seed, opponent: string | null, canRepeat: boolean): void;
+  show(seed: Seed, lineup: { ally: string | null; opponent: string | null }, canRepeat: boolean): void;
   /** Заменить черновик игрока целиком. `file` — Поведение из player.json, Заготовка «Из файла». */
   setPlayer(player: Behaviour, file: Behaviour): void;
   hide(): void;
@@ -35,10 +35,11 @@ export interface Prep {
   warn(message: string, keep?: { label: string; name: string; text: string }): void;
 }
 
-type Tab = UnitKind | 'opponent';
+/** Вкладка «За меня» есть только в Показательном матче — Правила того, кто играет за игрока. */
+type Tab = UnitKind | 'ally' | 'opponent';
 
-const TABS: readonly Tab[] = [...UNIT_KINDS, 'opponent'];
-const TAB_TITLES: Readonly<Record<Tab, string>> = { ...UNIT_TITLES, opponent: 'Противник' };
+const TABS: readonly Tab[] = [...UNIT_KINDS, 'ally', 'opponent'];
+const TAB_TITLES: Readonly<Record<Tab, string>> = { ...UNIT_TITLES, ally: 'За меня', opponent: 'Противник' };
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -66,19 +67,33 @@ function statsCard(kind: UnitKind): HTMLDListElement {
 }
 
 export interface PrepOptions {
-  /** Матч начинается с Сидом и Поведением игрока — уже разобранным. */
-  onStart(seed: Seed, player: Behaviour): void;
+  /**
+   * Матч начинается с Сидом и Поведением игрока — уже разобранным.
+   * В Показательном матче Правила игрока не нужны, и с ошибкой в них
+   * приходит null.
+   */
+  onStart(seed: Seed, player: Behaviour | null): void;
   /** Повтор прошлого матча — его Сид и Выпуски, но Правила с этого экрана. */
   onRepeat(player: Behaviour): void;
   /** Игрок поправил Правила, и черновик без ошибок. */
   onEdit(player: Behaviour): void;
   /** Игрок выбрал другого противника. */
   onOpponent(id: string): void;
+  /** Игрок выбрал, кто играет за него: Противник — Показательный матч, null — он сам. */
+  onAlly(id: string | null): void;
   readonly presets: readonly Preset[];
   readonly opponents: readonly Opponent[];
 }
 
-export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opponents }: PrepOptions): Prep {
+const optionsOf = (opponents: readonly Opponent[]): HTMLOptionElement[] =>
+  opponents.map((entry) => {
+    const option = block('option', '', entry.name);
+    option.value = entry.id;
+    option.title = entry.description;
+    return option;
+  });
+
+export function createPrep({ onStart, onRepeat, onEdit, onOpponent, onAlly, presets, opponents }: PrepOptions): Prep {
   const panel = element('prep');
   const tabs = element('prep-tabs');
   const body = element('prep-body');
@@ -88,19 +103,17 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
   const start = element<HTMLButtonElement>('prep-start');
   const repeat = element<HTMLButtonElement>('prep-repeat');
   const picker = element<HTMLSelectElement>('prep-opponent');
-  picker.append(
-    ...opponents.map((entry) => {
-      const option = block('option', '', entry.name);
-      option.value = entry.id;
-      option.title = entry.description;
-      return option;
-    }),
-  );
+  picker.append(...optionsOf(opponents));
   picker.disabled = opponents.length === 0;
+  const allyPicker = element<HTMLSelectElement>('prep-ally');
+  const me = block('option', '', 'я');
+  me.value = '';
+  allyPicker.append(me, ...optionsOf(opponents));
   let canRepeat = false;
 
   let active: Tab = UNIT_KINDS[0] ?? 'opponent';
   let opponent: Opponent | null = null;
+  let ally: Opponent | null = null;
   let shown = false;
   let draft: Draft | null = null;
   let file: Behaviour | null = null;
@@ -116,9 +129,9 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
       if (error) errors.set(kind, error);
     }
     for (const { tab, button } of buttons) {
-      button.classList.toggle('prep__tab--error', tab !== 'opponent' && errors.has(tab));
+      button.classList.toggle('prep__tab--error', tab !== 'opponent' && tab !== 'ally' && errors.has(tab));
     }
-    if (active !== 'opponent') editor?.showError(errors.get(active) ?? null);
+    if (active !== 'opponent' && active !== 'ally') editor?.showError(errors.get(active) ?? null);
     checkSeed();
   };
 
@@ -147,9 +160,19 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
 
   const render = (): void => {
     if (!shown || !draft) return;
-    for (const { tab, button } of buttons) button.classList.toggle('prep__tab--active', tab === active);
+    if (active === 'ally' && !ally) active = UNIT_KINDS[0] ?? 'opponent';
+    for (const { tab, button } of buttons) {
+      button.classList.toggle('prep__tab--active', tab === active);
+      if (tab === 'ally') button.hidden = !ally;
+    }
     editor = null;
-    body.replaceChildren(...(active === 'opponent' ? opponentView(opponent, DEFAULT_BEHAVIOUR) : playerView(active, draft)));
+    body.replaceChildren(
+      ...(active === 'opponent'
+        ? opponentView(opponent, DEFAULT_BEHAVIOUR)
+        : active === 'ally'
+          ? opponentView(ally, DEFAULT_BEHAVIOUR)
+          : playerView(active, draft)),
+    );
     check();
   };
 
@@ -164,11 +187,14 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
     return { tab, button };
   });
 
-  /** Негодный Сид или ошибка в Правилах не дают начать матч — и сказано почему. */
+  /**
+   * Негодный Сид или ошибка в Правилах не дают начать матч — и сказано
+   * почему. Показательному матчу Правила игрока не нужны.
+   */
   function checkSeed(): Seed | null {
     const seed = parseSeed(seedInput.value);
     seedError.hidden = seed !== null;
-    start.disabled = seed === null || errors.size > 0;
+    start.disabled = seed === null || (errors.size > 0 && !ally);
     repeat.disabled = !canRepeat || errors.size > 0;
     repeat.hidden = !canRepeat;
     return seed;
@@ -178,7 +204,7 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
   const begin = (): void => {
     const seed = checkSeed();
     const behaviour = current();
-    if (seed !== null && behaviour) onStart(seed, behaviour);
+    if (seed !== null && (behaviour || ally)) onStart(seed, behaviour);
   };
 
   bindBehaviourFiles({
@@ -195,6 +221,13 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
     render();
   });
 
+  allyPicker.addEventListener('change', () => {
+    ally = opponents.find((entry) => entry.id === allyPicker.value) ?? null;
+    if (ally) active = 'ally';
+    onAlly(ally?.id ?? null);
+    render();
+  });
+
   seedInput.addEventListener('input', checkSeed);
   seedInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') begin();
@@ -206,10 +239,12 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, presets, opp
   });
 
   return {
-    show(seed, opponentId, repeatable): void {
+    show(seed, lineup, repeatable): void {
       shown = true;
-      opponent = opponents.find((entry) => entry.id === opponentId) ?? null;
+      opponent = opponents.find((entry) => entry.id === lineup.opponent) ?? null;
       if (opponent) picker.value = opponent.id;
+      ally = opponents.find((entry) => entry.id === lineup.ally) ?? null;
+      allyPicker.value = ally?.id ?? '';
       canRepeat = repeatable;
       seedInput.value = String(seed);
       panel.hidden = false;

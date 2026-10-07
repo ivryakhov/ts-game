@@ -7,7 +7,7 @@
  * положение Юнитов между Тиками. Пауза и ускорение меняют только число
  * Тиков за кадр, поэтому на исход матча не влияют (ADR-0001).
  */
-import { createMatch, DEFAULT_BEHAVIOUR, sideFromFile, TICKS_PER_SECOND } from '@sim/index';
+import { createMatch, DEFAULT_BEHAVIOUR, TICKS_PER_SECOND } from '@sim/index';
 import type {
   Behaviour,
   LiveMatch,
@@ -15,15 +15,16 @@ import type {
   ScheduledRelease,
   Seed,
   SideId,
-  SideSetup,
   UnitId,
   UnitKind,
   WorldSnapshot,
 } from '@sim/index';
 import { bindTimeControls } from './app/controls.js';
 import { createPacer, STARTING_SPEED } from './app/pacer.js';
+import { playerSide } from './app/player-side.js';
 import { bindPointer } from './app/pointer.js';
-import { loadOpponents, pickOpponent } from './app/opponents.js';
+import { lineupOf, namesOf, type Lineup } from './app/lineup.js';
+import { loadOpponents } from './app/opponents.js';
 import { parsePresets, type Preset } from './app/presets.js';
 import { createReleaseLog, outcomeOf, type PlayedMatch } from './app/replay.js';
 import { freshSeed } from './app/seed.js';
@@ -34,7 +35,7 @@ import playerFile from './behaviours/player.json';
 import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
-import { opponentFromAddress, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
+import { allyFromAddress, opponentFromAddress, rememberAlly, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
@@ -67,12 +68,14 @@ try {
 }
 
 const roster = loadOpponents(arena, OPPONENT_SIDE);
-/** С кем играет человек: выбор на Подготовке, запомненный в адресе. */
-let opponent = pickOpponent(roster.opponents, opponentFromAddress());
+/** Кто играет за обе Стороны: выбор на Подготовке, запомненный в адресе. */
+const lineupFor = (names: { ally: string | null; opponent: string | null }): Lineup =>
+  lineupOf(roster.opponents, names, PLAYER_SIDE, OPPONENT_SIDE);
+let lineup = lineupFor({ ally: allyFromAddress(), opponent: opponentFromAddress() });
 
 const prep = createPrep({
   onStart(next, behaviour) {
-    playerBehaviour = behaviour;
+    if (behaviour) playerBehaviour = behaviour;
     startMatch(next);
   },
   onRepeat(behaviour) {
@@ -81,8 +84,12 @@ const prep = createPrep({
   },
   onEdit: writeSaved,
   onOpponent(id) {
-    opponent = pickOpponent(roster.opponents, id);
+    lineup = lineupFor({ ...namesOf(lineup), opponent: id });
     rememberOpponent(id);
+  },
+  onAlly(id) {
+    lineup = lineupFor({ ...namesOf(lineup), ally: id });
+    rememberAlly(id);
   },
   presets,
   opponents: roster.opponents,
@@ -97,44 +104,16 @@ const outcome = bindOutcomeActions({
   newSeed: () => startMatch(freshSeed(seed)),
 });
 
-/**
- * Сторона из файла в src/behaviours. Файлы правит человек, поэтому
- * опечатка в них — обычное дело: вместо молча стоящих Юнитов он видит,
- * где именно ошибся и чем это обернулось. Сторона тогда выходит
- * с Поведением по умолчанию и без Волн.
- */
-function loadSide(id: SideId, raw: unknown, file: string, fallback: string): SideSetup {
-  try {
-    return sideFromFile(id, raw, arena);
-  } catch (error) {
-    const problem = error instanceof Error ? error.message : String(error);
-    const message = `Файл ${file} отвергнут — ${problem}. ${fallback}`;
-    hud.warn(message);
-    prep.warn(message);
-    return { id };
-  }
-}
-
-const playerSide = loadSide(PLAYER_SIDE, playerFile, 'player.json', 'Юниты игрока действуют по Поведению по умолчанию.');
-// Противник — такая же Сторона из такого же файла, только со списком Волн:
-// Юнитов он выпускает сам, отдельного кода для него нет (ADR-0003).
-const opponentSide = (): SideSetup => opponent?.side ?? { id: OPPONENT_SIDE };
-
+const player = playerSide(PLAYER_SIDE, playerFile, arena, readSaved(), (message, keep) => {
+  if (!keep) hud.warn(message);
+  prep.warn(message, keep);
+});
 /**
  * Поведение игрока — то, с которым начат последний матч: с Подготовки,
- * а до первого старта — из файла. «Переиграть» берёт его же.
+ * а до первого старта — сохранённое или из файла. «Переиграть» берёт его же.
  */
-const fileBehaviour: Behaviour = playerSide.behaviour ?? DEFAULT_BEHAVIOUR;
-const saved = readSaved();
-let playerBehaviour: Behaviour = saved.kind === 'ok' ? saved.behaviour : fileBehaviour;
-if (saved.kind === 'rejected') {
-  prep.warn(`Сохранённые Правила отвергнуты — ${saved.problem}. Взяты Правила из player.json.`, {
-    label: 'Скачать отвергнутый набор',
-    name: 'rejected-behaviour.json',
-    text: saved.text,
-  });
-}
-prep.setPlayer(playerBehaviour, fileBehaviour);
+let playerBehaviour: Behaviour = player.behaviour;
+prep.setPlayer(playerBehaviour, player.file);
 
 /**
  * Матч получает копии Сторон: что бы ни случилось с Поведением на
@@ -143,7 +122,7 @@ prep.setPlayer(playerBehaviour, fileBehaviour);
 const setupFor = (seed: Seed, releases: readonly ScheduledRelease[] = []): MatchSetup => ({
   seed,
   map: arena,
-  sides: [structuredClone({ ...playerSide, behaviour: playerBehaviour }), structuredClone(opponentSide())],
+  sides: lineup.sides({ ...player.side, behaviour: playerBehaviour }).map((side) => structuredClone(side)),
   releases: [...releases],
   maxTicks: MATCH_LIMIT_TICKS,
 });
@@ -169,8 +148,8 @@ const behaviourOf = (side: SideId): Behaviour =>
   setup.sides.find((entry) => entry.id === side)?.behaviour ?? DEFAULT_BEHAVIOUR;
 const inspector = createInspector(behaviourOf);
 const inMatch = (): boolean => phase === 'match' && !match.finished;
-/** Матч, где игрок сам выпускает Юнитов: в повторе они выходят по журналу. */
-const playing = (): boolean => inMatch() && !log.replaying;
+/** Матч, где игрок сам выпускает Юнитов: в повторе они выходят по журналу, в Показательном — Волнами. */
+const playing = (): boolean => inMatch() && !log.replaying && !lineup.showcase;
 
 const pointer = bindPointer(canvas, renderer, {
   onRelease(roadId) {
@@ -191,12 +170,13 @@ let lastFrameMs = performance.now();
 let announced = false;
 
 /** Новый матч с теми же Сторонами. Сид попадает в адрес — матч можно повторить. */
-function startMatch(next: Seed, replay: PlayedMatch | null = null, against = opponent): void {
-  opponent = against;
-  if (!replay) log.beginLive(next, opponent?.id ?? null);
+function startMatch(next: Seed, replay: PlayedMatch | null = null, against = lineup): void {
+  lineup = against;
+  if (!replay) log.beginLive(next, namesOf(lineup));
   seed = next;
   rememberSeed(seed);
-  if (opponent) rememberOpponent(opponent.id);
+  if (lineup.opponent) rememberOpponent(lineup.opponent.id);
+  rememberAlly(lineup.ally?.id ?? null);
   setup = setupFor(seed, replay?.releases);
   match = createMatch(setup);
   announced = false;
@@ -212,14 +192,14 @@ function startMatch(next: Seed, replay: PlayedMatch | null = null, against = opp
 /** Тот же матч: Сид, противник и Выпуски последнего живого, Правила — текущие. */
 function repeatReleases(): void {
   const played = log.beginReplay();
-  if (played) startMatch(played.seed, played, pickOpponent(roster.opponents, played.opponent));
+  if (played) startMatch(played.seed, played, lineupFor(played));
 }
 
 function openPrep(): void {
   phase = 'prep';
   document.body.dataset['phase'] = phase;
   selectedUnit = null;
-  prep.show(seed, opponent?.id ?? null, log.last !== null);
+  prep.show(seed, namesOf(lineup), log.last !== null);
 }
 
 function fit(): void {
@@ -276,16 +256,18 @@ function frame(nowMs: number): void {
     foeIncomePerSecond: foe?.incomePerSecond ?? 0,
     chosenKind,
     replaying: phase === 'match' && log.replaying,
+    showcase: phase === 'match' && lineup.showcase,
   });
   const ended = phase === 'match' && match.finished;
+  const names = lineup.ally && { own: lineup.ally.name, foe: lineup.opponent?.name ?? 'Противник' };
   const now = ended ? outcomeOf(match.winner, current) : null;
   if (now && !announced) {
     announced = true;
     log.finish(now);
-    review.fill(match.result().stats.sides, setup.sides);
+    review.fill(match.result().stats.sides, setup.sides, names ? { mine: names.own, theirs: names.foe } : undefined);
   }
-  hud.announce(now && { now, original: log.replaying ? (log.last?.outcome ?? null) : null });
-  outcome.show(ended);
+  hud.announce(now && { now, original: log.replaying ? (log.last?.outcome ?? null) : null, names });
+  outcome.show(ended, lineup.showcase);
   window.requestAnimationFrame(frame);
 }
 
