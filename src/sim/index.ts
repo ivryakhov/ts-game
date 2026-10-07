@@ -12,6 +12,7 @@ export {
   type SideReview,
 } from './review.js';
 export { FileError, filePart, isRecord } from './parse.js';
+export { createRng, type Rng } from './rng.js';
 export type { Wave } from './waves.js';
 export {
   ACTION_KINDS,
