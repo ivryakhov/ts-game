@@ -41,7 +41,7 @@ export const LIMITS = {
 const FIRST = { rules: 4, waves: 3, waveUnits: 4 } as const;
 
 /** Условия, которые могут стоять в «И», — без чисел и с ними. */
-const JOINT_KINDS = [
+export const JOINT_KINDS = [
   'hp-below',
   'enemy-in-range',
   'enemy-kind-in-range',
@@ -74,7 +74,7 @@ export function pick<T>(rng: Rng, items: readonly T[]): T {
   return item;
 }
 
-const unitKind = (rng: Rng): UnitKind => pick(rng, UNIT_KINDS);
+export const unitKind = (rng: Rng): UnitKind => pick(rng, UNIT_KINDS);
 
 /** Порог здоровья на сетке: 5, 10, … 100. */
 export const randomPercent = (rng: Rng): number => between(rng, 1, 100 / LIMITS.percentStep) * LIMITS.percentStep;

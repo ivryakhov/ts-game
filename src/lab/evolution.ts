@@ -1,0 +1,182 @@
+import { createRng, type GameMap } from '@sim/index';
+import type { Candidate } from '../evolve/candidate.js';
+import { candidateSide, totalOf, type Bout } from '../evolve/exam.js';
+import { ELITE, firstGeneration, nextGeneration } from '../evolve/generation.js';
+import type { BoutRequest } from './protocol.js';
+import type { Runner } from './runner.js';
+import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
+
+/**
+ * Прогон эволюции на странице: Поколение держит Экзамен в Worker'е,
+ * из Оценок рождается следующее. Ядро (src/evolve) решает, кто дети;
+ * здесь — очередь, пауза, остановка и то, что видно между Поколениями.
+ *
+ * Случайность эволюции — только генератор по Сиду, Экзамен её не тратит,
+ * а ответы Worker'а встают на место по номеру задания. Поэтому тот же
+ * Сид и те же настройки дают те же Поколения.
+ */
+
+export interface Settings {
+  readonly size: number;
+  readonly generations: number;
+  readonly seed: number;
+  /** Противники Экзамена, в порядке таблиц. */
+  readonly examiners: readonly { readonly id: string; readonly name: string }[];
+  /** С кого начать; пусто — со случайных Претендентов. */
+  readonly ready: readonly Candidate[];
+}
+
+/** Итог Поколения — строка истории. */
+export interface GenerationRecord {
+  /** С единицы. */
+  readonly number: number;
+  readonly best: number;
+  readonly mean: number;
+  /** У скольких Противников выигрывает лучший. */
+  readonly wins: number;
+  /** Сколько раз лучший взял Обелиск за весь Экзамен. */
+  readonly obelisks: number;
+}
+
+export interface Evolution {
+  start(settings: Settings): Promise<void>;
+  pause(): void;
+  resume(): void;
+  stop(): void;
+  readonly state: {
+    readonly phase: 'idle' | 'running' | 'paused' | 'stopped' | 'done';
+    readonly settings: Settings | null;
+    /** Номер идущего Поколения, с единицы. */
+    readonly generation: number;
+    readonly entries: readonly Entry[];
+    /** Сыгранных матчей текущего Поколения. */
+    readonly done: number;
+    readonly history: readonly GenerationRecord[];
+  };
+}
+
+function entriesOf(candidates: readonly Candidate[], origins: (index: number) => Origin, map: GameMap, examined: number, warn: (message: string) => void): Entry[] {
+  return candidates.map((candidate, index) => {
+    const base = { number: index + 1, candidate, origin: origins(index), bouts: Array.from({ length: examined }, () => null) };
+    try {
+      return { ...base, side: candidateSide(candidate, map), problem: null };
+    } catch (error) {
+      const problem = error instanceof Error ? error.message : String(error);
+      warn(`Ошибка эволюции: Претендент №${index + 1} отвергнут разбором — ${problem}`);
+      return { ...base, side: null, problem };
+    }
+  });
+}
+
+function recordOf(number: number, entries: readonly Entry[]): GenerationRecord {
+  const [best] = ranked(entries);
+  const finite = entries.map(scoreOfEntry).filter(Number.isFinite);
+  const bouts = (best?.bouts ?? []).filter((bout): bout is Bout => bout !== null);
+  return {
+    number,
+    best: best ? scoreOfEntry(best) : Number.NEGATIVE_INFINITY,
+    mean: finite.length > 0 ? finite.reduce((sum, value) => sum + value, 0) / finite.length : Number.NaN,
+    wins: totalOf(bouts).wins,
+    obelisks: bouts.reduce((sum, bout) => sum + bout.obelisks, 0),
+  };
+}
+
+export function createEvolution(
+  runner: Runner,
+  map: GameMap,
+  onChange: () => void,
+  warn: (message: string) => void,
+): Evolution {
+  const roads = map.roads.map((road) => road.id);
+  const state: {
+    phase: Evolution['state']['phase'];
+    settings: Settings | null;
+    generation: number;
+    entries: Entry[];
+    done: number;
+    history: GenerationRecord[];
+  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [] };
+  /** Номер запуска: остановленный прогон, доигрывая, не трогает следующего. */
+  let launch = 0;
+
+  /** Экзамен Поколения. false — прогон остановлен или сменился. */
+  async function examine(mine: number, settings: Settings, generation: number): Promise<boolean> {
+    const count = settings.examiners.length;
+    const requests: BoutRequest[] = state.entries.flatMap((entry, candidate) =>
+      entry.side
+        ? settings.examiners.map((examiner, index) => ({
+            job: candidate * count + index,
+            side: entry.side!,
+            opponent: examiner.id,
+            generation,
+          }))
+        : [],
+    );
+    await runner.run(
+      requests,
+      (job, bout) => {
+        if (mine !== launch) return;
+        const entry = state.entries[Math.floor(job / count)];
+        if (entry) entry.bouts[job % count] = bout;
+        state.done += 1;
+        onChange();
+      },
+      (job, problem) => {
+        warn(job < 0 ? `Экзамен прерван — ${problem}` : `Матч Экзамена не сыгран — ${problem}`);
+        if (mine === launch) state.done += 1;
+      },
+    );
+    return mine === launch && state.phase !== 'stopped';
+  }
+
+  return {
+    async start(settings) {
+      const mine = (launch += 1);
+      const rng = createRng(settings.seed);
+      let candidates = firstGeneration(rng, settings.size, roads, settings.ready);
+      let origins = (index: number): Origin =>
+        settings.ready.length === 0 ? 'random' : index < settings.ready.length ? 'ready' : 'child';
+      Object.assign(state, { phase: 'running', settings, history: [] });
+
+      for (let generation = 0; generation < settings.generations; generation += 1) {
+        state.generation = generation + 1;
+        state.entries = entriesOf(candidates, origins, map, settings.examiners.length, warn);
+        state.done = 0;
+        onChange();
+        if (!(await examine(mine, settings, generation))) return;
+        state.history.push(recordOf(generation + 1, state.entries));
+        const scored = state.entries.map((entry) => ({ candidate: entry.candidate, score: scoreOfEntry(entry) }));
+        candidates = nextGeneration(rng, scored, roads);
+        origins = (index) => (index < ELITE ? 'elite' : 'child');
+      }
+      state.phase = 'done';
+      onChange();
+    },
+
+    pause() {
+      if (state.phase !== 'running') return;
+      runner.pause();
+      state.phase = 'paused';
+      onChange();
+    },
+
+    resume() {
+      if (state.phase !== 'paused') return;
+      runner.resume();
+      state.phase = 'running';
+      onChange();
+    },
+
+    stop() {
+      if (state.phase !== 'running' && state.phase !== 'paused') return;
+      state.phase = 'stopped';
+      launch += 1;
+      runner.stop();
+      onChange();
+    },
+
+    get state() {
+      return state;
+    },
+  };
+}
