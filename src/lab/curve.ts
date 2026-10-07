@@ -48,17 +48,21 @@ const formatScore = (value: number): string => (Number.isFinite(value) ? Math.ro
 
 /**
  * Круглые деления оси: шаг 1, 2 или 5 на порядок, 3–6 делений. Крайние
- * деления охватывают данные целиком — точка не вылезет за рамку.
+ * деления охватывают данные целиком — точка не вылезет за рамку, — и их
+ * всегда хотя бы два разных. Оценки — целые очки, дробной бывает только
+ * средняя, поэтому шаг не меньше единицы: узкий дробный диапазон
+ * расширяется до ближайших целых, а не схлопывается в одно деление.
  */
 export function niceTicks(low: number, high: number): number[] {
   const span = high - low || Math.abs(high) || 1;
   const rough = span / 4;
   const power = 10 ** Math.floor(Math.log10(rough));
-  const step = [1, 2, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough) ?? 10 * power;
+  const nice = [1, 2, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough) ?? 10 * power;
+  const step = Math.max(1, nice);
   const first = Math.floor(low / step) * step;
-  const last = Math.ceil(high / step) * step;
+  const last = Math.max(Math.ceil(high / step) * step, first + step);
   const ticks: number[] = [];
-  for (let index = 0; first + index * step <= last + step / 2; index += 1) ticks.push(Math.round(first + index * step));
+  for (let index = 0; first + index * step <= last; index += 1) ticks.push(first + index * step);
   return ticks;
 }
 
@@ -82,7 +86,10 @@ export function createCurve(onPick: (generation: number) => void): Curve {
   }
   const frame = html('div', 'lab__curve-frame');
   frame.tabIndex = 0;
-  frame.setAttribute('role', 'img');
+  // Для программы чтения с экрана кривая — ползунок по Поколениям: стрелки
+  // меняют значение, и оно объявляется вместе с Оценками выбранного.
+  frame.setAttribute('role', 'slider');
+  frame.setAttribute('aria-label', 'Кривая Оценки по Поколениям');
   const tooltip = html('div', 'lab__tooltip');
   tooltip.hidden = true;
   element.append(legend, frame);
@@ -119,10 +126,36 @@ export function createCurve(onPick: (generation: number) => void): Curve {
       html('div', 'lab__tooltip-hint', 'клик — показать лучшего'),
     );
     tooltip.hidden = false;
-    // Подсказка у перекрестия, но не за краем рамки.
-    const share = x / WIDTH;
-    tooltip.style.left = `${share * 100}%`;
-    tooltip.style.transform = share > 0.6 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)';
+    // Подсказка у перекрестия — справа, а не влезает — слева, и всегда
+    // в рамке: SVG сжимается вместе с экраном, подсказка — нет, поэтому
+    // меряется её настоящая ширина, а не доля от ширины графика.
+    const room = frame.clientWidth;
+    const width = tooltip.offsetWidth;
+    const at = (x / WIDTH) * room;
+    const right = at + 12;
+    const left = right + width <= room ? right : at - 12 - width;
+    tooltip.style.left = `${Math.max(0, Math.min(left, room - width))}px`;
+  }
+
+  /** Состояние ползунка: выбранное Поколение, а без выбора — последнее, и их Оценки. */
+  function announce(): void {
+    if (!shown) return;
+    const { points, total, examined, selected } = shown;
+    const point = points.find((entry) => entry.number === selected) ?? points[points.length - 1];
+    frame.setAttribute('aria-valuemin', '1');
+    frame.setAttribute('aria-valuemax', String(Math.max(1, points[points.length - 1]?.number ?? 1)));
+    if (!point) {
+      frame.removeAttribute('aria-valuenow');
+      frame.setAttribute('aria-valuetext', 'Поколений ещё нет');
+      return;
+    }
+    const which = selected === point.number ? 'выбрано' : 'последнее';
+    frame.setAttribute('aria-valuenow', String(point.number));
+    frame.setAttribute(
+      'aria-valuetext',
+      `Поколение ${point.number} из ${total}, ${which}: лучшая ${formatScore(point.best)}, средняя ${formatScore(point.mean)}, ` +
+        `лучший выигрывает ${point.wins} из ${examined}`,
+    );
   }
 
   function draw(): void {
@@ -211,8 +244,7 @@ export function createCurve(onPick: (generation: number) => void): Curve {
     });
     chart.append(crosshair, hit);
     frame.replaceChildren(chart, tooltip);
-    const best = end ? `лучшая ${formatScore(end.best)}, средняя ${formatScore(end.mean)} в Поколении ${end.number}` : 'Поколений ещё нет';
-    frame.setAttribute('aria-label', `Кривая Оценки по Поколениям: ${best}. Стрелки выбирают Поколение.`);
+    announce();
     hover(hovered);
   }
 

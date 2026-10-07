@@ -13,7 +13,7 @@ import { ELITE } from '../evolve/generation.js';
 import { createCurve } from './curve.js';
 import { createEvolution, type GenerationRecord, type Settings } from './evolution.js';
 import { createRunner, threadCount } from './runner.js';
-import { readRun, writeRun, type RunSettings } from './saved-run.js';
+import { createRunMemory, readRun, type RunSettings } from './saved-run.js';
 import { details, historyTable, leaderboard, ranked, summary } from './view.js';
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -87,8 +87,6 @@ let viewing: number | null = null;
  * и лучшие Поколений видны, хотя Претендентов последнего Поколения нет.
  */
 let restored: { settings: RunSettings; history: readonly GenerationRecord[] } | null = null;
-/** Настройки идущего прогона — в том виде, в каком их сохранять. */
-let running: RunSettings | null = null;
 const curve = createCurve((generation) => {
   viewing = generation;
   render();
@@ -99,16 +97,7 @@ const evolution = createEvolution(runner, arena, render, warn);
 /** Секунды Экзамена каждого доигранного Поколения, без пауз. */
 const durations = new Map<number, number>();
 
-/** Сохранить прогон после каждого Поколения. Не влез — сказать один раз. */
-let saved = 0;
-let saveFailed = false;
-function save(records: readonly GenerationRecord[]): void {
-  if (!running || records.length === saved) return;
-  saved = records.length;
-  const ok = writeRun({ settings: running, history: records, seconds: [...durations] });
-  if (!ok && !saveFailed) warn('Прогон не сохранён: хранилища браузера нет или прогон в него не влез. После перезагрузки он пропадёт.');
-  saveFailed ||= !ok;
-}
+const memory = createRunMemory(warn);
 
 const PHASES = { idle: '', running: '', paused: ' · пауза', stopped: ' · остановлен', done: ' · готово' } as const;
 
@@ -124,7 +113,7 @@ function render(): void {
   else if (clock.phase !== 'running' && phase === 'running') clock.sinceMs = now;
   clock.phase = phase;
   if (phase === 'done') durations.set(generation, clock.spentMs / 1000);
-  save(evolution.state.history);
+  memory.record(evolution.state.history, [...durations]);
   const records = restored?.history ?? evolution.state.history;
   const examiners = restored?.settings.examiners ?? settings?.examiners ?? [];
   const examined = examiners.length;
@@ -211,14 +200,14 @@ start.addEventListener('click', () => {
   durations.clear();
   restored = null;
   viewing = null;
-  saved = 0;
-  running = {
+  const remembered: RunSettings = {
     size: chosenSettings.size,
     generations: chosenSettings.generations,
     seed: chosenSettings.seed,
     origin: origin.value === 'ready' ? 'ready' : 'scratch',
     examiners: chosenSettings.examiners,
   };
+  memory.begin(remembered);
   void evolution.start(chosenSettings);
 });
 pause.addEventListener('click', () => (evolution.state.phase === 'paused' ? evolution.resume() : evolution.pause()));

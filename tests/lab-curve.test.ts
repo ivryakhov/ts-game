@@ -10,13 +10,19 @@ describe('деления оси', () => {
     [1, 30],
     [1, 2],
     [-310, -310],
-  ])('охватывают данные от %d до %d целиком', (low, high) => {
+    [-0.2, 0],
+    [0, 0],
+    [-1127.5, 2430.25],
+    [0.4, 0.6],
+  ])('охватывают данные от %d до %d целиком, без повторов, целыми', (low, high) => {
     const ticks = niceTicks(low, high);
 
     expect(ticks[0]).toBeLessThanOrEqual(low);
     expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(high);
     expect(ticks.length).toBeGreaterThanOrEqual(2);
     expect(ticks.length).toBeLessThanOrEqual(7);
+    expect(new Set(ticks).size).toBe(ticks.length);
+    for (const tick of ticks) expect(Number.isInteger(tick)).toBe(true);
   });
 
   it('шаг круглый: 1, 2 или 5 на порядок', () => {
