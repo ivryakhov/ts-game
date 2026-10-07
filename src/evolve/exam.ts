@@ -40,6 +40,11 @@ export interface Bout {
   readonly ownHp: number;
   readonly foeHp: number;
   readonly score: number;
+  /**
+   * Сколько раз Претендент взял Обелиск. В Оценку не входит: Обелиск
+   * ценен только Эфиром, и выгоден ли он, должна показать эволюция.
+   */
+  readonly obelisks: number;
   /** Сколько Юнито-Тиков исполнялось каждое Правило Претендента, по типам. */
   readonly ruleTicks: Readonly<Record<UnitKind, readonly number[]>>;
 }
@@ -84,8 +89,9 @@ function boutOf(opponent: string, result: MatchResult): Bout {
     UnitKind,
     readonly number[]
   >;
+  const obelisks = result.events.filter((event) => event.kind === 'obelisk-taken' && event.owner === 'A').length;
   const bout = { opponent, outcome, ticks: result.ticks, ownHp: hp('A'), foeHp: hp('B') } as const;
-  return { ...bout, score: scoreOf(bout), ruleTicks };
+  return { ...bout, score: scoreOf(bout), obelisks, ruleTicks };
 }
 
 /**

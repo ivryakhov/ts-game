@@ -10,11 +10,22 @@ import { opponentView } from '../ui/opponent-view.js';
  * Только показ: решения принимает lab.ts.
  */
 
+/** Откуда Претендент в Поколении. */
+export type Origin = 'random' | 'ready' | 'elite' | 'child';
+
+const ORIGINS: Readonly<Record<Origin, string>> = {
+  random: 'случайный',
+  ready: 'готовый',
+  elite: 'элита',
+  child: 'ребёнок',
+};
+
 /** Претендент Поколения и то, как идёт его Экзамен. */
 export interface Entry {
   /** Номер в Поколении с единицы — им Претендент и зовётся. */
   readonly number: number;
   readonly candidate: Candidate;
+  readonly origin: Origin;
   /** Сторона после разбора; null — разбор отверг Претендента. */
   readonly side: SideSetup | null;
   /** Почему отвергнут — ошибка эволюции, а не Претендента. */
@@ -38,7 +49,7 @@ export function ranked(entries: readonly Entry[]): Entry[] {
   );
 }
 
-const score = (value: number): string => (Number.isFinite(value) ? Math.round(value).toLocaleString('ru-RU') : '—');
+export const score = (value: number): string => (Number.isFinite(value) ? Math.round(value).toLocaleString('ru-RU') : '—');
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 const OUTCOMES: Readonly<Record<Bout['outcome'], string>> = { win: 'победа', loss: 'поражение', draw: 'ничья' };
 
@@ -63,13 +74,13 @@ function table(head: readonly string[], rows: readonly (readonly string[])[]): H
 }
 
 /** Строка Поколения: сколько выигрывает лучший и какая у него Оценка. */
-export function summary(entries: readonly Entry[], examined: number, generation: number): string {
+export function summary(entries: readonly Entry[], examined: number, generation: number, generations: number): string {
   const [best] = ranked(entries);
   if (!best) return '';
   const finite = entries.map(scoreOfEntry).filter(Number.isFinite);
   const mean = finite.length > 0 ? finite.reduce((sum, value) => sum + value, 0) / finite.length : Number.NaN;
   const wins = totalOf(played(best)).wins;
-  return `Поколение ${generation} · лучший выигрывает ${wins} из ${examined} · Оценка ${score(scoreOfEntry(best))} · средняя ${score(mean)}`;
+  return `Поколение ${generation} из ${generations} · лучший выигрывает ${wins} из ${examined} · Оценка ${score(scoreOfEntry(best))} · средняя ${score(mean)}`;
 }
 
 /** Таблица Претендентов по Оценке. Клик по строке выбирает Претендента. */
@@ -79,20 +90,21 @@ export function leaderboard(
   selected: number | null,
   onSelect: (number: number) => void,
 ): HTMLTableElement {
-  const shown = table(['место', 'Претендент', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил'], []);
+  const shown = table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил'], []);
   ranked(entries).forEach((entry, place) => {
     const bouts = played(entry);
     const cells = entry.side
       ? [
           String(place + 1),
           nameOf(entry),
+          ORIGINS[entry.origin],
           score(scoreOfEntry(entry)),
           String(bouts.filter((bout) => bout.outcome === 'win').length),
           String(bouts.filter((bout) => bout.outcome === 'draw').length),
           `${bouts.length} из ${examined}`,
           String(ruleCount(entry.candidate)),
         ]
-      : [String(place + 1), nameOf(entry), '—', '—', '—', 'отвергнут', String(ruleCount(entry.candidate))];
+      : [String(place + 1), nameOf(entry), ORIGINS[entry.origin], '—', '—', '—', 'отвергнут', String(ruleCount(entry.candidate))];
     const line = make('tr', entry.number === selected ? 'lab__row lab__row--selected' : 'lab__row');
     line.append(...cells.map((text) => make('td', '', text)));
     line.addEventListener('click', () => onSelect(entry.number));
@@ -107,12 +119,13 @@ export function details(entry: Entry, opponents: readonly { id: string; name: st
   if (!entry.side) return [title, make('p', 'lab__problem', `Разбор отверг Претендента — ${entry.problem ?? 'причина неизвестна'}.`)];
   const rows = opponents.map((opponent, index) => {
     const bout = entry.bouts[index];
-    if (!bout) return [opponent.name, 'ещё не сыгран', '', '', ''];
+    if (!bout) return [opponent.name, 'ещё не сыгран', '', '', '', ''];
     return [
       opponent.name,
       OUTCOMES[bout.outcome],
       formatMatchTime(bout.ticks),
       `${percent(bout.ownHp)} / ${percent(bout.foeHp)}`,
+      String(bout.obelisks),
       score(bout.score),
     ];
   });
@@ -123,7 +136,24 @@ export function details(entry: Entry, opponents: readonly { id: string; name: st
   );
   return [
     title,
-    table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Оценка'], rows),
+    table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Обелисков взято', 'Оценка'], rows),
     ...rules,
   ];
+}
+
+/** История прогона: лучший и средний по Поколениям — растёт ли Оценка. */
+export function historyTable(
+  history: readonly { number: number; best: number; mean: number; wins: number; obelisks: number }[],
+  examined: number,
+): HTMLTableElement {
+  return table(
+    ['Поколение', 'лучшая Оценка', 'средняя', 'лучший выигрывает', 'Обелисков у лучшего'],
+    history.map((entry) => [
+      String(entry.number),
+      score(entry.best),
+      score(entry.mean),
+      `${entry.wins} из ${examined}`,
+      String(entry.obelisks),
+    ]),
+  );
 }
