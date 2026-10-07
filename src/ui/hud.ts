@@ -23,6 +23,8 @@ export interface Hud {
     chosenKind: UnitKind;
     /** Идёт повтор: Выпуски идут сами, клики по Дороге не действуют. */
     replaying: boolean;
+    /** Показательный матч: за обе Стороны играют Противники. */
+    showcase: boolean;
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
@@ -30,9 +32,12 @@ export interface Hud {
   warn(message: string): void;
   /**
    * Объявить исход глазами игрока. Победитель null означает, что время
-   * вышло вничью. У повтора рядом стоит исход оригинала.
+   * вышло вничью. У повтора рядом стоит исход оригинала. В Показательном
+   * матче победа не своя и не чужая — объявляется, чья она, по имени.
    */
-  announce(outcome: { now: Outcome; original: Outcome | null } | null): void;
+  announce(
+    outcome: { now: Outcome; original: Outcome | null; names: { own: string; foe: string } | null } | null,
+  ): void;
 }
 
 function element(id: string): HTMLElement {
@@ -68,6 +73,7 @@ export function createHud(playerSide: SideId): Hud {
   const kinds = element('hud-kinds');
   const warning = element('hud-warning');
   const replay = element('hud-replay');
+  const showcase = element('hud-showcase');
 
   const slots = UNIT_KINDS.map((kind, index) => {
     const slot = document.createElement('span');
@@ -86,6 +92,7 @@ export function createHud(playerSide: SideId): Hud {
       ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond.toFixed(1)}/с)`;
       foeIncome.textContent = `+${state.foeIncomePerSecond.toFixed(1)}/с`;
       replay.hidden = !state.replaying;
+      showcase.hidden = !state.showcase;
 
       for (const { kind, slot } of slots) {
         slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);
@@ -112,8 +119,16 @@ export function createHud(playerSide: SideId): Hud {
       outcome.classList.toggle('hud__outcome--shown', result !== null);
       if (!result) return;
 
-      const { now, original } = result;
-      const headline = now.winner === null ? 'Время вышло' : now.winner === playerSide ? 'Победа' : 'Поражение';
+      const { now, original, names } = result;
+      const mine = now.winner === playerSide;
+      const headline =
+        now.winner === null
+          ? 'Время вышло'
+          : names
+            ? `Победа: ${mine ? names.own : names.foe}`
+            : mine
+              ? 'Победа'
+              : 'Поражение';
       const line = (text: string) => {
         const small = document.createElement('small');
         small.textContent = text;
