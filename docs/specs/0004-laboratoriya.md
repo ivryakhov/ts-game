@@ -2,7 +2,7 @@
 
 **Объём:** 6 тикетов · **Статус:** ready-for-agent
 **Контекст:** [CONTEXT.md](../../CONTEXT.md) · [Исследование 0001](../research/0001-obuchenie-botov.md) · [ADR-0003](../adr/0003-bot-is-a-rule-set.md) · [ADR-0008](../adr/0008-laboratory-breeds-opponents-from-the-rule-vocabulary.md)
-**Тикеты:** [docs/tickets/](../tickets/) (26–31)
+**Тикеты:** [docs/tickets/](../tickets/) (26–31) · **Задача:** [ivryakhov/ts-game#51](https://github.com/ivryakhov/ts-game/issues/51)
 
 ## Problem Statement
 

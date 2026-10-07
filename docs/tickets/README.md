@@ -81,7 +81,8 @@
 ## Спека 0004
 
 Разбивка [спеки 0004](../specs/0004-laboratoriya.md): Лаборатория
-и Показательный матч. Показательный матч (26) от Лаборатории
+и Показательный матч. Задачи в GitHub — подзадачи
+[ivryakhov/ts-game#51](https://github.com/ivryakhov/ts-game/issues/51). Показательный матч (26) от Лаборатории
 не зависит и даёт «Противник против Противника» в игре сразу.
 Лаборатория показывает результат с первого тикета: 27 — как играют
 случайные Претенденты, 28 — как они учатся.
@@ -92,11 +93,11 @@
           └─→ 30 ─────┴─→ 31
 ```
 
-| # | Тикет | Блокируется | Демо |
-|---|---|---|---|
-| [26](26-pokazatelnyy-match.md) | Показательный матч: Противник против Противника | — | да |
-| [27](27-laboratoriya-ekzamen.md) | Лаборатория: случайные Претенденты держат Экзамен | — | да |
-| [28](28-pokoleniya.md) | Поколения: отбор, скрещивание, мутации | 27 | да |
-| [29](29-vse-yadra.md) | Все ядра | 28 | да |
-| [30](30-krivaya-otsenki.md) | Кривая Оценки и память прогона | 28 | да |
-| [31](31-vyvedennyy-protivnik.md) | Выведенный Противник | 26, 30 | да |
+| # | Тикет | Блокируется | Демо | Задача |
+|---|---|---|---|---|
+| [26](26-pokazatelnyy-match.md) | Показательный матч: Противник против Противника | — | да | [ivryakhov/ts-game#52](https://github.com/ivryakhov/ts-game/issues/52) |
+| [27](27-laboratoriya-ekzamen.md) | Лаборатория: случайные Претенденты держат Экзамен | — | да | [ivryakhov/ts-game#53](https://github.com/ivryakhov/ts-game/issues/53) |
+| [28](28-pokoleniya.md) | Поколения: отбор, скрещивание, мутации | 27 | да | [ivryakhov/ts-game#54](https://github.com/ivryakhov/ts-game/issues/54) |
+| [29](29-vse-yadra.md) | Все ядра | 28 | да | [ivryakhov/ts-game#55](https://github.com/ivryakhov/ts-game/issues/55) |
+| [30](30-krivaya-otsenki.md) | Кривая Оценки и память прогона | 28 | да | [ivryakhov/ts-game#56](https://github.com/ivryakhov/ts-game/issues/56) |
+| [31](31-vyvedennyy-protivnik.md) | Выведенный Противник | 26, 30 | да | [ivryakhov/ts-game#57](https://github.com/ivryakhov/ts-game/issues/57) |
