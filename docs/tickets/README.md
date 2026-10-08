@@ -105,7 +105,8 @@
 ## Спека 0005
 
 Разбивка [спеки 0005](../specs/0005-rodoslovnaya.md): как идёт отбор
-и откуда берётся Претендент. Рождение (32) — основа остальных: без него
+и откуда берётся Претендент. Задачи в GitHub — подзадачи
+[ivryakhov/ts-game#66](https://github.com/ivryakhov/ts-game/issues/66). Рождение (32) — основа остальных: без него
 нечего показывать ни на паузе, ни в карточке.
 
 ```
@@ -113,9 +114,9 @@
     └─→ 34 ─→ 35
 ```
 
-| # | Тикет | Блокируется | Демо |
-|---|---|---|---|
-| [32](32-rozhdenie.md) | Рождение: от кого Претендент и что в нём мутировало | — | да |
-| [33](33-pauza-posle-pokoleniya.md) | Пауза после каждого Поколения | 32 | да |
-| [34](34-kartochka-pretendenta.md) | Карточка Претендента и Родословная | 32 | да |
-| [35](35-match-ekzamena.md) | Матч Экзамена в игре | 34 | да |
+| # | Тикет | Блокируется | Демо | Задача |
+|---|---|---|---|---|
+| [32](32-rozhdenie.md) | Рождение: от кого Претендент и что в нём мутировало | — | да | [ivryakhov/ts-game#67](https://github.com/ivryakhov/ts-game/issues/67) |
+| [33](33-pauza-posle-pokoleniya.md) | Пауза после каждого Поколения | 32 | да | [ivryakhov/ts-game#68](https://github.com/ivryakhov/ts-game/issues/68) |
+| [34](34-kartochka-pretendenta.md) | Карточка Претендента и Родословная | 32 | да | [ivryakhov/ts-game#69](https://github.com/ivryakhov/ts-game/issues/69) |
+| [35](35-match-ekzamena.md) | Матч Экзамена в игре | 34 | да | [ivryakhov/ts-game#70](https://github.com/ivryakhov/ts-game/issues/70) |

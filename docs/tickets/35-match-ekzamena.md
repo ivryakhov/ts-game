@@ -8,7 +8,7 @@
 
 **Блокируется:** 34
 
-**Статус:** ready-for-agent
+**Статус:** ready-for-agent · **Задача:** [ivryakhov/ts-game#70](https://github.com/ivryakhov/ts-game/issues/70)
 
 - [ ] Адрес `?ally=lab-preview&opponent=…&shift=…&limit=exam`; место предпросмотра перезаписывается каждым «Смотреть»
 - [ ] Игра сдвигает Волны Противника `rotateWaves` и кончает матч на 6 000 Тиков; плашка с Поколением и сдвигом

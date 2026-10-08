@@ -2,7 +2,7 @@
 
 **Объём:** 4 тикета · **Статус:** ready-for-agent
 **Контекст:** [CONTEXT.md](../../CONTEXT.md) · [спека 0004](0004-laboratoriya.md) · [ADR-0001](../adr/0001-deterministic-fixed-tick.md) · [ADR-0008](../adr/0008-laboratory-breeds-opponents-from-the-rule-vocabulary.md)
-**Тикеты:** [docs/tickets/](../tickets/) (32–35)
+**Тикеты:** [docs/tickets/](../tickets/) (32–35) · **Задача:** [ivryakhov/ts-game#66](https://github.com/ivryakhov/ts-game/issues/66)
 
 ## Problem Statement
 

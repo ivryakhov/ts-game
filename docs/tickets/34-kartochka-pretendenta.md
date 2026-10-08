@@ -9,7 +9,7 @@
 
 **Блокируется:** 32
 
-**Статус:** ready-for-agent
+**Статус:** ready-for-agent · **Задача:** [ivryakhov/ts-game#69](https://github.com/ivryakhov/ts-game/issues/69)
 
 - [ ] `<dialog>`: Esc, клик мимо и кнопка закрывают; ссылка на предка и «← назад»
 - [ ] Рождение словами (`birth-text.ts`): Гены от родителей, мутации «было → стало»
