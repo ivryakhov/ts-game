@@ -4,6 +4,7 @@ import { randomCandidate } from '../src/evolve/candidate.js';
 import type { Bout } from '../src/evolve/exam.js';
 import { nextGeneration } from '../src/evolve/generation.js';
 import { createEvolution, type Settings } from '../src/lab/evolution.js';
+import { selectionAfterAdvance } from '../src/lab/selection.js';
 import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
 import { createRunner, threadCount, type WorkerLike } from '../src/lab/runner.js';
 import { arena } from '../src/maps/arena.js';
@@ -166,5 +167,51 @@ describe('пул Worker\'ов', () => {
     expect(threadCount(10)).toBe(9);
     expect(threadCount(1)).toBe(1);
     expect(threadCount(undefined)).toBe(1);
+  });
+});
+
+describe('память прогона в странице', () => {
+  const scoredBy = (request: BoutRequest): WorkerReply => ({ kind: 'bout', job: request.job, bout: bout(request, -request.job) });
+
+  it('полностью хранится не больше предела Претендентов, более ранние Поколения выцветают', async () => {
+    const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, 20);
+    expect(await finishes(evolution.start(settings({ size: 4, generations: 30 })))).toBe(true);
+    const { generations, history } = evolution.state;
+
+    const full = generations.reduce((sum, snapshot) => sum + snapshot.entries.length, 0);
+    expect(full).toBeLessThanOrEqual(20);
+    expect(generations).toHaveLength(30);
+    expect(generations.at(-1)?.faded).toBeNull();
+    const faded = generations.filter((snapshot) => snapshot.faded);
+    expect(faded.length).toBeGreaterThanOrEqual(25);
+    for (const snapshot of faded) {
+      expect(snapshot.entries).toEqual([]);
+      expect(snapshot.faded).toHaveLength(4);
+      expect(snapshot.children).not.toBeNull();
+      for (const entry of snapshot.faded ?? []) {
+        // Ни Правил, ни Волн «было и стало», ни матчей — только отметки.
+        expect(JSON.stringify(entry)).not.toMatch(/"before"|"after"|"when"|"units"|"ruleTicks"/);
+        expect(Number.isFinite(entry.score)).toBe(true);
+      }
+    }
+    // Лучший каждого Поколения не выцветает: его копия — в истории.
+    expect(history.every((record) => record.champion?.candidate !== undefined)).toBe(true);
+  });
+
+  it('выцветание не меняет эволюцию: те же Поколения при любом пределе', async () => {
+    const run = async (budget: number) => {
+      const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, budget);
+      await finishes(evolution.start(settings({ size: 4, generations: 12, seed: 3 })));
+      return evolution.state.history;
+    };
+
+    expect(await run(8)).toEqual(await run(10_000));
+  });
+});
+
+describe('выбор Претендента при смене Поколения', () => {
+  it('в идущем Поколении сбрасывается, в просматриваемом прошлом остаётся', () => {
+    expect(selectionAfterAdvance(null, 3)).toBeNull();
+    expect(selectionAfterAdvance(1, 3)).toBe(3);
   });
 });

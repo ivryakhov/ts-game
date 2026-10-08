@@ -1,8 +1,10 @@
 import type { SideSetup } from '@sim/index';
 import { ruleCount, type Candidate } from '../evolve/candidate.js';
 import { totalOf, type Bout } from '../evolve/exam.js';
+import type { Birth } from '../evolve/birth.js';
 import { formatMatchTime } from '../ui/hud.js';
 import { opponentView } from '../ui/opponent-view.js';
+import { birthSummary, shortName } from './birth-text.js';
 
 /**
  * Что Лаборатория показывает о Поколении: таблицу Претендентов по Оценке
@@ -26,6 +28,10 @@ export interface Entry {
   readonly number: number;
   readonly candidate: Candidate;
   readonly origin: Origin;
+  /** Поколение Претендента, с единицы; нет — Претендент из сохранения старого формата. */
+  readonly generation?: number;
+  /** Рождение — от кого он и что в нём мутировало (спека 0005); нет у восстановленных из браузера. */
+  readonly birth?: Birth;
   /** Сторона после разбора; null — разбор отверг Претендента. */
   readonly side: SideSetup | null;
   /** Почему отвергнут — ошибка эволюции, а не Претендента. */
@@ -34,7 +40,8 @@ export interface Entry {
   readonly bouts: (Bout | null)[];
 }
 
-export const nameOf = (entry: Entry): string => `Претендент №${entry.number}`;
+export const nameOf = (entry: Entry): string =>
+  entry.generation === undefined ? `Претендент №${entry.number}` : `Претендент ${shortName(entry.generation, entry.number - 1)}`;
 
 const played = (entry: Entry): Bout[] => entry.bouts.filter((bout): bout is Bout => bout !== null);
 
@@ -83,28 +90,40 @@ export function summary(entries: readonly Entry[], examined: number, generation:
   return `Поколение ${generation} из ${generations} · лучший выигрывает ${wins} из ${examined} · Оценка ${score(scoreOfEntry(best))} · средняя ${score(mean)}`;
 }
 
-/** Таблица Претендентов по Оценке. Клик по строке выбирает Претендента. */
+/** Откуда Претендент: Рождение словами, а без Рождения — элита или ребёнок. */
+const originText = (entry: Entry, readyNames: readonly string[]): string =>
+  entry.birth && entry.generation !== undefined ? birthSummary(entry.birth, entry.generation, readyNames) : ORIGINS[entry.origin];
+
+/**
+ * Таблица Претендентов по Оценке. Клик по строке выбирает Претендента.
+ * `children` — сколько детей у каждого по месту в Поколении, когда
+ * следующее Поколение уже собрано; до того колонка пуста.
+ */
 export function leaderboard(
   entries: readonly Entry[],
   examined: number,
   selected: number | null,
   onSelect: (number: number) => void,
+  children: readonly number[] | null = null,
+  readyNames: readonly string[] = [],
 ): HTMLTableElement {
-  const shown = table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил'], []);
+  const shown = table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], []);
   ranked(entries).forEach((entry, place) => {
     const bouts = played(entry);
+    const kids = children ? String(children[entry.number - 1] ?? 0) : '';
     const cells = entry.side
       ? [
           String(place + 1),
           nameOf(entry),
-          ORIGINS[entry.origin],
+          originText(entry, readyNames),
           score(scoreOfEntry(entry)),
           String(bouts.filter((bout) => bout.outcome === 'win').length),
           String(bouts.filter((bout) => bout.outcome === 'draw').length),
           `${bouts.length} из ${examined}`,
           String(ruleCount(entry.candidate)),
+          kids,
         ]
-      : [String(place + 1), nameOf(entry), ORIGINS[entry.origin], '—', '—', '—', 'отвергнут', String(ruleCount(entry.candidate))];
+      : [String(place + 1), nameOf(entry), originText(entry, readyNames), '—', '—', '—', 'отвергнут', String(ruleCount(entry.candidate)), kids];
     const line = make('tr', entry.number === selected ? 'lab__row lab__row--selected' : 'lab__row');
     line.append(...cells.map((text) => make('td', '', text)));
     line.addEventListener('click', () => onSelect(entry.number));
@@ -172,4 +191,43 @@ export function historyTable(
     shown.append(line);
   }
   return shown;
+}
+
+/** Выцветший Претендент — то, что от него осталось (спека 0005, «Память»). */
+export interface FadedRow {
+  readonly number: number;
+  readonly generation: number;
+  readonly birth: Parameters<typeof birthSummary>[0];
+  readonly score: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly played: number;
+  readonly rules: number;
+}
+
+/**
+ * Таблица выцветшего Поколения: те же колонки, но без выбора — Правил,
+ * чтобы показать подробности, уже нет. Над ней сказано почему.
+ */
+export function fadedBoard(
+  faded: readonly FadedRow[],
+  examined: number,
+  children: readonly number[] | null,
+  readyNames: readonly string[] = [],
+): HTMLElement[] {
+  const note = make('p', 'lab__note', 'Поколение выцвело: Правила его Претендентов уже не хранятся, остались Рождение, Оценка и дети.');
+  const rows = [...faded]
+    .sort((a, b) => b.score - a.score || a.rules - b.rules || a.number - b.number)
+    .map((entry, place) => [
+      String(place + 1),
+      `Претендент ${shortName(entry.generation, entry.number - 1)}`,
+      birthSummary(entry.birth, entry.generation, readyNames),
+      score(entry.score),
+      String(entry.wins),
+      String(entry.draws),
+      `${entry.played} из ${examined}`,
+      String(entry.rules),
+      children ? String(children[entry.number - 1] ?? 0) : '',
+    ]);
+  return [note, table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], rows)];
 }
