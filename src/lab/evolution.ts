@@ -1,7 +1,8 @@
 import { createRng, type GameMap } from '@sim/index';
 import type { Candidate } from '../evolve/candidate.js';
 import { candidateSide, totalOf, type Bout } from '../evolve/exam.js';
-import { eliteOf, firstGeneration, nextGeneration } from '../evolve/generation.js';
+import { childrenOf, type Birth } from '../evolve/birth.js';
+import { breed, firstBorn, type Born } from '../evolve/generation.js';
 import type { BoutRequest } from './protocol.js';
 import type { Runner } from './runner.js';
 import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
@@ -24,6 +25,19 @@ export interface Settings {
   readonly examiners: readonly { readonly id: string; readonly name: string }[];
   /** С кого начать; пусто — со случайных Претендентов. */
   readonly ready: readonly Candidate[];
+  /** Имена готовых — для Рождения словами. */
+  readonly readyNames?: readonly string[];
+}
+
+/**
+ * Поколение прогона, каким его видно в памяти страницы: Претенденты
+ * с Рождениями и, когда следующее уже собрано, сколько детей у каждого.
+ */
+export interface Snapshot {
+  /** С единицы. */
+  readonly number: number;
+  readonly entries: readonly Entry[];
+  children: readonly number[] | null;
 }
 
 /** Итог Поколения — строка истории. */
@@ -54,12 +68,29 @@ export interface Evolution {
     /** Сыгранных матчей текущего Поколения. */
     readonly done: number;
     readonly history: readonly GenerationRecord[];
+    /** Все Поколения прогона по порядку — для детей и Родословной. */
+    readonly generations: readonly Snapshot[];
   };
 }
 
-function entriesOf(candidates: readonly Candidate[], origins: (index: number) => Origin, map: GameMap, examined: number, warn: (message: string) => void): Entry[] {
-  return candidates.map((candidate, index) => {
-    const base = { number: index + 1, candidate, origin: origins(index), bouts: Array.from({ length: examined }, () => null) };
+const ORIGIN_OF: Readonly<Record<Birth['kind'], Origin>> = { random: 'random', ready: 'ready', elite: 'elite', child: 'child' };
+
+function entriesOf(
+  born: readonly Born[],
+  generation: number,
+  map: GameMap,
+  examined: number,
+  warn: (message: string) => void,
+): Entry[] {
+  return born.map(({ candidate, birth }, index) => {
+    const base = {
+      number: index + 1,
+      generation,
+      birth,
+      candidate,
+      origin: ORIGIN_OF[birth.kind],
+      bouts: Array.from({ length: examined }, () => null),
+    };
     try {
       return { ...base, side: candidateSide(candidate, map), problem: null };
     } catch (error) {
@@ -99,7 +130,8 @@ export function createEvolution(
     entries: Entry[];
     done: number;
     history: GenerationRecord[];
-  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [] };
+    generations: Snapshot[];
+  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [], generations: [] };
   /** Номер запуска: остановленный прогон, доигрывая, не трогает следующего. */
   let launch = 0;
 
@@ -153,21 +185,26 @@ export function createEvolution(
       // последних матча, он кончился, а очередь так и стоит.
       runner.resume();
       const rng = createRng(settings.seed);
-      let candidates = firstGeneration(rng, settings.size, roads, settings.ready);
-      let origins = (index: number): Origin =>
-        settings.ready.length === 0 ? 'random' : index < settings.ready.length ? 'ready' : 'child';
-      Object.assign(state, { phase: 'running', settings, history: [] });
+      let born = firstBorn(rng, settings.size, roads, settings.ready);
+      Object.assign(state, { phase: 'running', settings, history: [], generations: [] });
 
       for (let generation = 0; generation < settings.generations; generation += 1) {
         state.generation = generation + 1;
-        state.entries = entriesOf(candidates, origins, map, settings.examiners.length, warn);
+        state.entries = entriesOf(born, generation + 1, map, settings.examiners.length, warn);
+        const snapshot: Snapshot = { number: generation + 1, entries: state.entries, children: null };
+        state.generations.push(snapshot);
         state.done = 0;
         onChange();
         if (!(await examine(mine, settings, generation))) return;
         state.history.push(recordOf(generation + 1, state.entries));
+        // Последнее Поколение прогона не размножается: следующего не будет.
+        if (generation + 1 === settings.generations) break;
         const scored = state.entries.map((entry) => ({ candidate: entry.candidate, score: scoreOfEntry(entry) }));
-        candidates = nextGeneration(rng, scored, roads);
-        origins = (index) => (index < eliteOf(settings.size) ? 'elite' : 'child');
+        born = breed(rng, scored, roads);
+        snapshot.children = childrenOf(
+          born.map((entry) => entry.birth),
+          scored.length,
+        );
       }
       state.phase = 'done';
       onChange();

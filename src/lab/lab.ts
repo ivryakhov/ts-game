@@ -93,6 +93,7 @@ let viewing: number | null = null;
 let restored: { settings: RunSettings; history: readonly GenerationRecord[] } | null = null;
 const curve = createCurve((generation) => {
   viewing = generation;
+  selected = null;
   render();
 });
 curveSlot.append(curve.element);
@@ -135,6 +136,7 @@ function render(): void {
   curve.update(records, total, examined, viewing);
   const pick = (number: number): void => {
     viewing = number;
+    selected = null;
     render();
   };
   const scrolled = history.scrollTop + history.clientHeight >= history.scrollHeight - 4;
@@ -143,28 +145,61 @@ function render(): void {
   );
   // Новое Поколение видно, если читатель не листает историю выше.
   if (scrolled || viewing === null) history.scrollTop = history.scrollHeight;
+  // Таблица — идущее Поколение или, если на кривой или в истории выбрано
+  // прошлое, оно целиком: с Оценками и детьми каждого (спека 0005).
+  const snapshot = viewing === null ? null : (evolution.state.generations.find((entry) => entry.number === viewing) ?? null);
+  const tableEntries = snapshot?.entries ?? entries;
+  const readyNames = settings?.readyNames ?? [];
+  const title = document.createElement('p');
+  title.className = 'lab__board-title';
+  title.textContent = snapshot
+    ? `Поколение ${snapshot.number}${snapshot.children ? ' · сдано, детей сосчитано' : ''}`
+    : entries.length > 0
+      ? `Поколение ${generation}${phase === 'running' || phase === 'paused' ? ' · Экзамен' : ''}`
+      : '';
+  if (snapshot && snapshot.number !== generation) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'button lab__back';
+    back.textContent = `← к Поколению ${generation}`;
+    back.addEventListener('click', () => {
+      viewing = null;
+      selected = null;
+      render();
+    });
+    title.append(' ', back);
+  }
   board.replaceChildren(
-    ...(entries.length === 0
+    ...(tableEntries.length === 0
       ? []
       : [
-          leaderboard(entries, examined, viewing === null ? selected : null, (number) => {
-            selected = number;
-            viewing = null;
-            render();
-          }),
+          title,
+          leaderboard(
+            tableEntries,
+            examined,
+            selected,
+            (number) => {
+              selected = number;
+              render();
+            },
+            snapshot?.children ?? null,
+            readyNames,
+          ),
         ]),
   );
   const champion = records.find((record) => record.number === viewing)?.champion;
-  const shown = champion ?? entries.find((entry) => entry.number === (selected ?? ranked(entries)[0]?.number));
-  const of = champion ? (viewing ?? generation) : generation;
+  const fromTable = tableEntries.find((entry) => entry.number === (selected ?? ranked(tableEntries)[0]?.number));
+  // Без Поколения в памяти (прогон из браузера) — лучший из истории.
+  const shown = snapshot || viewing === null ? fromTable : (champion ?? fromTable);
+  const of = viewing ?? generation;
   const seed = restored?.settings.seed ?? settings?.seed ?? 0;
   // Подробности перерисовываются, только когда в них что-то поменялось:
   // иначе кнопка, пересоздаваемая на каждый матч Экзамена, теряла бы клик.
   const played = shown?.bouts.filter((bout) => bout !== null).length ?? 0;
-  const key = `${champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
+  const key = `${snapshot ? 'table' : champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
   if (key !== detailsKey) {
     detailsKey = key;
-    const heading = champion ? `Лучший Поколения ${of}: Претендент №${champion.number}` : undefined;
+    const heading = !snapshot && champion && shown === champion ? `Лучший Поколения ${of}: Претендент №${champion.number}` : undefined;
     const complete = shown?.side && played === examined;
     chosen.replaceChildren(
       ...(shown ? details(shown, examiners, heading) : []),
@@ -211,7 +246,8 @@ function settings(): Settings | null {
     origin.value === 'ready'
       ? roster.opponents.flatMap(({ side }) => (side.behaviour && side.waves ? [{ behaviour: side.behaviour, waves: side.waves }] : []))
       : [];
-  return { size, generations, seed, examiners, ready };
+  const readyNames = origin.value === 'ready' ? roster.opponents.flatMap(({ name, side }) => (side.behaviour && side.waves ? [name] : [])) : [];
+  return { size, generations, seed, examiners, ready, readyNames };
 }
 
 start.addEventListener('click', () => {

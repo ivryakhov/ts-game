@@ -13,6 +13,7 @@ import {
   unitKind,
   type Candidate,
 } from './candidate.js';
+import { mutationBetween, type Mutation } from './birth.js';
 
 /**
  * Мутации Претендента — список спеки 0004. Каждая держит пределы
@@ -22,7 +23,7 @@ import {
  */
 
 type Rules = readonly Rule[];
-type Mutation = (rng: Rng, candidate: Candidate, roads: readonly string[]) => Candidate | null;
+type Mutator = (rng: Rng, candidate: Candidate, roads: readonly string[]) => Candidate | null;
 
 /** Номер случайного Правила, кроме последнего «всегда»; null — таких нет. */
 const ruleIndex = (rng: Rng, rules: Rules): number | null => (rules.length > 1 ? rng.nextInt(rules.length - 1) : null);
@@ -43,7 +44,7 @@ function ruleOf(conditions: readonly JointCondition[], action: Rule['do']): Rule
 /** Мутация одного Правила случайного типа: `change` получает Условия и Действие. */
 function onRule(
   change: (rng: Rng, conditions: readonly JointCondition[], rule: Rule) => Rule | null,
-): Mutation {
+): Mutator {
   return (rng, candidate) => {
     const kind = unitKind(rng);
     const rules = candidate.behaviour[kind];
@@ -80,7 +81,7 @@ function nudged(rng: Rng, condition: JointCondition): JointCondition | null {
   }
 }
 
-const RULE_MUTATIONS: readonly Mutation[] = [
+const RULE_MUTATIONS: readonly Mutator[] = [
   // Заменить Условие на другое.
   onRule((rng, conditions, rule) => {
     const index = rng.nextInt(conditions.length);
@@ -154,7 +155,7 @@ const RULE_MUTATIONS: readonly Mutation[] = [
 const withWaves = (candidate: Candidate, waves: readonly Wave[]): Candidate => ({ ...candidate, waves });
 
 /** Мутация одной случайной Волны. */
-function onWave(change: (rng: Rng, wave: Wave, roads: readonly string[]) => Wave | null): Mutation {
+function onWave(change: (rng: Rng, wave: Wave, roads: readonly string[]) => Wave | null): Mutator {
   return (rng, candidate, roads) => {
     const index = rng.nextInt(candidate.waves.length);
     const wave = candidate.waves[index];
@@ -163,7 +164,7 @@ function onWave(change: (rng: Rng, wave: Wave, roads: readonly string[]) => Wave
   };
 }
 
-const WAVE_MUTATIONS: readonly Mutation[] = [
+const WAVE_MUTATIONS: readonly Mutator[] = [
   // Сменить Дорогу.
   onWave((rng, wave, roads) => {
     const others = roads.filter((road) => road !== wave.road);
@@ -211,7 +212,7 @@ const WAVE_MUTATIONS: readonly Mutation[] = [
 ];
 
 /** Вид мутации выбирается поровну из всех; у Правил видов больше, чем у Волн, — их и больше в Претенденте. */
-const MUTATIONS: readonly Mutation[] = [...RULE_MUTATIONS, ...WAVE_MUTATIONS];
+const MUTATIONS: readonly Mutator[] = [...RULE_MUTATIONS, ...WAVE_MUTATIONS];
 
 /** Одна случайная мутация. Неприложимые пропускаются; смена последнего Действия приложима всегда. */
 export function mutate(rng: Rng, candidate: Candidate, roads: readonly string[]): Candidate {
@@ -226,7 +227,24 @@ export function mutate(rng: Rng, candidate: Candidate, roads: readonly string[])
 
 /** Сколько мутаций получает ребёнок: от одной до трёх (спека 0004). */
 export function mutateSome(rng: Rng, candidate: Candidate, roads: readonly string[]): Candidate {
+  return mutateNoted(rng, candidate, roads).candidate;
+}
+
+/**
+ * То же, и с записью каждой мутации для Рождения (спека 0005). Запись —
+ * сравнение до и после, генератор она не трогает.
+ */
+export function mutateNoted(
+  rng: Rng,
+  candidate: Candidate,
+  roads: readonly string[],
+): { candidate: Candidate; mutations: Mutation[] } {
   let next = candidate;
-  for (let times = between(rng, 1, 3); times > 0; times -= 1) next = mutate(rng, next, roads);
-  return next;
+  const mutations: Mutation[] = [];
+  for (let times = between(rng, 1, 3); times > 0; times -= 1) {
+    const before = next;
+    next = mutate(rng, next, roads);
+    mutations.push(mutationBetween(before, next));
+  }
+  return { candidate: next, mutations };
 }
