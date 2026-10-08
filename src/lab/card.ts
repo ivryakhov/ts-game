@@ -25,6 +25,8 @@ export interface CardSource {
    * модальным окном не видна и недоступна.
    */
   readonly actions: (entry: Entry, generation: number, onChange: () => void, warn: (message: string) => void) => HTMLElement;
+  /** Открыть в игре Матч Экзамена Претендента против этого Противника. false — не вышло. */
+  readonly watch: (entry: Entry, generation: number, opponent: string) => boolean;
 }
 
 export interface Card {
@@ -135,6 +137,9 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
   function draw(): void {
     const ref = stack[stack.length - 1];
     if (!ref) return;
+    const watchProblem = make('p', 'lab__problem');
+    watchProblem.setAttribute('role', 'alert');
+    watchProblem.hidden = true;
     const facts = resolve(ref);
     const { member, entry } = facts;
     key = `${ref.generation}:${ref.number}:${entry ? played(entry).length : -1}:${version}:${stack.length}`;
@@ -163,7 +168,12 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
       nav,
       make('h2', 'lab__subtitle', `Претендент ${shortName(ref.generation, ref.number - 1)}`),
       summary,
-      ...(entry ? [examTable(entry, source.examiners())] : []),
+      ...(entry ? [examTable(entry, source.examiners(), (opponent) => {
+        if (!source.watch(entry, ref.generation, opponent)) {
+          watchProblem.textContent = 'Матч не открыт: хранилище браузера не приняло Претендента для предпросмотра.';
+          watchProblem.hidden = false;
+        }
+      }), watchProblem] : []),
       ...birthSection(facts.birth, ref),
       ...lineageSection(ref),
       ...(entry ? rulesOf(entry) : []),

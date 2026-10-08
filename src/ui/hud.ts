@@ -23,8 +23,8 @@ export interface Hud {
     chosenKind: UnitKind;
     /** Идёт повтор: Выпуски идут сами, клики по Дороге не действуют. */
     replaying: boolean;
-    /** Показательный матч: за обе Стороны играют Противники. */
-    showcase: boolean;
+    /** Показательный матч: за обе Стороны играют Противники; текст надписи или null — не он. */
+    showcase: string | null;
   }): void;
   /** Показать, что Эфира не хватило: отказ должен быть заметен. */
   refuse(): void;
@@ -92,7 +92,8 @@ export function createHud(playerSide: SideId): Hud {
       ether.textContent = `${Math.floor(state.ether)} (+${state.incomePerSecond.toFixed(1)}/с)`;
       foeIncome.textContent = `+${state.foeIncomePerSecond.toFixed(1)}/с`;
       replay.hidden = !state.replaying;
-      showcase.hidden = !state.showcase;
+      showcase.hidden = state.showcase === null;
+      if (state.showcase !== null && showcase.textContent !== state.showcase) showcase.textContent = state.showcase;
 
       for (const { kind, slot } of slots) {
         slot.classList.toggle('hud__kind--chosen', kind === state.chosenKind);

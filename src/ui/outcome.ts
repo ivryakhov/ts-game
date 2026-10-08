@@ -4,8 +4,11 @@
  * коротким, иначе Правила никто не станет доводить.
  */
 export interface OutcomeActions {
-  /** `showcase` — Показательный матч: Выпусков игрока в нём нет, повторять нечего. */
-  show(visible: boolean, showcase?: boolean): void;
+  /**
+   * `showcase` — Показательный матч: Выпусков игрока в нём нет, повторять нечего.
+   * `fixedSeed` — Матч Экзамена: Сид у него Экзамена, «Новый Сид» ничего бы не изменил.
+   */
+  show(visible: boolean, showcase?: boolean, fixedSeed?: boolean): void;
 }
 
 export interface OutcomeHandlers {
@@ -29,6 +32,7 @@ export function bindOutcomeActions(handlers: OutcomeHandlers): OutcomeActions {
   const box = element('outcome-actions');
   const review = element('outcome-review');
   const repeat = element('outcome-repeat');
+  const newSeed = element('outcome-new-seed');
 
   const bind = (id: string, act: () => void): void => {
     const button = element(id);
@@ -46,9 +50,10 @@ export function bindOutcomeActions(handlers: OutcomeHandlers): OutcomeActions {
   bind('outcome-new-seed', handlers.newSeed);
 
   return {
-    show(visible, showcase = false): void {
+    show(visible, showcase = false, fixedSeed = false): void {
       box.hidden = !visible;
       repeat.hidden = showcase;
+      newSeed.hidden = fixedSeed;
       review.hidden = !visible;
     },
   };

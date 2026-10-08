@@ -23,7 +23,7 @@ import { candidateFile, type Candidate } from './candidate.js';
 export const EXAM_TICKS = 6_000;
 
 /** Сид матча. На исход он сейчас не влияет (задача #41), но матчу нужен. */
-const EXAM_SEED = 1;
+export const EXAM_SEED = 1;
 
 /** Противник Экзамена — то, что нужно для матча, без имени и описания. */
 export interface Examiner {
