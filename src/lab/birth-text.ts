@@ -1,4 +1,4 @@
-import type { Birth } from '../evolve/birth.js';
+import type { Birth, FadedBirth } from '../evolve/birth.js';
 
 /**
  * Рождение словами — для таблицы Поколения (спека 0005). Претендент
@@ -23,7 +23,7 @@ export function mutationsCount(count: number): string {
  * у ребёнка Поколения N родители — из Поколения N − 1.
  * `readyNames` — имена готовых Противников, с которых начат прогон.
  */
-export function birthSummary(birth: Birth | undefined, generation: number, readyNames: readonly string[] = []): string {
+export function birthSummary(birth: Birth | FadedBirth | undefined, generation: number, readyNames: readonly string[] = []): string {
   if (!birth) return '';
   const parent = (index: number): string => shortName(generation - 1, index);
   const ready = (index: number): string => `«${readyNames[index] ?? `готовый №${index + 1}`}»`;

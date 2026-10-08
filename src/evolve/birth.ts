@@ -116,3 +116,31 @@ export function childrenOf(births: readonly Birth[], size: number): number[] {
   }
   return counts;
 }
+
+/**
+ * Мутация выцветшего Поколения (спека 0005, «Память»): что и где
+ * произошло, без Правил и Волн «было и стало» — их держать дорого,
+ * а для Родословной хватает Гена, вида и номера.
+ */
+export interface MutationMark {
+  readonly gene: Gene;
+  readonly change: Mutation['change'];
+  readonly at?: number;
+  readonly other?: number;
+}
+
+/** Рождение выцветшего Претендента: то же, но мутации — отметками. */
+export type FadedBirth =
+  | Exclude<Birth, { kind: 'child' }>
+  | (Omit<Extract<Birth, { kind: 'child' }>, 'mutations'> & { readonly mutations: readonly MutationMark[] });
+
+export function markOf(mutation: Mutation): MutationMark {
+  const { gene, change } = mutation;
+  if (mutation.change === 'same') return { gene, change };
+  if (mutation.change === 'swapped') return { gene, change, at: mutation.at, other: mutation.other };
+  return { gene, change, at: mutation.at };
+}
+
+export function fadeBirth(birth: Birth): FadedBirth {
+  return birth.kind === 'child' ? { ...birth, mutations: birth.mutations.map(markOf) } : birth;
+}

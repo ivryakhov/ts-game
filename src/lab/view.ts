@@ -192,3 +192,42 @@ export function historyTable(
   }
   return shown;
 }
+
+/** Выцветший Претендент — то, что от него осталось (спека 0005, «Память»). */
+export interface FadedRow {
+  readonly number: number;
+  readonly generation: number;
+  readonly birth: Parameters<typeof birthSummary>[0];
+  readonly score: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly played: number;
+  readonly rules: number;
+}
+
+/**
+ * Таблица выцветшего Поколения: те же колонки, но без выбора — Правил,
+ * чтобы показать подробности, уже нет. Над ней сказано почему.
+ */
+export function fadedBoard(
+  faded: readonly FadedRow[],
+  examined: number,
+  children: readonly number[] | null,
+  readyNames: readonly string[] = [],
+): HTMLElement[] {
+  const note = make('p', 'lab__note', 'Поколение выцвело: Правила его Претендентов уже не хранятся, остались Рождение, Оценка и дети.');
+  const rows = [...faded]
+    .sort((a, b) => b.score - a.score || a.rules - b.rules || a.number - b.number)
+    .map((entry, place) => [
+      String(place + 1),
+      `Претендент ${shortName(entry.generation, entry.number - 1)}`,
+      birthSummary(entry.birth, entry.generation, readyNames),
+      score(entry.score),
+      String(entry.wins),
+      String(entry.draws),
+      `${entry.played} из ${examined}`,
+      String(entry.rules),
+      children ? String(children[entry.number - 1] ?? 0) : '',
+    ]);
+  return [note, table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], rows)];
+}

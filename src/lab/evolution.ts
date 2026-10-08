@@ -1,7 +1,8 @@
 import { createRng, type GameMap } from '@sim/index';
 import type { Candidate } from '../evolve/candidate.js';
 import { candidateSide, totalOf, type Bout } from '../evolve/exam.js';
-import { childrenOf, type Birth } from '../evolve/birth.js';
+import { childrenOf, fadeBirth, type Birth, type FadedBirth } from '../evolve/birth.js';
+import { ruleCount } from '../evolve/candidate.js';
 import { breed, firstBorn, type Born } from '../evolve/generation.js';
 import type { BoutRequest } from './protocol.js';
 import type { Runner } from './runner.js';
@@ -30,14 +31,69 @@ export interface Settings {
 }
 
 /**
+ * Сколько Претендентов хранится полностью — с Правилами, Стороной,
+ * матчами и мутациями «было и стало» (спека 0005, «Память»): 100
+ * Поколений по 32. Более ранние Поколения выцветают.
+ */
+export const FULL_BUDGET = 3_200;
+
+/**
+ * Выцветший Претендент: то, что нужно таблице и Родословной, без
+ * Правил, Стороны и матчей — десятки байт вместо килобайтов.
+ */
+export interface Faded {
+  readonly number: number;
+  readonly generation: number;
+  readonly origin: Origin;
+  readonly birth: FadedBirth | undefined;
+  readonly score: number;
+  readonly wins: number;
+  readonly draws: number;
+  readonly played: number;
+  readonly rules: number;
+}
+
+/**
  * Поколение прогона, каким его видно в памяти страницы: Претенденты
  * с Рождениями и, когда следующее уже собрано, сколько детей у каждого.
+ * У выцветшего Поколения `entries` пуст, а Претенденты — в `faded`.
  */
 export interface Snapshot {
   /** С единицы. */
   readonly number: number;
-  readonly entries: readonly Entry[];
+  entries: readonly Entry[];
+  faded: readonly Faded[] | null;
   children: readonly number[] | null;
+}
+
+function fadedOf(entry: Entry): Faded {
+  const bouts = entry.bouts.filter((bout): bout is Bout => bout !== null);
+  return {
+    number: entry.number,
+    generation: entry.generation ?? 0,
+    origin: entry.origin,
+    birth: entry.birth && fadeBirth(entry.birth),
+    score: scoreOfEntry(entry),
+    wins: bouts.filter((bout) => bout.outcome === 'win').length,
+    draws: bouts.filter((bout) => bout.outcome === 'draw').length,
+    played: bouts.length,
+    rules: ruleCount(entry.candidate),
+  };
+}
+
+/**
+ * Выцветить старейшие полные Поколения, пока полных Претендентов больше
+ * предела. Идущее Поколение не выцветает никогда.
+ */
+export function fadeBeyond(generations: readonly Snapshot[], budget: number): void {
+  let full = generations.reduce((sum, snapshot) => sum + snapshot.entries.length, 0);
+  for (const snapshot of generations.slice(0, -1)) {
+    if (full <= budget) return;
+    if (snapshot.faded) continue;
+    full -= snapshot.entries.length;
+    snapshot.faded = snapshot.entries.map(fadedOf);
+    snapshot.entries = [];
+  }
 }
 
 /** Итог Поколения — строка истории. */
@@ -121,6 +177,7 @@ export function createEvolution(
   map: GameMap,
   onChange: () => void,
   warn: (message: string) => void,
+  fullBudget: number = FULL_BUDGET,
 ): Evolution {
   const roads = map.roads.map((road) => road.id);
   const state: {
@@ -191,8 +248,9 @@ export function createEvolution(
       for (let generation = 0; generation < settings.generations; generation += 1) {
         state.generation = generation + 1;
         state.entries = entriesOf(born, generation + 1, map, settings.examiners.length, warn);
-        const snapshot: Snapshot = { number: generation + 1, entries: state.entries, children: null };
+        const snapshot: Snapshot = { number: generation + 1, entries: state.entries, faded: null, children: null };
         state.generations.push(snapshot);
+        fadeBeyond(state.generations, fullBudget);
         state.done = 0;
         onChange();
         if (!(await examine(mine, settings, generation))) return;
