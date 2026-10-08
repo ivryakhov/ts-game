@@ -18,7 +18,9 @@ import { createEvolution, type GenerationRecord, type Settings } from './evoluti
 import { evolvedActions } from './evolved-actions.js';
 import { createRunner, threadCount } from './runner.js';
 import { createRunMemory, readRun, type RunSettings } from './saved-run.js';
-import { details, historyTable, ranked, summary } from './view.js';
+import { historyTable, summary } from './view.js';
+import { createCard } from './card.js';
+import type { Ref } from './lineage.js';
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -45,7 +47,6 @@ const line = element('lab-summary');
 const history = element('lab-history');
 const curveSlot = element('lab-curve');
 const board = element('lab-board');
-const chosen = element('lab-details');
 const problems = element('lab-problems');
 
 const boxes = roster.opponents.map((opponent) => {
@@ -96,11 +97,7 @@ let viewing: number | null = null;
  * и лучшие Поколений видны, хотя Претендентов последнего Поколения нет.
  */
 let restored: { settings: RunSettings; history: readonly GenerationRecord[] } | null = null;
-const curve = createCurve((generation) => {
-  viewing = generation;
-  selected = null;
-  render();
-});
+const curve = createCurve((generation) => openBest(generation));
 curveSlot.append(curve.element);
 const runner = createRunner(undefined, threadCount(navigator.hardwareConcurrency));
 const evolution = createEvolution(runner, arena, render, warn);
@@ -108,8 +105,38 @@ const evolution = createEvolution(runner, arena, render, warn);
 const durations = new Map<number, number>();
 
 const memory = createRunMemory(warn);
-let detailsKey = '';
-let detailsVersion = 0;
+/** Поколения прогона в истории — живого или восстановленного из браузера. */
+const historyRecords = (): readonly GenerationRecord[] => restored?.history ?? evolution.state.history;
+const card = createCard(element<HTMLDialogElement>('lab-card'), {
+  // Собранное, но не сданное Поколение — тоже Поколение прогона: у его
+  // Претендентов есть Рождение и Родословная, только Экзамена ещё нет.
+  generations: () => {
+    const { generations, assembled, generation } = evolution.state;
+    return assembled ? [...generations, { number: generation + 1, entries: assembled, faded: null, children: null }] : generations;
+  },
+  champion: (generation) => historyRecords().find((record) => record.number === generation)?.champion ?? null,
+  examiners: () => restored?.settings.examiners ?? evolution.state.settings?.examiners ?? [],
+  readyNames: () => evolution.state.settings?.readyNames ?? [],
+  hasLineage: () => !restored,
+  actions: (entry, generation, onChange, warnInCard) =>
+    evolvedActions(
+      entry,
+      { generation, seed: restored?.settings.seed ?? evolution.state.settings?.seed ?? 0 },
+      watchable(),
+      warnInCard,
+      onChange,
+      roster.opponents.map((opponent) => opponent.id),
+    ),
+});
+
+/** Поколение на кривой или в истории: таблица — оно целиком, карточка — его лучший. */
+function openBest(generation: number): void {
+  viewing = generation;
+  selected = null;
+  render();
+  const best = historyRecords().find((record) => record.number === generation)?.champion;
+  if (best) card.open({ generation, number: best.number } satisfies Ref);
+}
 /** С кем смотреть Показательный матч: готовые Противники и уже Выведенные. */
 const watchable = () => [...roster.opponents, ...readEvolved(arena, 'B', roster.opponents.map((opponent) => opponent.id)).opponents];
 
@@ -141,11 +168,7 @@ function render(): void {
         : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с · потоков: ${runner.threads}${PHASES[phase]}`;
   line.textContent = settings && !restored ? summary(entries, examined, generation, total) : '';
   curve.update(records, total, examined, viewing);
-  const pick = (number: number): void => {
-    viewing = number;
-    selected = null;
-    render();
-  };
+  const pick = (number: number): void => openBest(number);
   const scrolled = history.scrollTop + history.clientHeight >= history.scrollHeight - 4;
   history.replaceChildren(
     ...(records.length > 0 ? [historyTable(records, examined, (number) => durations.get(number), viewing, pick)] : []),
@@ -165,8 +188,9 @@ function render(): void {
     examined,
     readyNames: settings?.readyNames ?? [],
     on: {
-      select(number) {
-        selected = number;
+      select(ref) {
+        selected = ref.number;
+        card.open(ref);
         render();
       },
       back() {
@@ -182,33 +206,7 @@ function render(): void {
     },
   });
   board.replaceChildren(...shownBoard.elements);
-  const { snapshot, entries: tableEntries } = shownBoard;
-  const champion = records.find((record) => record.number === viewing)?.champion;
-  const fromTable = tableEntries.find((entry) => entry.number === (selected ?? ranked(tableEntries)[0]?.number));
-  // Без Поколения в памяти (прогон из браузера) — лучший из истории.
-  // У выцветшего Поколения подробности — лучшего: его полная копия в истории.
-  const shown = snapshot?.faded ? champion : snapshot || viewing === null ? fromTable : (champion ?? fromTable);
-  const of = viewing ?? generation;
-  const seed = restored?.settings.seed ?? settings?.seed ?? 0;
-  // Подробности перерисовываются, только когда в них что-то поменялось:
-  // иначе кнопка, пересоздаваемая на каждый матч Экзамена, теряла бы клик.
-  const played = shown?.bouts.filter((bout) => bout !== null).length ?? 0;
-  const assembledShown = tableEntries === evolution.state.assembled;
-  const key = `${assembledShown ? 'assembled' : snapshot ? 'table' : champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
-  if (key !== detailsKey) {
-    detailsKey = key;
-    const heading = !snapshot && champion && shown === champion ? `Лучший Поколения ${of}: Претендент №${champion.number}` : undefined;
-    const complete = shown?.side && played === examined;
-    chosen.replaceChildren(
-      ...(shown ? details(shown, examiners, heading) : []),
-      ...(shown && complete
-        ? [evolvedActions(shown, { generation: of, seed }, watchable(), warn, () => {
-            detailsVersion += 1;
-            render();
-          }, roster.opponents.map((opponent) => opponent.id))]
-        : []),
-    );
-  }
+  card.refresh();
   const live = phase === 'running' || phase === 'paused';
   start.disabled = live;
   pause.disabled = !live;

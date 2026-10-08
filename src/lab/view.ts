@@ -135,14 +135,8 @@ export function leaderboard(
   return shown;
 }
 
-/** Претендент подробно: матч против каждого Противника, затем Волны и Правила словами. */
-export function details(
-  entry: Entry,
-  opponents: readonly { id: string; name: string }[],
-  heading: string = nameOf(entry),
-): HTMLElement[] {
-  const title = make('h2', 'lab__subtitle', heading);
-  if (!entry.side) return [title, make('p', 'lab__problem', `Разбор отверг Претендента — ${entry.problem ?? 'причина неизвестна'}.`)];
+/** Матчи Экзамена Претендента: исход, время, Цитадели, Обелиски, Оценка. */
+export function examTable(entry: Entry, opponents: readonly { id: string; name: string }[]): HTMLTableElement {
   const rows = opponents.map((opponent, index) => {
     const bout = entry.bouts[index];
     if (!bout) return [opponent.name, 'ещё не сыгран', '', '', '', ''];
@@ -155,16 +149,17 @@ export function details(
       score(bout.score),
     ];
   });
-  const rules = opponentView(
+  return table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Обелисков взято', 'Оценка'], rows);
+}
+
+/** Волны и Правила Претендента словами — тем же кодом, что вкладка «Противник» на Подготовке. */
+export function rulesOf(entry: Entry): HTMLElement[] {
+  if (!entry.side) return [make('p', 'lab__problem', `Разбор отверг Претендента — ${entry.problem ?? 'причина неизвестна'}.`)];
+  return opponentView(
     { id: `candidate-${entry.number}`, name: 'Волны и Правила', description: 'Так этот Претендент играет.', side: entry.side },
     entry.side.behaviour ?? entry.candidate.behaviour,
     null,
   );
-  return [
-    title,
-    table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Обелисков взято', 'Оценка'], rows),
-    ...rules,
-  ];
 }
 
 /** История прогона: лучший и средний по Поколениям — растёт ли Оценка. */
@@ -217,11 +212,11 @@ export function fadedBoard(
   examined: number,
   children: readonly number[] | null,
   readyNames: readonly string[] = [],
+  onSelect: (number: number) => void = () => {},
 ): HTMLElement[] {
   const note = make('p', 'lab__note', 'Поколение выцвело: Правила его Претендентов уже не хранятся, остались Рождение, Оценка и дети.');
-  const rows = [...faded]
-    .sort((a, b) => b.score - a.score || a.rules - b.rules || a.number - b.number)
-    .map((entry, place) => [
+  const sorted = [...faded].sort((a, b) => b.score - a.score || a.rules - b.rules || a.number - b.number);
+  const rows = sorted.map((entry, place) => [
       String(place + 1),
       `Претендент ${shortName(entry.generation, entry.number - 1)}`,
       birthSummary(entry.birth, entry.generation, readyNames),
@@ -232,5 +227,13 @@ export function fadedBoard(
       String(entry.rules),
       children ? String(children[entry.number - 1] ?? 0) : '',
     ]);
-  return [note, table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], rows)];
+  const shown = table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], rows);
+  // Строка выцветшего тоже открывает карточку: там его Рождение и Родословная.
+  shown.querySelectorAll('tr').forEach((line, index) => {
+    const entry = sorted[index - 1];
+    if (!entry) return;
+    line.className = 'lab__row';
+    line.addEventListener('click', () => onSelect(entry.number));
+  });
+  return [note, shown];
 }
