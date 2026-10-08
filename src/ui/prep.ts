@@ -5,6 +5,7 @@ import type { Preset } from '../app/presets.js';
 import { parseSeed } from '../app/seed.js';
 import { bindBehaviourFiles, offerDownload } from './behaviour-files.js';
 import { presetPicker } from './preset-picker.js';
+import { isEvolved } from './evolved.js';
 import { createRuleEditor } from './rule-editor.js';
 import { opponentView } from './opponent-view.js';
 import { UNIT_TITLES } from './rule-text.js';
@@ -85,13 +86,23 @@ export interface PrepOptions {
   readonly opponents: readonly Opponent[];
 }
 
-const optionsOf = (opponents: readonly Opponent[]): HTMLOptionElement[] =>
-  opponents.map((entry) => {
-    const option = block('option', '', entry.name);
-    option.value = entry.id;
-    option.title = entry.description;
-    return option;
-  });
+const optionOf = (entry: Opponent): HTMLOptionElement => {
+  const option = block('option', '', entry.name);
+  option.value = entry.id;
+  option.title = entry.description;
+  return option;
+};
+
+/** Готовые Противники, а за ними — Выведенные в Лаборатории, отдельной группой. */
+function optionsOf(opponents: readonly Opponent[]): HTMLElement[] {
+  const ready = opponents.filter((entry) => !isEvolved(entry.id)).map(optionOf);
+  const evolved = opponents.filter((entry) => isEvolved(entry.id)).map(optionOf);
+  if (evolved.length === 0) return ready;
+  const group = document.createElement('optgroup');
+  group.label = 'Выведенные в Лаборатории';
+  group.append(...evolved);
+  return [...ready, group];
+}
 
 export function createPrep({ onStart, onRepeat, onEdit, onOpponent, onAlly, presets, opponents }: PrepOptions): Prep {
   const panel = element('prep');
@@ -110,6 +121,8 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, onAlly, pres
   me.value = '';
   allyPicker.append(me, ...optionsOf(opponents));
   let canRepeat = false;
+  /** Подготовка уже открывалась: дальше вкладку выбирает игрок. */
+  let opened = false;
 
   let active: Tab = UNIT_KINDS[0] ?? 'opponent';
   let opponent: Opponent | null = null;
@@ -245,6 +258,10 @@ export function createPrep({ onStart, onRepeat, onEdit, onOpponent, onAlly, pres
       if (opponent) picker.value = opponent.id;
       ally = opponents.find((entry) => entry.id === lineup.ally) ?? null;
       allyPicker.value = ally?.id ?? '';
+      // Ссылка на Показательный матч открывает Подготовку на том, кто
+      // играет за игрока: его Правила здесь и смотрят.
+      if (ally && !opened) active = 'ally';
+      opened = true;
       canRepeat = repeatable;
       seedInput.value = String(seed);
       panel.hidden = false;

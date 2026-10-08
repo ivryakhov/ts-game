@@ -36,6 +36,7 @@ import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
 import { allyFromAddress, opponentFromAddress, rememberAlly, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
+import { readEvolved } from './ui/evolved.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
@@ -67,7 +68,10 @@ try {
   presetsProblem = `Файл presets.json отвергнут — ${error instanceof Error ? error.message : String(error)}.`;
 }
 
-const roster = loadOpponents(arena, OPPONENT_SIDE);
+// Готовые Противники из файлов и Выведенные в Лаборатории — из браузера.
+const files = loadOpponents(arena, OPPONENT_SIDE);
+const evolved = readEvolved(arena, OPPONENT_SIDE, files.opponents.map((opponent) => opponent.id));
+const roster = { opponents: [...files.opponents, ...evolved.opponents], problems: [...files.problems, ...evolved.problems] };
 /** Кто играет за обе Стороны: выбор на Подготовке, запомненный в адресе. */
 const lineupFor = (names: { ally: string | null; opponent: string | null }): Lineup =>
   lineupOf(roster.opponents, names, PLAYER_SIDE, OPPONENT_SIDE);

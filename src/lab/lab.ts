@@ -9,9 +9,11 @@ import type { Candidate } from '../evolve/candidate.js';
 import { loadOpponents } from '../app/opponents.js';
 import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
+import { readEvolved } from '../ui/evolved.js';
 import { ELITE } from '../evolve/generation.js';
 import { createCurve } from './curve.js';
 import { createEvolution, type GenerationRecord, type Settings } from './evolution.js';
+import { evolvedActions } from './evolved-actions.js';
 import { createRunner, threadCount } from './runner.js';
 import { createRunMemory, readRun, type RunSettings } from './saved-run.js';
 import { details, historyTable, leaderboard, ranked, summary } from './view.js';
@@ -65,6 +67,8 @@ function warn(message: string): void {
   problems.hidden = false;
 }
 for (const problem of roster.problems) warn(problem);
+// Испорченные Выведенные — та же причина, что на Подготовке в игре.
+for (const problem of readEvolved(arena, 'B', roster.opponents.map((opponent) => opponent.id)).problems) warn(problem);
 
 /**
  * Время Поколения без пауз: часы идут, только пока идёт Экзамен. Их
@@ -98,6 +102,10 @@ const evolution = createEvolution(runner, arena, render, warn);
 const durations = new Map<number, number>();
 
 const memory = createRunMemory(warn);
+let detailsKey = '';
+let detailsVersion = 0;
+/** С кем смотреть Показательный матч: готовые Противники и уже Выведенные. */
+const watchable = () => [...roster.opponents, ...readEvolved(arena, 'B', roster.opponents.map((opponent) => opponent.id)).opponents];
 
 const PHASES = { idle: '', running: '', paused: ' · пауза', stopped: ' · остановлен', done: ' · готово' } as const;
 
@@ -147,14 +155,27 @@ function render(): void {
         ]),
   );
   const champion = records.find((record) => record.number === viewing)?.champion;
-  const shown = entries.find((entry) => entry.number === (selected ?? ranked(entries)[0]?.number));
-  chosen.replaceChildren(
-    ...(champion
-      ? details(champion, examiners, `Лучший Поколения ${viewing}: Претендент №${champion.number}`)
-      : shown
-        ? details(shown, examiners)
+  const shown = champion ?? entries.find((entry) => entry.number === (selected ?? ranked(entries)[0]?.number));
+  const of = champion ? (viewing ?? generation) : generation;
+  const seed = restored?.settings.seed ?? settings?.seed ?? 0;
+  // Подробности перерисовываются, только когда в них что-то поменялось:
+  // иначе кнопка, пересоздаваемая на каждый матч Экзамена, теряла бы клик.
+  const played = shown?.bouts.filter((bout) => bout !== null).length ?? 0;
+  const key = `${champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
+  if (key !== detailsKey) {
+    detailsKey = key;
+    const heading = champion ? `Лучший Поколения ${of}: Претендент №${champion.number}` : undefined;
+    const complete = shown?.side && played === examined;
+    chosen.replaceChildren(
+      ...(shown ? details(shown, examiners, heading) : []),
+      ...(shown && complete
+        ? [evolvedActions(shown, { generation: of, seed }, watchable(), warn, () => {
+            detailsVersion += 1;
+            render();
+          }, roster.opponents.map((opponent) => opponent.id))]
         : []),
-  );
+    );
+  }
   const live = phase === 'running' || phase === 'paused';
   start.disabled = live;
   pause.disabled = !live;
