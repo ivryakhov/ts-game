@@ -106,19 +106,22 @@ export function leaderboard(
   onSelect: (number: number) => void,
   children: readonly number[] | null = null,
   readyNames: readonly string[] = [],
+  /** `rank` — по Оценке; `birth` — как собраны: элита, затем дети (Экзамена ещё не было). */
+  order: 'rank' | 'birth' = 'rank',
 ): HTMLTableElement {
   const shown = table(['место', 'Претендент', 'откуда', 'Оценка', 'побед', 'ничьих', 'сыграно', 'Правил', 'детей'], []);
-  ranked(entries).forEach((entry, place) => {
+  (order === 'rank' ? ranked(entries) : [...entries]).forEach((entry, place) => {
     const bouts = played(entry);
+    const unplayed = bouts.length === 0;
     const kids = children ? String(children[entry.number - 1] ?? 0) : '';
     const cells = entry.side
       ? [
           String(place + 1),
           nameOf(entry),
           originText(entry, readyNames),
-          score(scoreOfEntry(entry)),
-          String(bouts.filter((bout) => bout.outcome === 'win').length),
-          String(bouts.filter((bout) => bout.outcome === 'draw').length),
+          unplayed ? '—' : score(scoreOfEntry(entry)),
+          unplayed ? '—' : String(bouts.filter((bout) => bout.outcome === 'win').length),
+          unplayed ? '—' : String(bouts.filter((bout) => bout.outcome === 'draw').length),
           `${bouts.length} из ${examined}`,
           String(ruleCount(entry.candidate)),
           kids,

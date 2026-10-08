@@ -59,6 +59,11 @@ export interface Evolution {
   pause(): void;
   resume(): void;
   stop(): void;
+  /**
+   * Пауза после каждого Поколения (спека 0005): прогон встаёт, когда
+   * Поколение сдало Экзамен и следующее уже собрано. Меняется на ходу.
+   */
+  pauseAfterGeneration: boolean;
   readonly state: {
     readonly phase: 'idle' | 'running' | 'paused' | 'stopped' | 'done';
     readonly settings: Settings | null;
@@ -70,6 +75,11 @@ export interface Evolution {
     readonly history: readonly GenerationRecord[];
     /** Все Поколения прогона по порядку — для детей и Родословной. */
     readonly generations: readonly Snapshot[];
+    /**
+     * Собранное, но ещё не сданное следующее Поколение — пока прогон
+     * стоит после отбора. null — не стоит.
+     */
+    readonly assembled: readonly Entry[] | null;
   };
 }
 
@@ -131,7 +141,11 @@ export function createEvolution(
     done: number;
     history: GenerationRecord[];
     generations: Snapshot[];
-  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [], generations: [] };
+    assembled: Entry[] | null;
+  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [], generations: [], assembled: null };
+  let pauseAfterGeneration = false;
+  /** Продолжить прогон, стоящий после отбора; null — он не стоит. */
+  let proceed: (() => void) | null = null;
   /** Номер запуска: остановленный прогон, доигрывая, не трогает следующего. */
   let launch = 0;
 
@@ -140,7 +154,18 @@ export function createEvolution(
     state.phase = 'stopped';
     launch += 1;
     runner.stop();
+    proceed?.();
+    proceed = null;
     onChange();
+  }
+
+  /** Стоять после отбора, пока не позовут «Продолжить» или «Стоп». */
+  function waitAfterSelection(): Promise<void> {
+    state.phase = 'paused';
+    onChange();
+    return new Promise((resolve) => {
+      proceed = resolve;
+    });
   }
 
   /** Экзамен Поколения. false — прогон остановлен или сменился. */
@@ -185,12 +210,13 @@ export function createEvolution(
       // последних матча, он кончился, а очередь так и стоит.
       runner.resume();
       const rng = createRng(settings.seed);
-      let born = firstBorn(rng, settings.size, roads, settings.ready);
-      Object.assign(state, { phase: 'running', settings, history: [], generations: [] });
+      const born = firstBorn(rng, settings.size, roads, settings.ready);
+      Object.assign(state, { phase: 'running', settings, history: [], generations: [], assembled: null });
+      let next = entriesOf(born, 1, map, settings.examiners.length, warn);
 
       for (let generation = 0; generation < settings.generations; generation += 1) {
         state.generation = generation + 1;
-        state.entries = entriesOf(born, generation + 1, map, settings.examiners.length, warn);
+        state.entries = next;
         const snapshot: Snapshot = { number: generation + 1, entries: state.entries, children: null };
         state.generations.push(snapshot);
         state.done = 0;
@@ -200,11 +226,18 @@ export function createEvolution(
         // Последнее Поколение прогона не размножается: следующего не будет.
         if (generation + 1 === settings.generations) break;
         const scored = state.entries.map((entry) => ({ candidate: entry.candidate, score: scoreOfEntry(entry) }));
-        born = breed(rng, scored, roads);
+        const children = breed(rng, scored, roads);
         snapshot.children = childrenOf(
-          born.map((entry) => entry.birth),
+          children.map((entry) => entry.birth),
           scored.length,
         );
+        next = entriesOf(children, generation + 2, map, settings.examiners.length, warn);
+        if (pauseAfterGeneration) {
+          state.assembled = next;
+          await waitAfterSelection();
+          state.assembled = null;
+          if (mine !== launch) return;
+        }
       }
       state.phase = 'done';
       onChange();
@@ -219,6 +252,15 @@ export function createEvolution(
 
     resume() {
       if (state.phase !== 'paused') return;
+      if (proceed) {
+        // Стоял после отбора: дальше — Экзамен собранного Поколения.
+        const go = proceed;
+        proceed = null;
+        state.phase = 'running';
+        onChange();
+        go();
+        return;
+      }
       runner.resume();
       state.phase = 'running';
       onChange();
@@ -230,6 +272,14 @@ export function createEvolution(
 
     get state() {
       return state;
+    },
+
+    get pauseAfterGeneration() {
+      return pauseAfterGeneration;
+    },
+
+    set pauseAfterGeneration(on: boolean) {
+      pauseAfterGeneration = on;
     },
   };
 }
