@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { createRng, runMatch, type MatchResult } from '@sim/index';
-import { examFromAddress, examLabel, matchSetupOf } from '../src/app/exam-match.js';
+import { EXAM_MATCH, examFromAddress, examLabel, matchSetupOf, seedOf } from '../src/app/exam-match.js';
 import { lineupOf } from '../src/app/lineup.js';
 import { loadOpponents } from '../src/app/opponents.js';
 import { randomCandidate, type Candidate } from '../src/evolve/candidate.js';
@@ -98,5 +98,33 @@ describe('Матч Экзамена в игре', () => {
     writePreview(turtle.side as unknown as Candidate, 'Претендент 2·4', 'второй');
     const preview = readPreview(arena, 'B');
     expect(preview && 'opponent' in preview ? preview.opponent.name : null).toBe('Претендент 2·4');
+  });
+});
+
+describe('Матч Экзамена недоступен — сказано, а не подменено молча', () => {
+  it('нет Претендента в месте предпросмотра — причина, а не тишина', () => {
+    browser();
+    const read = readPreview(arena, 'B');
+    expect(read).toHaveProperty('problem');
+    expect('problem' in read ? read.problem : '').toMatch(/^Матч Экзамена недоступен: Претендента для просмотра в этом браузере нет/);
+  });
+
+  it('нет хранилища — тоже причина', () => {
+    const read = readPreview(arena, 'B');
+    expect('problem' in read ? read.problem : '').toMatch(/^Матч Экзамена недоступен: хранилища браузера нет/);
+  });
+
+  it('испорченный Претендент — причина с местом ошибки', () => {
+    browser();
+    items.set('neon-arcana:lab-preview', JSON.stringify({ name: 'x', description: 'y', scout: [] }));
+    const read = readPreview(arena, 'B');
+    expect('problem' in read ? read.problem : '').toMatch(/не прочитан/);
+  });
+});
+
+describe('Сид Матча Экзамена', () => {
+  it('у Матча Экзамена Сид — Экзамена, что бы ни стояло на Подготовке; у обычного — свой', () => {
+    expect(seedOf({ shift: 2 }, 777)).toBe(EXAM_MATCH.seed);
+    expect(seedOf(null, 777)).toBe(777);
   });
 });

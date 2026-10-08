@@ -32,15 +32,26 @@ export function writePreview(candidate: Candidate, name: string, description: st
   }
 }
 
-/** Претендент из места предпросмотра Противником этой Стороны; null — места нет, иначе причина. */
-export function readPreview(map: GameMap, side: SideId): { opponent: Opponent } | { problem: string } | null {
+/** Почему Матч Экзамена недоступен — вместо молчаливого обычного матча за человека. */
+const unavailable = (reason: string): { problem: string } => ({
+  problem: `Матч Экзамена недоступен: ${reason}. Откройте «Смотреть» в карточке Претендента в Лаборатории ещё раз.`,
+});
+
+/**
+ * Претендент из места предпросмотра Противником этой Стороны. Зовётся,
+ * только когда адрес его просит, поэтому и отсутствие места — причина,
+ * а не тишина.
+ */
+export function readPreview(map: GameMap, side: SideId): { opponent: Opponent } | { problem: string } {
   let text: string | null;
   try {
-    text = storage()?.getItem(PREVIEW_KEY) ?? null;
-  } catch {
-    return null;
+    const place = storage();
+    if (!place) return unavailable('хранилища браузера нет');
+    text = place.getItem(PREVIEW_KEY);
+  } catch (error) {
+    return unavailable(`хранилище браузера недоступно (${error instanceof Error ? error.message : String(error)})`);
   }
-  if (text === null) return null;
+  if (text === null) return unavailable('Претендента для просмотра в этом браузере нет — хранилище очищено или ссылка открыта в другом браузере');
   try {
     const file = opponentFromFile(side, JSON.parse(text), map);
     return { opponent: { id: PREVIEW_ID, name: file.name, description: file.description, side: file.side } };

@@ -45,6 +45,9 @@ export function matchSetupOf(base: MatchSetup & { sides: readonly [SideSetup, Si
   return { ...base, seed: EXAM_MATCH.seed, maxTicks: EXAM_MATCH.maxTicks, sides: examSides(base.sides, exam) };
 }
 
+/** Сид матча: у Матча Экзамена — Экзамена, что бы ни стояло на Подготовке. */
+export const seedOf = (exam: ExamMatch | null, seed: number): number => (exam ? EXAM_MATCH.seed : seed);
+
 /** Надпись Показательного матча — обычного или Матча Экзамена. */
 export function showcaseLabel(exam: ExamMatch | null, foeWaves: number): string {
   return exam ? examLabel(exam, foeWaves) : 'Показательный матч · Юнитов выпускают Волны обеих Сторон, клики по Дороге выключены';
