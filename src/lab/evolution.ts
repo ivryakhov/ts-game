@@ -5,6 +5,7 @@ import { childrenOf, type Birth } from '../evolve/birth.js';
 import { breed, firstBorn, type Born } from '../evolve/generation.js';
 import type { BoutRequest } from './protocol.js';
 import type { Runner } from './runner.js';
+import { fadeBeyond, FULL_BUDGET, type Snapshot } from './snapshots.js';
 import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
 
 /**
@@ -16,6 +17,8 @@ import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
  * а ответы Worker'а встают на место по номеру задания. Поэтому тот же
  * Сид и те же настройки дают те же Поколения.
  */
+
+export type { Faded, Snapshot } from './snapshots.js';
 
 export interface Settings {
   readonly size: number;
@@ -29,16 +32,6 @@ export interface Settings {
   readonly readyNames?: readonly string[];
 }
 
-/**
- * Поколение прогона, каким его видно в памяти страницы: Претенденты
- * с Рождениями и, когда следующее уже собрано, сколько детей у каждого.
- */
-export interface Snapshot {
-  /** С единицы. */
-  readonly number: number;
-  readonly entries: readonly Entry[];
-  children: readonly number[] | null;
-}
 
 /** Итог Поколения — строка истории. */
 export interface GenerationRecord {
@@ -131,6 +124,7 @@ export function createEvolution(
   map: GameMap,
   onChange: () => void,
   warn: (message: string) => void,
+  fullBudget: number = FULL_BUDGET,
 ): Evolution {
   const roads = map.roads.map((road) => road.id);
   const state: {
@@ -217,8 +211,9 @@ export function createEvolution(
       for (let generation = 0; generation < settings.generations; generation += 1) {
         state.generation = generation + 1;
         state.entries = next;
-        const snapshot: Snapshot = { number: generation + 1, entries: state.entries, children: null };
+        const snapshot: Snapshot = { number: generation + 1, entries: state.entries, faded: null, children: null };
         state.generations.push(snapshot);
+        fadeBeyond(state.generations, fullBudget);
         state.done = 0;
         onChange();
         if (!(await examine(mine, settings, generation))) return;

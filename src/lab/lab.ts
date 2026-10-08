@@ -13,6 +13,7 @@ import { readEvolved } from '../ui/evolved.js';
 import { ELITE } from '../evolve/generation.js';
 import { boardOf, type Pane } from './board.js';
 import { createCurve } from './curve.js';
+import { selectionAfterAdvance } from './selection.js';
 import { createEvolution, type GenerationRecord, type Settings } from './evolution.js';
 import { evolvedActions } from './evolved-actions.js';
 import { createRunner, threadCount } from './runner.js';
@@ -121,7 +122,7 @@ function render(): void {
     const spent = clock.spentMs + (clock.phase === 'running' ? now - clock.sinceMs : 0);
     if (clock.generation > 0) durations.set(clock.generation, spent / 1000);
     Object.assign(clock, { spentMs: 0, sinceMs: now, generation });
-    selected = null;
+    selected = selectionAfterAdvance(viewing, selected);
   } else if (clock.phase === 'running' && phase !== 'running') clock.spentMs += now - clock.sinceMs;
   else if (clock.phase !== 'running' && phase === 'running') clock.sinceMs = now;
   clock.phase = phase;
@@ -185,7 +186,8 @@ function render(): void {
   const champion = records.find((record) => record.number === viewing)?.champion;
   const fromTable = tableEntries.find((entry) => entry.number === (selected ?? ranked(tableEntries)[0]?.number));
   // Без Поколения в памяти (прогон из браузера) — лучший из истории.
-  const shown = snapshot || viewing === null ? fromTable : (champion ?? fromTable);
+  // У выцветшего Поколения подробности — лучшего: его полная копия в истории.
+  const shown = snapshot?.faded ? champion : snapshot || viewing === null ? fromTable : (champion ?? fromTable);
   const of = viewing ?? generation;
   const seed = restored?.settings.seed ?? settings?.seed ?? 0;
   // Подробности перерисовываются, только когда в них что-то поменялось:

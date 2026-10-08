@@ -1,5 +1,5 @@
 import type { Snapshot } from './evolution.js';
-import { leaderboard, type Entry } from './view.js';
+import { fadedBoard, leaderboard, type Entry } from './view.js';
 
 /**
  * Таблица Поколения над подробностями (спеки 0004–0005): идущее
@@ -73,6 +73,10 @@ export function boardOf(input: BoardInput): Board {
     title.append(`Поколение ${generation}${input.examining ? ' · Экзамен' : ''}`);
   }
 
+  // Выцветшее Поколение — без Правил: своя таблица, без выбора.
+  if (past?.faded) {
+    return { elements: [title, ...fadedBoard(past.faded, input.examined, past.children, input.readyNames)], entries: [], snapshot: past };
+  }
   const table = leaderboard(shown, input.examined, input.selected, on.select, children, input.readyNames, showAssembled ? 'birth' : 'rank');
   return { elements: shown.length === 0 ? [] : [title, table], entries: shown, snapshot: past };
 }

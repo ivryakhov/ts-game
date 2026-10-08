@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '@sim/index';
 import { randomCandidate } from '../src/evolve/candidate.js';
-import type { Bout } from '../src/evolve/exam.js';
 import { nextGeneration } from '../src/evolve/generation.js';
-import { createEvolution, type Settings } from '../src/lab/evolution.js';
+import { createEvolution } from '../src/lab/evolution.js';
+import { selectionAfterAdvance } from '../src/lab/selection.js';
 import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
-import { createRunner, threadCount, type WorkerLike } from '../src/lab/runner.js';
+import { createRunner, threadCount } from '../src/lab/runner.js';
 import { arena } from '../src/maps/arena.js';
+import { bout, fakeWorker, finishes, settings, setup } from './lab-fakes.js';
 
 /**
  * Прогон эволюции на странице (замечания к PR #61): пауза, переживающая
@@ -15,54 +16,6 @@ import { arena } from '../src/maps/arena.js';
  */
 
 const ROADS = arena.roads.map((road) => road.id);
-
-const bout = (request: BoutRequest, score: number): Bout => ({
-  opponent: request.opponent,
-  outcome: 'loss',
-  ticks: 100,
-  ownHp: 1,
-  foeHp: 1,
-  score,
-  obelisks: 0,
-  ruleTicks: { scout: [], tank: [], ranger: [] },
-});
-
-/**
- * Worker, который отвечает на задание в следующей задаче; `answer` решает,
- * что ответить, `delay` — через сколько миллисекунд.
- */
-function fakeWorker(answer: (request: BoutRequest) => WorkerReply, delay: () => number = () => 0): WorkerLike {
-  const worker: WorkerLike = {
-    onmessage: null,
-    onerror: null,
-    postMessage(request) {
-      setTimeout(() => worker.onmessage?.({ data: answer(request) } as MessageEvent<WorkerReply>), delay());
-    },
-    terminate() {
-      worker.onmessage = null;
-    },
-  };
-  return worker;
-}
-
-const settings = (overrides: Partial<Settings> = {}): Settings => ({
-  size: 2,
-  generations: 1,
-  seed: 1,
-  examiners: [{ id: 'balanced', name: 'Сбалансированный' }],
-  ready: [],
-  ...overrides,
-});
-
-function setup(answer: (request: BoutRequest) => WorkerReply) {
-  const warnings: string[] = [];
-  const evolution = createEvolution(createRunner(() => fakeWorker(answer)), arena, () => {}, (message) => warnings.push(message));
-  return { evolution, warnings };
-}
-
-/** Прогон, который не кончился за секунду, считается зависшим. */
-const finishes = (run: Promise<void>): Promise<boolean> =>
-  Promise.race([run.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000))]);
 
 describe('прогон эволюции', () => {
   it('пауза, нажатая на последних матчах прогона, не останавливает следующий «Старт»', async () => {
@@ -169,99 +122,48 @@ describe('пул Worker\'ов', () => {
   });
 });
 
-describe('пауза после каждого Поколения', () => {
-  /** Дождаться, пока прогон встанет или кончится. */
-  const settled = async (evolution: ReturnType<typeof createEvolution>): Promise<void> => {
-    for (let tries = 0; tries < 200 && evolution.state.phase === 'running'; tries += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
-  };
+describe('память прогона в странице', () => {
   const scoredBy = (request: BoutRequest): WorkerReply => ({ kind: 'bout', job: request.job, bout: bout(request, -request.job) });
 
-  it('встаёт после отбора: Поколение сдано, дети сосчитаны, следующее собрано и не сдано', async () => {
-    const { evolution } = setup(scoredBy);
-    evolution.pauseAfterGeneration = true;
-    void evolution.start(settings({ size: 5, generations: 3 }));
-    await settled(evolution);
+  it('полностью хранится не больше предела Претендентов, более ранние Поколения выцветают', async () => {
+    const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, 20);
+    expect(await finishes(evolution.start(settings({ size: 4, generations: 30 })))).toBe(true);
+    const { generations, history } = evolution.state;
 
-    expect(evolution.state.phase).toBe('paused');
-    expect(evolution.state.generation).toBe(1);
-    expect(evolution.state.history).toHaveLength(1);
-    expect(evolution.state.generations[0]?.children).not.toBeNull();
-    const assembled = evolution.state.assembled ?? [];
-    expect(assembled).toHaveLength(5);
-    expect(assembled.every((entry) => entry.generation === 2 && entry.birth !== undefined)).toBe(true);
-    expect(assembled.every((entry) => entry.bouts.every((played) => played === null))).toBe(true);
-    evolution.stop();
-  });
-
-  it('«Продолжить» сдаёт собранное Поколение и встаёт после следующего отбора', async () => {
-    const { evolution } = setup(scoredBy);
-    evolution.pauseAfterGeneration = true;
-    void evolution.start(settings({ size: 5, generations: 3 }));
-    await settled(evolution);
-    const assembled = evolution.state.assembled;
-
-    evolution.resume();
-    await settled(evolution);
-
-    expect(evolution.state.phase).toBe('paused');
-    expect(evolution.state.generation).toBe(2);
-    expect(evolution.state.generations[1]?.entries).toBe(assembled);
-    expect(evolution.state.history).toHaveLength(2);
-    evolution.stop();
-  });
-
-  it('снятая на ходу галочка больше не останавливает, а последнее Поколение не встаёт', async () => {
-    const { evolution } = setup(scoredBy);
-    evolution.pauseAfterGeneration = true;
-    const run = evolution.start(settings({ size: 5, generations: 4 }));
-    await settled(evolution);
-
-    evolution.pauseAfterGeneration = false;
-    evolution.resume();
-
-    expect(await finishes(run)).toBe(true);
-    expect(evolution.state.phase).toBe('done');
-    expect(evolution.state.history).toHaveLength(4);
-    expect(evolution.state.assembled).toBeNull();
-  });
-
-  it('с галочкой прогон из одного Поколения просто кончается', async () => {
-    const { evolution } = setup(scoredBy);
-    evolution.pauseAfterGeneration = true;
-
-    expect(await finishes(evolution.start(settings({ size: 5, generations: 1 })))).toBe(true);
-    expect(evolution.state.phase).toBe('done');
-  });
-
-  it('«Стоп» на паузе после отбора останавливает прогон', async () => {
-    const { evolution } = setup(scoredBy);
-    evolution.pauseAfterGeneration = true;
-    const run = evolution.start(settings({ size: 5, generations: 3 }));
-    await settled(evolution);
-
-    evolution.stop();
-
-    expect(await finishes(run)).toBe(true);
-    expect(evolution.state.phase).toBe('stopped');
-    expect(evolution.state.history).toHaveLength(1);
-  });
-
-  it('с паузами и без — те же Поколения', async () => {
-    const plain = setup(scoredBy).evolution;
-    expect(await finishes(plain.start(settings({ size: 5, generations: 3, seed: 9 })))).toBe(true);
-
-    const paused = setup(scoredBy).evolution;
-    paused.pauseAfterGeneration = true;
-    const run = paused.start(settings({ size: 5, generations: 3, seed: 9 }));
-    for (let step = 0; step < 2; step += 1) {
-      await settled(paused);
-      paused.resume();
+    const full = generations.reduce((sum, snapshot) => sum + snapshot.entries.length, 0);
+    expect(full).toBeLessThanOrEqual(20);
+    expect(generations).toHaveLength(30);
+    expect(generations.at(-1)?.faded).toBeNull();
+    const faded = generations.filter((snapshot) => snapshot.faded);
+    expect(faded.length).toBeGreaterThanOrEqual(25);
+    for (const snapshot of faded) {
+      expect(snapshot.entries).toEqual([]);
+      expect(snapshot.faded).toHaveLength(4);
+      expect(snapshot.children).not.toBeNull();
+      for (const entry of snapshot.faded ?? []) {
+        // Ни Правил, ни Волн «было и стало», ни матчей — только отметки.
+        expect(JSON.stringify(entry)).not.toMatch(/"before"|"after"|"when"|"units"|"ruleTicks"/);
+        expect(Number.isFinite(entry.score)).toBe(true);
+      }
     }
-    expect(await finishes(run)).toBe(true);
+    // Лучший каждого Поколения не выцветает: его копия — в истории.
+    expect(history.every((record) => record.champion?.candidate !== undefined)).toBe(true);
+  });
 
-    expect(paused.state.history).toEqual(plain.state.history);
-    expect(paused.state.entries.map((entry) => entry.candidate)).toEqual(plain.state.entries.map((entry) => entry.candidate));
+  it('выцветание не меняет эволюцию: те же Поколения при любом пределе', async () => {
+    const run = async (budget: number) => {
+      const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, budget);
+      await finishes(evolution.start(settings({ size: 4, generations: 12, seed: 3 })));
+      return evolution.state.history;
+    };
+
+    expect(await run(8)).toEqual(await run(10_000));
+  });
+});
+
+describe('выбор Претендента при смене Поколения', () => {
+  it('в идущем Поколении сбрасывается, в просматриваемом прошлом остаётся', () => {
+    expect(selectionAfterAdvance(null, 3)).toBeNull();
+    expect(selectionAfterAdvance(1, 3)).toBe(3);
   });
 });
