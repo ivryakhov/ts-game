@@ -10,6 +10,8 @@ import { loadOpponents } from '../app/opponents.js';
 import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
 import { readEvolved } from '../ui/evolved.js';
+import { PREVIEW_ID, writePreview } from '../ui/preview.js';
+import { shortName } from './birth-text.js';
 import { ELITE } from '../evolve/generation.js';
 import { boardOf, type Pane } from './board.js';
 import { createCurve } from './curve.js';
@@ -118,6 +120,14 @@ const card = createCard(element<HTMLDialogElement>('lab-card'), {
   examiners: () => restored?.settings.examiners ?? evolution.state.settings?.examiners ?? [],
   readyNames: () => evolution.state.settings?.readyNames ?? [],
   hasLineage: () => !restored,
+  watch: (entry, generation, opponent) => {
+    const name = `Претендент ${shortName(generation, entry.number - 1)}`;
+    if (!writePreview(entry.candidate, name, `Матч Экзамена Поколения ${generation}`)) return false;
+    // Сдвиг — тот, что получил Экзамен этого Поколения: N − 1 (спека 0005).
+    const address = new URLSearchParams({ ally: PREVIEW_ID, opponent, shift: String(generation - 1), limit: 'exam' });
+    window.open(`./index.html?${address.toString()}`, '_blank');
+    return true;
+  },
   actions: (entry, generation, onChange, warnInCard) =>
     evolvedActions(
       entry,

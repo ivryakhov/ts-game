@@ -135,8 +135,15 @@ export function leaderboard(
   return shown;
 }
 
-/** Матчи Экзамена Претендента: исход, время, Цитадели, Обелиски, Оценка. */
-export function examTable(entry: Entry, opponents: readonly { id: string; name: string }[]): HTMLTableElement {
+/**
+ * Матчи Экзамена Претендента: исход, время, Цитадели, Обелиски, Оценка.
+ * `onWatch` — у сыгранного матча кнопка «Смотреть»: Матч Экзамена в игре.
+ */
+export function examTable(
+  entry: Entry,
+  opponents: readonly { id: string; name: string }[],
+  onWatch: ((opponent: string) => void) | null = null,
+): HTMLTableElement {
   const rows = opponents.map((opponent, index) => {
     const bout = entry.bouts[index];
     if (!bout) return [opponent.name, 'ещё не сыгран', '', '', '', ''];
@@ -149,7 +156,21 @@ export function examTable(entry: Entry, opponents: readonly { id: string; name: 
       score(bout.score),
     ];
   });
-  return table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Обелисков взято', 'Оценка'], rows);
+  const shown = table(['Противник', 'исход', 'время', 'Цитадели: своя / чужая', 'Обелисков взято', 'Оценка', ''], rows);
+  if (onWatch) {
+    shown.querySelectorAll('tr').forEach((line, index) => {
+      const opponent = opponents[index - 1];
+      if (!opponent || !entry.bouts[index - 1]) return;
+      const cell = make('td', '');
+      const watch = make('button', 'button lab__back', 'Смотреть');
+      watch.type = 'button';
+      watch.title = `Матч Экзамена против «${opponent.name}» в игре — с тем же сдвигом Волн и пределом`;
+      watch.addEventListener('click', () => onWatch(opponent.id));
+      cell.append(watch);
+      line.append(cell);
+    });
+  }
+  return shown;
 }
 
 /** Волны и Правила Претендента словами — тем же кодом, что вкладка «Противник» на Подготовке. */

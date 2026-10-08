@@ -35,8 +35,10 @@ import playerFile from './behaviours/player.json';
 import presetsFile from './behaviours/presets.json';
 import { arena } from './maps/arena.js';
 import { createCanvasRenderer } from './render/canvas-renderer.js';
-import { allyFromAddress, opponentFromAddress, rememberAlly, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
+import { allyFromAddress, examFromPage, opponentFromAddress, rememberAlly, rememberOpponent, rememberSeed, seedFromAddress } from './ui/address.js';
 import { readEvolved } from './ui/evolved.js';
+import { PREVIEW_ID, readPreview } from './ui/preview.js';
+import { matchSetupOf, showcaseLabel, type ExamMatch } from './app/exam-match.js';
 import { createHud } from './ui/hud.js';
 import { createInspector } from './ui/inspector.js';
 import { bindOutcomeActions } from './ui/outcome.js';
@@ -71,7 +73,15 @@ try {
 // Готовые Противники из файлов и Выведенные в Лаборатории — из браузера.
 const files = loadOpponents(arena, OPPONENT_SIDE);
 const evolved = readEvolved(arena, OPPONENT_SIDE, files.opponents.map((opponent) => opponent.id));
-const roster = { opponents: [...files.opponents, ...evolved.opponents], problems: [...files.problems, ...evolved.problems] };
+// Претендент Лаборатории — только когда его Матч Экзамена и смотрят (спека 0005).
+const preview = allyFromAddress() === PREVIEW_ID ? readPreview(arena, OPPONENT_SIDE) : null;
+const roster = {
+  opponents: [...files.opponents, ...evolved.opponents, ...(preview && 'opponent' in preview ? [preview.opponent] : [])],
+  problems: [...files.problems, ...evolved.problems, ...(preview && 'problem' in preview ? [preview.problem] : [])],
+};
+const exam = examFromPage();
+/** Матч Экзамена — пока за игрока играет Претендент из Лаборатории. */
+const examNow = (): ExamMatch | null => (exam && lineup.ally?.id === PREVIEW_ID ? exam : null);
 /** Кто играет за обе Стороны: выбор на Подготовке, запомненный в адресе. */
 const lineupFor = (names: { ally: string | null; opponent: string | null }): Lineup =>
   lineupOf(roster.opponents, names, PLAYER_SIDE, OPPONENT_SIDE);
@@ -123,13 +133,11 @@ prep.setPlayer(playerBehaviour, player.file);
  * Матч получает копии Сторон: что бы ни случилось с Поведением на
  * Подготовке после старта, идущий матч оно не задевает.
  */
-const setupFor = (seed: Seed, releases: readonly ScheduledRelease[] = []): MatchSetup => ({
-  seed,
-  map: arena,
-  sides: lineup.sides({ ...player.side, behaviour: playerBehaviour }).map((side) => structuredClone(side)),
-  releases: [...releases],
-  maxTicks: MATCH_LIMIT_TICKS,
-});
+const setupFor = (seed: Seed, releases: readonly ScheduledRelease[] = []): MatchSetup => {
+  const [mine, theirs] = lineup.sides({ ...player.side, behaviour: playerBehaviour });
+  const sides = [structuredClone(mine), structuredClone(theirs)] as const;
+  return matchSetupOf({ seed, map: arena, sides, releases: [...releases], maxTicks: MATCH_LIMIT_TICKS }, examNow());
+};
 
 /** Выпуски игрока в живых матчах — для повтора того же матча. */
 const log = createReleaseLog();
@@ -260,7 +268,7 @@ function frame(nowMs: number): void {
     foeIncomePerSecond: foe?.incomePerSecond ?? 0,
     chosenKind,
     replaying: phase === 'match' && log.replaying,
-    showcase: phase === 'match' && lineup.showcase,
+    showcase: phase === 'match' && lineup.showcase ? showcaseLabel(examNow(), lineup.opponent?.side.waves?.length ?? 0) : null,
   });
   const ended = phase === 'match' && match.finished;
   const names = lineup.ally && { own: lineup.ally.name, foe: lineup.opponent?.name ?? 'Противник' };

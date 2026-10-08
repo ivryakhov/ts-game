@@ -1,4 +1,5 @@
 import type { Seed } from '@sim/index';
+import { examFromAddress, type ExamMatch } from '../app/exam-match.js';
 import { parseSeed } from '../app/seed.js';
 
 /**
@@ -32,6 +33,11 @@ export function rememberOpponent(id: string): void {
  * Противник за свою Сторону: ?ally=turtle — Показательный матч. Без него
  * за свою Сторону играет человек.
  */
+/** Матч Экзамена из адреса: ?limit=exam&shift=k (спека 0005). */
+export function examFromPage(): ExamMatch | null {
+  return examFromAddress(new URLSearchParams(window.location.search));
+}
+
 export function allyFromAddress(): string | null {
   return new URLSearchParams(window.location.search).get('ally');
 }
