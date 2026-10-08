@@ -148,7 +148,7 @@ describe('Выведенные Противники в браузере', () => 
         },
       };
 
-      await saveEvolved(candidate, 'одна', locks);
+      await saveEvolved(candidate, 'одна', [], locks);
       expect(calls).toEqual([{ name: EVOLVED_KEY, writtenBefore: false }]);
     });
 

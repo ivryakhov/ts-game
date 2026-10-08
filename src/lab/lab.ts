@@ -172,7 +172,7 @@ function render(): void {
         ? [evolvedActions(shown, { generation: of, seed }, watchable(), warn, () => {
             detailsVersion += 1;
             render();
-          })]
+          }, roster.opponents.map((opponent) => opponent.id))]
         : []),
     );
   }

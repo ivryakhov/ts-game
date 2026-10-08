@@ -37,6 +37,7 @@ export function evolvedDescription(origin: Origin, bouts: readonly (Bout | null)
 /**
  * Кнопки для Претендента. `opponents` — с кем смотреть матч; `onChange` —
  * перерисовать страницу после сохранения.
+ * `taken` — адреса Противников из файлов, занятые даже для старых сохранений.
  */
 export function evolvedActions(
   entry: Entry,
@@ -44,17 +45,18 @@ export function evolvedActions(
   opponents: readonly { id: string; name: string }[],
   warn: (message: string) => void,
   onChange: () => void,
+  taken: readonly string[] = [],
 ): HTMLElement {
   const box = document.createElement('div');
   box.className = 'lab__actions';
   const pruned = prune(entry.candidate, entry.bouts);
-  const done = findEvolved(pruned);
+  const done = findEvolved(pruned, taken);
   if (!done) {
     const save = button(
       'Сохранить как Противника',
       () => {
         save.disabled = true;
-        void saveEvolved(pruned, evolvedDescription(origin, entry.bouts)).then((result) => {
+        void saveEvolved(pruned, evolvedDescription(origin, entry.bouts), taken).then((result) => {
           if ('problem' in result) {
             warn(`Противник не сохранён: ${result.problem}.`);
             save.disabled = false;

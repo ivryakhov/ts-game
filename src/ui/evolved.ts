@@ -123,12 +123,14 @@ const playOf = (file: Record<string, unknown>): string =>
  * Сравнивается содержимое, а не объект в памяти: элита переходит
  * из Поколения в Поколение тем же объектом, а вычистка по другому
  * Экзамену даёт другие Правила — это уже другой Противник.
+ * Адреса из `taken` заняты файлами: такая запись скрыта на Подготовке,
+ * поэтому её нужно сохранить заново под свободным адресом.
  */
-export function findEvolved(candidate: Candidate): { id: string; name: string } | null {
+export function findEvolved(candidate: Candidate, taken: readonly string[] = []): { id: string; name: string } | null {
   const found = shelf();
   if (found.kind !== 'ok') return null;
   const play = playOf(candidateFile(candidate, '', ''));
-  const entry = found.entries.find((stored) => playOf(stored.file) === play);
+  const entry = found.entries.find((stored) => !taken.includes(stored.id) && playOf(stored.file) === play);
   return entry ? { id: entry.id, name: typeof entry.file['name'] === 'string' ? entry.file['name'] : entry.id } : null;
 }
 
@@ -155,17 +157,23 @@ export type SaveResult = { readonly id: string; readonly name: string } | { read
  * под одной блокировкой на все вкладки: две Лаборатории, сохраняющие
  * разом, не затрут друг друга. Испорченные записи полки сохраняются
  * как были; нечитаемая целиком полка не перезаписывается.
+ * `taken` — адреса Противников из файлов, которые нельзя занимать.
  */
-export async function saveEvolved(candidate: Candidate, description: string, locks = browserLocks()): Promise<SaveResult> {
+export async function saveEvolved(
+  candidate: Candidate,
+  description: string,
+  taken: readonly string[] = [],
+  locks = browserLocks(),
+): Promise<SaveResult> {
   const save = (): SaveResult => {
     const place = storage();
     if (!place) return { problem: 'хранилища браузера нет' };
     const found = shelf();
     if (found.kind === 'broken') return { problem: `хранилище Выведенных испорчено — ${found.problem}; оно не перезаписано` };
     const number = Math.max(0, ...found.entries.map((entry) => entry.number)) + 1;
-    const taken = new Set(found.entries.map((entry) => entry.id));
+    const occupied = new Set([...taken, ...found.entries.map((entry) => entry.id)]);
     let id = freshId();
-    while (taken.has(id)) id = freshId();
+    while (occupied.has(id)) id = freshId();
     const name = `Выведенный №${number}`;
     try {
       place.setItem(EVOLVED_KEY, JSON.stringify([...found.raw, { id, number, file: candidateFile(candidate, name, description) }]));
