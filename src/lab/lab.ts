@@ -11,13 +11,14 @@ import { parseSeed } from '../app/seed.js';
 import { arena } from '../maps/arena.js';
 import { readEvolved } from '../ui/evolved.js';
 import { ELITE } from '../evolve/generation.js';
+import { boardOf, type Pane } from './board.js';
 import { createCurve } from './curve.js';
 import { selectionAfterAdvance } from './selection.js';
 import { createEvolution, type GenerationRecord, type Settings } from './evolution.js';
 import { evolvedActions } from './evolved-actions.js';
 import { createRunner, threadCount } from './runner.js';
 import { createRunMemory, readRun, type RunSettings } from './saved-run.js';
-import { details, fadedBoard, historyTable, leaderboard, ranked, summary } from './view.js';
+import { details, historyTable, ranked, summary } from './view.js';
 
 function element<T extends HTMLElement = HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -32,6 +33,7 @@ const GENERATIONS = { min: 1, max: 1000, start: 30 } as const;
 
 const pickers = element('lab-opponents');
 const sizeInput = element<HTMLInputElement>('lab-size');
+const pauseEach = element<HTMLInputElement>('lab-pause-each');
 const generationsInput = element<HTMLInputElement>('lab-generations');
 const seedInput = element<HTMLInputElement>('lab-seed');
 const origin = element<HTMLSelectElement>('lab-origin');
@@ -85,6 +87,8 @@ const elapsedSeconds = (): number =>
   Math.round((clock.spentMs + (evolution.state.phase === 'running' ? performance.now() - clock.sinceMs : 0)) / 1000);
 
 let selected: number | null = null;
+/** На паузе после отбора: сданное Поколение или собранное следующее. */
+let pane: Pane = 'examined';
 /** Поколение, чьего лучшего показывает страница; null — идущее Поколение. */
 let viewing: number | null = null;
 /**
@@ -132,7 +136,9 @@ function render(): void {
     ? `Прошлый прогон из браузера: ${records.length} Поколений из ${total}, Сид ${restored.settings.seed}, размер ${restored.settings.size}`
     : phase === 'idle'
       ? status.textContent
-      : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с · потоков: ${runner.threads}${PHASES[phase]}`;
+      : evolution.state.assembled
+        ? `Поколение ${generation} сдано и отобрано · пауза: «Продолжить» начнёт Экзамен Поколения ${generation + 1}`
+        : `Поколение ${generation}: Экзамен ${done} из ${entries.length * examined} матчей · ${elapsedSeconds()} с · потоков: ${runner.threads}${PHASES[phase]}`;
   line.textContent = settings && !restored ? summary(entries, examined, generation, total) : '';
   curve.update(records, total, examined, viewing);
   const pick = (number: number): void => {
@@ -146,50 +152,37 @@ function render(): void {
   );
   // Новое Поколение видно, если читатель не листает историю выше.
   if (scrolled || viewing === null) history.scrollTop = history.scrollHeight;
-  // Таблица — идущее Поколение или, если на кривой или в истории выбрано
-  // прошлое, оно целиком: с Оценками и детьми каждого (спека 0005).
-  const snapshot = viewing === null ? null : (evolution.state.generations.find((entry) => entry.number === viewing) ?? null);
-  const tableEntries = snapshot?.entries ?? entries;
-  const readyNames = settings?.readyNames ?? [];
-  const title = document.createElement('p');
-  title.className = 'lab__board-title';
-  title.textContent = snapshot
-    ? `Поколение ${snapshot.number}${snapshot.children ? ' · сдано, детей сосчитано' : ''}`
-    : entries.length > 0
-      ? `Поколение ${generation}${phase === 'running' || phase === 'paused' ? ' · Экзамен' : ''}`
-      : '';
-  if (snapshot && snapshot.number !== generation) {
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'button lab__back';
-    back.textContent = `← к Поколению ${generation}`;
-    back.addEventListener('click', () => {
-      viewing = null;
-      selected = null;
-      render();
-    });
-    title.append(' ', back);
-  }
-  board.replaceChildren(
-    ...(snapshot?.faded
-      ? [title, ...fadedBoard(snapshot.faded, examined, snapshot.children, readyNames)]
-      : tableEntries.length === 0
-        ? []
-        : [
-            title,
-            leaderboard(
-              tableEntries,
-              examined,
-              selected,
-              (number) => {
-                selected = number;
-                render();
-              },
-              snapshot?.children ?? null,
-              readyNames,
-            ),
-          ]),
-  );
+  if (!evolution.state.assembled) pane = 'examined';
+  const shownBoard = boardOf({
+    generations: evolution.state.generations,
+    generation,
+    entries,
+    assembled: evolution.state.assembled,
+    examining: phase === 'running' || phase === 'paused',
+    viewing,
+    selected,
+    pane: evolution.state.assembled ? pane : 'examined',
+    examined,
+    readyNames: settings?.readyNames ?? [],
+    on: {
+      select(number) {
+        selected = number;
+        render();
+      },
+      back() {
+        viewing = null;
+        selected = null;
+        render();
+      },
+      pane(next) {
+        pane = next;
+        selected = null;
+        render();
+      },
+    },
+  });
+  board.replaceChildren(...shownBoard.elements);
+  const { snapshot, entries: tableEntries } = shownBoard;
   const champion = records.find((record) => record.number === viewing)?.champion;
   const fromTable = tableEntries.find((entry) => entry.number === (selected ?? ranked(tableEntries)[0]?.number));
   // Без Поколения в памяти (прогон из браузера) — лучший из истории.
@@ -200,7 +193,8 @@ function render(): void {
   // Подробности перерисовываются, только когда в них что-то поменялось:
   // иначе кнопка, пересоздаваемая на каждый матч Экзамена, теряла бы клик.
   const played = shown?.bouts.filter((bout) => bout !== null).length ?? 0;
-  const key = `${snapshot ? 'table' : champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
+  const assembledShown = tableEntries === evolution.state.assembled;
+  const key = `${assembledShown ? 'assembled' : snapshot ? 'table' : champion ? 'champion' : 'entry'}:${of}:${shown?.number}:${played}:${examined}:${detailsVersion}:${records.length}`;
   if (key !== detailsKey) {
     detailsKey = key;
     const heading = !snapshot && champion && shown === champion ? `Лучший Поколения ${of}: Претендент №${champion.number}` : undefined;
@@ -273,6 +267,10 @@ start.addEventListener('click', () => {
 });
 pause.addEventListener('click', () => (evolution.state.phase === 'paused' ? evolution.resume() : evolution.pause()));
 stop.addEventListener('click', () => evolution.stop());
+// Галочку можно менять на ходу: снятая больше не останавливает.
+pauseEach.addEventListener('change', () => {
+  evolution.pauseAfterGeneration = pauseEach.checked;
+});
 
 /** Прошлый прогон: поля — его настройки, кривая и история — его. */
 const previous = readRun(arena);

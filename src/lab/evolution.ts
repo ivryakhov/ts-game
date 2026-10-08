@@ -1,11 +1,11 @@
 import { createRng, type GameMap } from '@sim/index';
 import type { Candidate } from '../evolve/candidate.js';
 import { candidateSide, totalOf, type Bout } from '../evolve/exam.js';
-import { childrenOf, fadeBirth, type Birth, type FadedBirth } from '../evolve/birth.js';
-import { ruleCount } from '../evolve/candidate.js';
+import { childrenOf, type Birth } from '../evolve/birth.js';
 import { breed, firstBorn, type Born } from '../evolve/generation.js';
 import type { BoutRequest } from './protocol.js';
 import type { Runner } from './runner.js';
+import { fadeBeyond, FULL_BUDGET, type Snapshot } from './snapshots.js';
 import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
 
 /**
@@ -17,6 +17,8 @@ import { ranked, scoreOfEntry, type Entry, type Origin } from './view.js';
  * а ответы Worker'а встают на место по номеру задания. Поэтому тот же
  * Сид и те же настройки дают те же Поколения.
  */
+
+export type { Faded, Snapshot } from './snapshots.js';
 
 export interface Settings {
   readonly size: number;
@@ -30,71 +32,6 @@ export interface Settings {
   readonly readyNames?: readonly string[];
 }
 
-/**
- * Сколько Претендентов хранится полностью — с Правилами, Стороной,
- * матчами и мутациями «было и стало» (спека 0005, «Память»): 100
- * Поколений по 32. Более ранние Поколения выцветают.
- */
-export const FULL_BUDGET = 3_200;
-
-/**
- * Выцветший Претендент: то, что нужно таблице и Родословной, без
- * Правил, Стороны и матчей — десятки байт вместо килобайтов.
- */
-export interface Faded {
-  readonly number: number;
-  readonly generation: number;
-  readonly origin: Origin;
-  readonly birth: FadedBirth | undefined;
-  readonly score: number;
-  readonly wins: number;
-  readonly draws: number;
-  readonly played: number;
-  readonly rules: number;
-}
-
-/**
- * Поколение прогона, каким его видно в памяти страницы: Претенденты
- * с Рождениями и, когда следующее уже собрано, сколько детей у каждого.
- * У выцветшего Поколения `entries` пуст, а Претенденты — в `faded`.
- */
-export interface Snapshot {
-  /** С единицы. */
-  readonly number: number;
-  entries: readonly Entry[];
-  faded: readonly Faded[] | null;
-  children: readonly number[] | null;
-}
-
-function fadedOf(entry: Entry): Faded {
-  const bouts = entry.bouts.filter((bout): bout is Bout => bout !== null);
-  return {
-    number: entry.number,
-    generation: entry.generation ?? 0,
-    origin: entry.origin,
-    birth: entry.birth && fadeBirth(entry.birth),
-    score: scoreOfEntry(entry),
-    wins: bouts.filter((bout) => bout.outcome === 'win').length,
-    draws: bouts.filter((bout) => bout.outcome === 'draw').length,
-    played: bouts.length,
-    rules: ruleCount(entry.candidate),
-  };
-}
-
-/**
- * Выцветить старейшие полные Поколения, пока полных Претендентов больше
- * предела. Идущее Поколение не выцветает никогда.
- */
-export function fadeBeyond(generations: readonly Snapshot[], budget: number): void {
-  let full = generations.reduce((sum, snapshot) => sum + snapshot.entries.length, 0);
-  for (const snapshot of generations.slice(0, -1)) {
-    if (full <= budget) return;
-    if (snapshot.faded) continue;
-    full -= snapshot.entries.length;
-    snapshot.faded = snapshot.entries.map(fadedOf);
-    snapshot.entries = [];
-  }
-}
 
 /** Итог Поколения — строка истории. */
 export interface GenerationRecord {
@@ -115,6 +52,11 @@ export interface Evolution {
   pause(): void;
   resume(): void;
   stop(): void;
+  /**
+   * Пауза после каждого Поколения (спека 0005): прогон встаёт, когда
+   * Поколение сдало Экзамен и следующее уже собрано. Меняется на ходу.
+   */
+  pauseAfterGeneration: boolean;
   readonly state: {
     readonly phase: 'idle' | 'running' | 'paused' | 'stopped' | 'done';
     readonly settings: Settings | null;
@@ -126,6 +68,11 @@ export interface Evolution {
     readonly history: readonly GenerationRecord[];
     /** Все Поколения прогона по порядку — для детей и Родословной. */
     readonly generations: readonly Snapshot[];
+    /**
+     * Собранное, но ещё не сданное следующее Поколение — пока прогон
+     * стоит после отбора. null — не стоит.
+     */
+    readonly assembled: readonly Entry[] | null;
   };
 }
 
@@ -188,7 +135,11 @@ export function createEvolution(
     done: number;
     history: GenerationRecord[];
     generations: Snapshot[];
-  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [], generations: [] };
+    assembled: Entry[] | null;
+  } = { phase: 'idle', settings: null, generation: 0, entries: [], done: 0, history: [], generations: [], assembled: null };
+  let pauseAfterGeneration = false;
+  /** Продолжить прогон, стоящий после отбора; null — он не стоит. */
+  let proceed: (() => void) | null = null;
   /** Номер запуска: остановленный прогон, доигрывая, не трогает следующего. */
   let launch = 0;
 
@@ -197,7 +148,18 @@ export function createEvolution(
     state.phase = 'stopped';
     launch += 1;
     runner.stop();
+    proceed?.();
+    proceed = null;
     onChange();
+  }
+
+  /** Стоять после отбора, пока не позовут «Продолжить» или «Стоп». */
+  function waitAfterSelection(): Promise<void> {
+    state.phase = 'paused';
+    onChange();
+    return new Promise((resolve) => {
+      proceed = resolve;
+    });
   }
 
   /** Экзамен Поколения. false — прогон остановлен или сменился. */
@@ -242,12 +204,13 @@ export function createEvolution(
       // последних матча, он кончился, а очередь так и стоит.
       runner.resume();
       const rng = createRng(settings.seed);
-      let born = firstBorn(rng, settings.size, roads, settings.ready);
-      Object.assign(state, { phase: 'running', settings, history: [], generations: [] });
+      const born = firstBorn(rng, settings.size, roads, settings.ready);
+      Object.assign(state, { phase: 'running', settings, history: [], generations: [], assembled: null });
+      let next = entriesOf(born, 1, map, settings.examiners.length, warn);
 
       for (let generation = 0; generation < settings.generations; generation += 1) {
         state.generation = generation + 1;
-        state.entries = entriesOf(born, generation + 1, map, settings.examiners.length, warn);
+        state.entries = next;
         const snapshot: Snapshot = { number: generation + 1, entries: state.entries, faded: null, children: null };
         state.generations.push(snapshot);
         fadeBeyond(state.generations, fullBudget);
@@ -258,11 +221,18 @@ export function createEvolution(
         // Последнее Поколение прогона не размножается: следующего не будет.
         if (generation + 1 === settings.generations) break;
         const scored = state.entries.map((entry) => ({ candidate: entry.candidate, score: scoreOfEntry(entry) }));
-        born = breed(rng, scored, roads);
+        const children = breed(rng, scored, roads);
         snapshot.children = childrenOf(
-          born.map((entry) => entry.birth),
+          children.map((entry) => entry.birth),
           scored.length,
         );
+        next = entriesOf(children, generation + 2, map, settings.examiners.length, warn);
+        if (pauseAfterGeneration) {
+          state.assembled = next;
+          await waitAfterSelection();
+          state.assembled = null;
+          if (mine !== launch) return;
+        }
       }
       state.phase = 'done';
       onChange();
@@ -277,6 +247,15 @@ export function createEvolution(
 
     resume() {
       if (state.phase !== 'paused') return;
+      if (proceed) {
+        // Стоял после отбора: дальше — Экзамен собранного Поколения.
+        const go = proceed;
+        proceed = null;
+        state.phase = 'running';
+        onChange();
+        go();
+        return;
+      }
       runner.resume();
       state.phase = 'running';
       onChange();
@@ -288,6 +267,14 @@ export function createEvolution(
 
     get state() {
       return state;
+    },
+
+    get pauseAfterGeneration() {
+      return pauseAfterGeneration;
+    },
+
+    set pauseAfterGeneration(on: boolean) {
+      pauseAfterGeneration = on;
     },
   };
 }

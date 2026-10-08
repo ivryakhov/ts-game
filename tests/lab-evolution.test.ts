@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '@sim/index';
 import { randomCandidate } from '../src/evolve/candidate.js';
-import type { Bout } from '../src/evolve/exam.js';
 import { nextGeneration } from '../src/evolve/generation.js';
-import { createEvolution, type Settings } from '../src/lab/evolution.js';
+import { createEvolution } from '../src/lab/evolution.js';
 import { selectionAfterAdvance } from '../src/lab/selection.js';
 import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
-import { createRunner, threadCount, type WorkerLike } from '../src/lab/runner.js';
+import { createRunner, threadCount } from '../src/lab/runner.js';
 import { arena } from '../src/maps/arena.js';
+import { bout, fakeWorker, finishes, settings, setup } from './lab-fakes.js';
 
 /**
  * Прогон эволюции на странице (замечания к PR #61): пауза, переживающая
@@ -16,54 +16,6 @@ import { arena } from '../src/maps/arena.js';
  */
 
 const ROADS = arena.roads.map((road) => road.id);
-
-const bout = (request: BoutRequest, score: number): Bout => ({
-  opponent: request.opponent,
-  outcome: 'loss',
-  ticks: 100,
-  ownHp: 1,
-  foeHp: 1,
-  score,
-  obelisks: 0,
-  ruleTicks: { scout: [], tank: [], ranger: [] },
-});
-
-/**
- * Worker, который отвечает на задание в следующей задаче; `answer` решает,
- * что ответить, `delay` — через сколько миллисекунд.
- */
-function fakeWorker(answer: (request: BoutRequest) => WorkerReply, delay: () => number = () => 0): WorkerLike {
-  const worker: WorkerLike = {
-    onmessage: null,
-    onerror: null,
-    postMessage(request) {
-      setTimeout(() => worker.onmessage?.({ data: answer(request) } as MessageEvent<WorkerReply>), delay());
-    },
-    terminate() {
-      worker.onmessage = null;
-    },
-  };
-  return worker;
-}
-
-const settings = (overrides: Partial<Settings> = {}): Settings => ({
-  size: 2,
-  generations: 1,
-  seed: 1,
-  examiners: [{ id: 'balanced', name: 'Сбалансированный' }],
-  ready: [],
-  ...overrides,
-});
-
-function setup(answer: (request: BoutRequest) => WorkerReply) {
-  const warnings: string[] = [];
-  const evolution = createEvolution(createRunner(() => fakeWorker(answer)), arena, () => {}, (message) => warnings.push(message));
-  return { evolution, warnings };
-}
-
-/** Прогон, который не кончился за секунду, считается зависшим. */
-const finishes = (run: Promise<void>): Promise<boolean> =>
-  Promise.race([run.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000))]);
 
 describe('прогон эволюции', () => {
   it('пауза, нажатая на последних матчах прогона, не останавливает следующий «Старт»', async () => {

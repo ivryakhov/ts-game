@@ -54,6 +54,7 @@
       .lab__note { margin: 0 0 8px; color: var(--ink-dim); font-size: 12px; }
       .lab__board-title { margin: 0 0 6px; color: var(--ink-dim); }
       .lab__back { margin-left: 8px; font-size: 12px; padding: 2px 8px; }
+      .lab__pane--active { border-color: var(--accent); box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); }
       .lab__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 14px 0 6px; }
       .lab__saved { color: var(--ink-dim); flex-basis: 100%; }
       .button {
@@ -128,6 +129,7 @@
           <label>Размер Поколения <input class="lab__input" id="lab-size" type="text" inputmode="numeric" autocomplete="off" /></label>
           <label>Поколений <input class="lab__input" id="lab-generations" type="text" inputmode="numeric" autocomplete="off" /></label>
           <label>Сид <input class="lab__input" id="lab-seed" type="text" inputmode="numeric" autocomplete="off" /></label>
+          <label title="Прогон встаёт, когда Поколение сдало Экзамен и следующее уже собрано: видно, кто сколько детей получил и кто от кого"><input type="checkbox" id="lab-pause-each" /> Пауза после каждого Поколения</label>
           <button type="button" class="button button--main" id="lab-start">Старт</button>
           <button type="button" class="button" id="lab-pause">Пауза</button>
           <button type="button" class="button" id="lab-stop">Стоп</button>
