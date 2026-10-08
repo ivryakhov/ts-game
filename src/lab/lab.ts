@@ -118,12 +118,12 @@ const card = createCard(element<HTMLDialogElement>('lab-card'), {
   examiners: () => restored?.settings.examiners ?? evolution.state.settings?.examiners ?? [],
   readyNames: () => evolution.state.settings?.readyNames ?? [],
   hasLineage: () => !restored,
-  actions: (entry, generation, onChange) =>
+  actions: (entry, generation, onChange, warnInCard) =>
     evolvedActions(
       entry,
       { generation, seed: restored?.settings.seed ?? evolution.state.settings?.seed ?? 0 },
       watchable(),
-      warn,
+      warnInCard,
       onChange,
       roster.opponents.map((opponent) => opponent.id),
     ),

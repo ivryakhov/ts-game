@@ -4,7 +4,7 @@ import type { Mutation } from '../src/evolve/birth.js';
 import { randomCandidate } from '../src/evolve/candidate.js';
 import { createEvolution } from '../src/lab/evolution.js';
 import { genesText, mutationText } from '../src/lab/birth-text.js';
-import { lineage, memberOf, parentsOf } from '../src/lab/lineage.js';
+import { factsOf, lineage, memberOf, parentsOf } from '../src/lab/lineage.js';
 import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
 import { createRunner } from '../src/lab/runner.js';
 import { arena } from '../src/maps/arena.js';
@@ -17,11 +17,21 @@ import { bout, fakeWorker, finishes, settings } from './lab-fakes.js';
 
 const scoredBy = (request: BoutRequest): WorkerReply => ({ kind: 'bout', job: request.job, bout: bout(request, -request.job) });
 
-async function run(budget: number, generations = 8) {
-  const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, budget);
+/** Оценка по самому Претенденту — чтобы лучшим бывала и не элита. */
+const scoredByContent = (request: BoutRequest): WorkerReply => {
+  const text = JSON.stringify(request.side);
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) hash = (hash * 31 + text.charCodeAt(index)) | 0;
+  return { kind: 'bout', job: request.job, bout: bout(request, hash % 1000) };
+};
+
+async function evolve(budget: number, generations = 8, scorer = scoredBy) {
+  const evolution = createEvolution(createRunner(() => fakeWorker(scorer)), arena, () => {}, () => {}, budget);
   expect(await finishes(evolution.start(settings({ size: 6, generations })))).toBe(true);
-  return evolution.state.generations;
+  return evolution.state;
 }
+
+const run = async (budget: number, generations = 8) => (await evolve(budget, generations)).generations;
 
 describe('Родословная', () => {
   it('предки по Поколениям: каждый уровень — ровно родители предыдущего, без повторов, до первого Поколения', async () => {
@@ -96,5 +106,36 @@ describe('Гены словами', () => {
     expect(genesText(child([4], { scout: 0, tank: 0, ranger: 0, waves: 0 }), 3)).toBe('Все Гены — от 2·5');
     expect(genesText(child([4, 4], { scout: 0, tank: 1, ranger: 0, waves: 1 }), 3)).toBe('Все Гены — от 2·5');
     expect(genesText(child([1], { scout: 0, tank: 0, ranger: 0, waves: 0 }, true), 1, ['Раш', 'Черепаха'])).toBe('Все Гены — от «Черепаха»');
+  });
+});
+
+describe('что карточка знает о Претенденте', () => {
+  it('у выцветшего — победы и сыгранные матчи из сохранённого, без полного Претендента', async () => {
+    const { generations, history } = await evolve(12);
+    const old = generations.find((snapshot) => snapshot.number === 3)!;
+    const champion = history[2]!.champion!;
+    const other = old.faded!.find((entry) => entry.number !== champion.number)!;
+
+    const facts = factsOf(generations, champion, { generation: 3, number: other.number });
+    expect(facts.entry).toBeNull();
+    expect(facts.wins).toBe(other.wins);
+    expect(facts.played).toBe(other.played);
+  });
+
+  it('у лучшего выцветшего Поколения — полный Претендент и полное Рождение из истории', async () => {
+    const { generations, history } = await evolve(12, 20, scoredByContent);
+    // Выцветшее Поколение, где лучший — ребёнок: у него есть мутации «было и стало».
+    const faded = new Set(generations.filter((snapshot) => snapshot.faded).map((snapshot) => snapshot.number));
+    const record = history.find((entry) => faded.has(entry.number) && entry.champion?.birth?.kind === 'child');
+    expect(record).toBeDefined();
+    const champion = record!.champion!;
+    const member = memberOf(generations, { generation: record!.number, number: champion.number })!;
+
+    const facts = factsOf(generations, champion, { generation: record!.number, number: champion.number });
+    expect(facts.entry).toBe(champion);
+    expect(facts.birth).toBe(champion.birth);
+    expect(facts.birth).not.toBe(member.birth);
+    expect(JSON.stringify(facts.birth)).toEqual(expect.stringMatching(/"before"|"after"|"same"|"swapped"/));
+    expect(JSON.stringify(member.birth)).not.toMatch(/"before"|"after"/);
   });
 });

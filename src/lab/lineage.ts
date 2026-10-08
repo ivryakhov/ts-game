@@ -19,6 +19,9 @@ export interface Member {
   readonly ref: Ref;
   readonly birth: Birth | FadedBirth | undefined;
   readonly score: number;
+  /** Сколько матчей Экзамена выиграл и сколько сыграл — есть и у выцветшего. */
+  readonly wins: number;
+  readonly played: number;
   /** Полный Претендент, если его Поколение ещё не выцвело. */
   readonly entry: Entry | null;
 }
@@ -34,9 +37,12 @@ export function memberOf(generations: readonly Snapshot[], ref: Ref): Member | n
   const snapshot = generations.find((entry) => entry.number === ref.generation);
   if (!snapshot) return null;
   const entry = snapshot.entries[ref.number - 1];
-  if (entry) return { ref, birth: entry.birth, score: scoreOfEntry(entry), entry };
+  if (entry) {
+    const bouts = entry.bouts.filter((bout) => bout !== null);
+    return { ref, birth: entry.birth, score: scoreOfEntry(entry), wins: bouts.filter((bout) => bout.outcome === 'win').length, played: bouts.length, entry };
+  }
   const faded = snapshot.faded?.[ref.number - 1];
-  return faded ? { ref, birth: faded.birth, score: faded.score, entry: null } : null;
+  return faded ? { ref, birth: faded.birth, score: faded.score, wins: faded.wins, played: faded.played, entry: null } : null;
 }
 
 /**
@@ -69,4 +75,29 @@ export function lineage(generations: readonly Snapshot[], ref: Ref): Level[] {
     current = members;
   }
   return levels;
+}
+
+/** Что карточка знает о Претенденте. */
+export interface Facts {
+  readonly member: Member | null;
+  /** Полный Претендент: из Поколений или, у лучшего выцветшего Поколения, из истории. */
+  readonly entry: Entry | null;
+  /** Полное Рождение важнее выцветшего — в нём «было и стало». */
+  readonly birth: Birth | FadedBirth | undefined;
+  /** Победы и сыгранные матчи — у полного по его матчам, у выцветшего — сохранённые. */
+  readonly wins: number | null;
+  readonly played: number | null;
+}
+
+export function factsOf(generations: readonly Snapshot[], champion: Entry | null, ref: Ref): Facts {
+  const member = memberOf(generations, ref);
+  const entry = member?.entry ?? (champion && champion.number === ref.number ? champion : null);
+  const bouts = entry?.bouts.filter((bout) => bout !== null) ?? null;
+  return {
+    member,
+    entry,
+    birth: entry?.birth ?? member?.birth,
+    wins: bouts ? bouts.filter((bout) => bout.outcome === 'win').length : (member?.wins ?? null),
+    played: bouts ? bouts.length : (member?.played ?? null),
+  };
 }

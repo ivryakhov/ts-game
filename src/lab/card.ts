@@ -1,6 +1,6 @@
-import { totalOf, type Bout } from '../evolve/exam.js';
+import type { Bout } from '../evolve/exam.js';
 import { birthSummary, genesText, mutationText, shortName } from './birth-text.js';
-import { lineage, memberOf, parentsOf, type Level, type Member, type Ref } from './lineage.js';
+import { factsOf, lineage, parentsOf, type Facts, type Level, type Ref } from './lineage.js';
 import type { Snapshot } from './snapshots.js';
 import { examTable, rulesOf, score, scoreOfEntry, type Entry } from './view.js';
 
@@ -19,8 +19,12 @@ export interface CardSource {
   readonly readyNames: () => readonly string[];
   /** Есть ли Родословная — после перезагрузки её нет. */
   readonly hasLineage: () => boolean;
-  /** Кнопки Выведенного Противника для полного, сдавшего Экзамен Претендента. */
-  readonly actions: (entry: Entry, generation: number, onChange: () => void) => HTMLElement;
+  /**
+   * Кнопки Выведенного Противника для полного, сдавшего Экзамен Претендента.
+   * `warn` — сказать об ошибке сохранения внутри карточки: страница за
+   * модальным окном не видна и недоступна.
+   */
+  readonly actions: (entry: Entry, generation: number, onChange: () => void, warn: (message: string) => void) => HTMLElement;
 }
 
 export interface Card {
@@ -61,16 +65,9 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
       draw();
     }, 'lab__link-button');
 
-  /** Полный Претендент: из Поколений, а выцветшего лучшего — из истории. */
-  function resolve(ref: Ref): { member: Member | null; entry: Entry | null } {
-    const member = memberOf(source.generations(), ref);
-    const champion = source.champion(ref.generation);
-    const entry = member?.entry ?? (champion && champion.number === ref.number ? champion : null);
-    return { member, entry };
-  }
+  const resolve = (ref: Ref): Facts => factsOf(source.generations(), source.champion(ref.generation), ref);
 
-  function birthSection(member: Member | null, entry: Entry | null, ref: Ref): HTMLElement[] {
-    const birth = member?.birth ?? entry?.birth;
+  function birthSection(birth: Facts['birth'], ref: Ref): HTMLElement[] {
     const head = make('h3', 'prep__kind', 'Рождение');
     if (!birth) return [head, make('p', 'lab__note', 'Рождение не сохраняется между перезагрузками страницы.')];
     const out: HTMLElement[] = [head, make('p', '', birthSummary(birth, ref.generation, source.readyNames()))];
@@ -117,16 +114,29 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
     if (!entry.side || played(entry).length !== examined) {
       return [make('p', 'lab__note', 'Сохранить можно после Экзамена: вычистка Правил опирается на все его матчи.')];
     }
-    return [source.actions(entry, ref.generation, () => {
-      version += 1;
-      draw();
-    })];
+    const problem = make('p', 'lab__problem');
+    problem.setAttribute('role', 'alert');
+    problem.hidden = true;
+    const actions = source.actions(
+      entry,
+      ref.generation,
+      () => {
+        version += 1;
+        draw();
+      },
+      (message) => {
+        problem.textContent = message;
+        problem.hidden = false;
+      },
+    );
+    return [actions, problem];
   }
 
   function draw(): void {
     const ref = stack[stack.length - 1];
     if (!ref) return;
-    const { member, entry } = resolve(ref);
+    const facts = resolve(ref);
+    const { member, entry } = facts;
     key = `${ref.generation}:${ref.number}:${entry ? played(entry).length : -1}:${version}:${stack.length}`;
     const nav = make('div', 'lab__card-nav');
     if (stack.length > 1) nav.append(button('← назад', () => {
@@ -135,8 +145,8 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
     }));
     nav.append(button('Закрыть', () => dialog.close(), 'button lab__back lab__card-close'));
     const examined = source.examiners().length;
-    const wins = entry ? totalOf(played(entry)).wins : null;
-    const unexamined = entry !== null && played(entry).length === 0;
+    const { wins } = facts;
+    const unexamined = facts.played === 0;
     const summary = make(
       'p',
       'lab__summary',
@@ -154,7 +164,7 @@ export function createCard(dialog: HTMLDialogElement, source: CardSource): Card 
       make('h2', 'lab__subtitle', `Претендент ${shortName(ref.generation, ref.number - 1)}`),
       summary,
       ...(entry ? [examTable(entry, source.examiners())] : []),
-      ...birthSection(member, entry, ref),
+      ...birthSection(facts.birth, ref),
       ...lineageSection(ref),
       ...(entry ? rulesOf(entry) : []),
       ...actionsSection(entry, ref),
