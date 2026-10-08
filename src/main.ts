@@ -70,7 +70,7 @@ try {
 
 // Готовые Противники из файлов и Выведенные в Лаборатории — из браузера.
 const files = loadOpponents(arena, OPPONENT_SIDE);
-const evolved = readEvolved(arena, OPPONENT_SIDE);
+const evolved = readEvolved(arena, OPPONENT_SIDE, files.opponents.map((opponent) => opponent.id));
 const roster = { opponents: [...files.opponents, ...evolved.opponents], problems: [...files.problems, ...evolved.problems] };
 /** Кто играет за обе Стороны: выбор на Подготовке, запомненный в адресе. */
 const lineupFor = (names: { ally: string | null; opponent: string | null }): Lineup =>

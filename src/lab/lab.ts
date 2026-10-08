@@ -67,6 +67,8 @@ function warn(message: string): void {
   problems.hidden = false;
 }
 for (const problem of roster.problems) warn(problem);
+// Испорченные Выведенные — та же причина, что на Подготовке в игре.
+for (const problem of readEvolved(arena, 'B', roster.opponents.map((opponent) => opponent.id)).problems) warn(problem);
 
 /**
  * Время Поколения без пауз: часы идут, только пока идёт Экзамен. Их
@@ -103,7 +105,7 @@ const memory = createRunMemory(warn);
 let detailsKey = '';
 let detailsVersion = 0;
 /** С кем смотреть Показательный матч: готовые Противники и уже Выведенные. */
-const watchable = () => [...roster.opponents, ...readEvolved(arena, 'B').opponents];
+const watchable = () => [...roster.opponents, ...readEvolved(arena, 'B', roster.opponents.map((opponent) => opponent.id)).opponents];
 
 const PHASES = { idle: '', running: '', paused: ' · пауза', stopped: ' · остановлен', done: ' · готово' } as const;
 

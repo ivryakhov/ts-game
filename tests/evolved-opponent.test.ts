@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { createRng, opponentFromFile } from '@sim/index';
-import { EVOLVED_KEY, evolvedText, isEvolved, readEvolved, saveEvolved } from '../src/ui/evolved.js';
+import { EVOLVED_KEY, evolvedText, findEvolved, isEvolved, readEvolved, saveEvolved } from '../src/ui/evolved.js';
 import { loadOpponents } from '../src/app/opponents.js';
 import { randomCandidate, type Candidate } from '../src/evolve/candidate.js';
 import { candidateSide, examBout, type Bout } from '../src/evolve/exam.js';
@@ -66,53 +66,129 @@ describe('Выведенные Противники в браузере', () => 
   };
   const turtle = roster.opponents.find((entry) => entry.id === 'turtle')!;
   const candidate: Candidate = { behaviour: turtle.side.behaviour!, waves: turtle.side.waves! };
+  const rush = roster.opponents.find((entry) => entry.id === 'rush-easy')!;
+  const other: Candidate = { behaviour: rush.side.behaviour!, waves: rush.side.waves! };
+  const saved = async (what: Candidate, description = 'проверка') => {
+    const result = await saveEvolved(what, description);
+    if ('problem' in result) throw new Error(result.problem);
+    return result;
+  };
 
-  it('номера идут по порядку: «Выведенный №1», «№2», в адресе evolved-1, evolved-2', () => {
+  it('имена по порядку «Выведенный №1», «№2», а адреса уникальны и с префиксом evolved-', async () => {
     browser();
+    const first = await saved(candidate);
+    const second = await saved(other);
 
-    expect(saveEvolved(candidate, 'первый')).toEqual({ id: 'evolved-1', name: 'Выведенный №1' });
-    expect(saveEvolved(candidate, 'второй')).toEqual({ id: 'evolved-2', name: 'Выведенный №2' });
-    expect(isEvolved('evolved-2')).toBe(true);
-    expect(isEvolved('turtle')).toBe(false);
+    expect([first.name, second.name]).toEqual(['Выведенный №1', 'Выведенный №2']);
+    expect(isEvolved(first.id) && isEvolved(second.id)).toBe(true);
+    expect(first.id).not.toBe(second.id);
+    expect(first.id).not.toBe('evolved-1');
   });
 
-  it('игра читает их Противниками за любую Сторону — с теми же Правилами и Волнами', () => {
+  it('игра читает их Противниками за любую Сторону — с теми же Правилами и Волнами', async () => {
     browser();
-    saveEvolved(candidate, 'Поколение 3 из Сида 1: выигрывает 7 из 7');
+    const { id } = await saved(candidate, 'Поколение 3 из Сида 1: выигрывает 7 из 7');
 
     const { opponents, problems } = readEvolved(arena, 'A');
     expect(problems).toEqual([]);
     expect(opponents).toHaveLength(1);
-    expect(opponents[0]).toMatchObject({ id: 'evolved-1', name: 'Выведенный №1', description: 'Поколение 3 из Сида 1: выигрывает 7 из 7' });
+    expect(opponents[0]).toMatchObject({ id, name: 'Выведенный №1', description: 'Поколение 3 из Сида 1: выигрывает 7 из 7' });
     expect(opponents[0]?.side.id).toBe('A');
     expect(opponents[0]?.side.behaviour).toEqual(turtle.side.behaviour);
     expect(opponents[0]?.side.waves).toEqual(turtle.side.waves);
   });
 
-  it('скачанный файл — в формате src/behaviours/opponents и проходит его разбор', () => {
+  it('скачанный файл — в формате src/behaviours/opponents и проходит его разбор', async () => {
     browser();
-    saveEvolved(candidate, 'файлом');
+    const { id } = await saved(candidate, 'файлом');
 
-    const text = evolvedText('evolved-1');
-    expect(text).not.toBeNull();
-    const file = opponentFromFile('B', JSON.parse(text ?? '{}'), arena);
+    const file = opponentFromFile('B', JSON.parse(evolvedText(id) ?? '{}'), arena);
     expect(file.name).toBe('Выведенный №1');
     expect(file.side.behaviour).toEqual(turtle.side.behaviour);
   });
 
-  it('испорченный не лишает остальных: он — в проблемах с причиной', () => {
+  it('совпавший по адресу с файлом Противника не показывается, а сказано почему', async () => {
     browser();
-    saveEvolved(candidate, 'целый');
-    const stored = JSON.parse(items.get(EVOLVED_KEY) ?? '[]') as unknown[];
-    items.set(EVOLVED_KEY, JSON.stringify([...stored, { id: 'evolved-9', file: { name: 'Сломанный', description: 'x', scout: [] } }]));
+    const { id } = await saved(candidate);
 
-    const { opponents, problems } = readEvolved(arena, 'B');
-    expect(opponents.map((entry) => entry.id)).toEqual(['evolved-1']);
-    expect(problems.join('\n')).toContain('evolved-9');
+    const { opponents, problems } = readEvolved(arena, 'B', [id]);
+    expect(opponents).toEqual([]);
+    expect(problems.join('\n')).toContain(id);
   });
 
-  it('без хранилища — ни Выведенных, ни ошибки', () => {
-    expect(saveEvolved(candidate, 'некуда')).toBeNull();
+  describe('уже сохранённый узнаётся по содержимому', () => {
+    it('те же Правила и Волны — тот же Выведенный, и после перезагрузки', async () => {
+      browser();
+      const { id } = await saved(candidate);
+
+      expect(findEvolved(structuredClone(candidate))?.id).toBe(id);
+      expect(findEvolved(other)).toBeNull();
+    });
+
+    it('тот же Претендент, вычищенный по другому Экзамену, — другой Противник', async () => {
+      browser();
+      const used = (ticks: number) =>
+        ({ ruleTicks: { scout: candidate.behaviour.scout.map(() => ticks), tank: [], ranger: [] } }) as unknown as Bout;
+      // Элита переходит в следующее Поколение тем же объектом, но Экзамен у неё другой.
+      await saved(prune(candidate, [used(1)]));
+
+      expect(findEvolved(prune(candidate, [used(1)]))).not.toBeNull();
+      expect(findEvolved(prune(candidate, [used(0)]))).toBeNull();
+    });
+  });
+
+  describe('две вкладки разом', () => {
+    it('сохранение идёт под блокировкой на все вкладки: прочитать, выбрать номер и записать — одним шагом', async () => {
+      browser();
+      const calls: { name: string; writtenBefore: boolean }[] = [];
+      const locks = {
+        request: async <T,>(name: string, run: () => T | Promise<T>) => {
+          calls.push({ name, writtenBefore: items.has(EVOLVED_KEY) });
+          return run();
+        },
+      };
+
+      await saveEvolved(candidate, 'одна', locks);
+      expect(calls).toEqual([{ name: EVOLVED_KEY, writtenBefore: false }]);
+    });
+
+    it('с настоящими блокировками оба сохранения на месте и с разными номерами', async () => {
+      browser();
+      const [first, second] = await Promise.all([saved(candidate, 'первая вкладка'), saved(other, 'вторая вкладка')]);
+
+      expect(readEvolved(arena, 'B').opponents.map((entry) => entry.id).sort()).toEqual([first.id, second.id].sort());
+      expect(new Set([first.name, second.name]).size).toBe(2);
+    });
+  });
+
+  describe('испорченное не пропадает молча', () => {
+    it('испорченная запись остаётся в хранилище после следующего сохранения, и о ней сказано', async () => {
+      browser();
+      items.set(EVOLVED_KEY, JSON.stringify([{ id: 'evolved-9', file: null }]));
+
+      expect(readEvolved(arena, 'B').problems.join('\n')).toContain('evolved-9');
+      await saved(candidate);
+      const stored = JSON.parse(items.get(EVOLVED_KEY) ?? '[]') as { id: string }[];
+      expect(stored.map((entry) => entry.id)).toContain('evolved-9');
+      expect(stored).toHaveLength(2);
+    });
+
+    it.each([
+      ['не JSON', '{оборвано'],
+      ['не список', '{"evolved-1": {}}'],
+    ])('нечитаемое хранилище (%s) — причина при чтении, и запись отказывается его затирать', async (_title, text) => {
+      browser();
+      items.set(EVOLVED_KEY, text);
+
+      expect(readEvolved(arena, 'B').problems[0]).toContain('не прочитаны');
+      const result = await saveEvolved(candidate, 'поверх');
+      expect(result).toHaveProperty('problem');
+      expect(items.get(EVOLVED_KEY)).toBe(text);
+    });
+  });
+
+  it('без хранилища — ни Выведенных, ни ошибки чтения; сохранение говорит почему не вышло', async () => {
+    expect(await saveEvolved(candidate, 'некуда')).toEqual({ problem: 'хранилища браузера нет' });
     expect(readEvolved(arena, 'B')).toEqual({ opponents: [], problems: [] });
   });
 });

@@ -1,19 +1,17 @@
-import type { Candidate } from '../evolve/candidate.js';
 import { totalOf, type Bout } from '../evolve/exam.js';
 import { prune } from '../evolve/prune.js';
 import { offerDownload } from '../ui/behaviour-files.js';
-import { evolvedText, saveEvolved } from '../ui/evolved.js';
+import { evolvedText, findEvolved, saveEvolved } from '../ui/evolved.js';
 import type { Entry } from './view.js';
 
 /**
  * Кнопки под Претендентом: сохранить его Выведенным Противником, затем
  * смотреть его Показательный матч в игре и скачать файлом (спека 0004).
- * Сохранённый остаётся сохранённым, пока страница открыта: повторное
- * «Сохранить» не плодит копий.
+ * Сохранён ли он, решает содержимое: Претендент, вычищенный по своему
+ * Экзамену, сравнивается с полкой Выведенных. Элита того же объекта
+ * в другом Поколении вычищается по другому Экзамену — и это другой
+ * Противник, а тот же — узнаётся и после перезагрузки.
  */
-
-/** Что уже сохранено с этой страницы: Претендент → его имя в адресе и имя. */
-const saved = new WeakMap<Candidate, { id: string; name: string }>();
 
 export interface Origin {
   /** Поколение Претендента и Сид прогона — для описания Выведенного. */
@@ -49,23 +47,25 @@ export function evolvedActions(
 ): HTMLElement {
   const box = document.createElement('div');
   box.className = 'lab__actions';
-  const done = saved.get(entry.candidate);
+  const pruned = prune(entry.candidate, entry.bouts);
+  const done = findEvolved(pruned);
   if (!done) {
-    box.append(
-      button(
-        'Сохранить как Противника',
-        () => {
-          const result = saveEvolved(prune(entry.candidate, entry.bouts), evolvedDescription(origin, entry.bouts));
-          if (!result) {
-            warn('Противник не сохранён: хранилища браузера нет или оно переполнено.');
+    const save = button(
+      'Сохранить как Противника',
+      () => {
+        save.disabled = true;
+        void saveEvolved(pruned, evolvedDescription(origin, entry.bouts)).then((result) => {
+          if ('problem' in result) {
+            warn(`Противник не сохранён: ${result.problem}.`);
+            save.disabled = false;
             return;
           }
-          saved.set(entry.candidate, result);
           onChange();
-        },
-        true,
-      ),
+        });
+      },
+      true,
     );
+    box.append(save);
     return box;
   }
 
