@@ -1,0 +1,100 @@
+import { describe, it, expect } from 'vitest';
+import { createRng } from '@sim/index';
+import type { Mutation } from '../src/evolve/birth.js';
+import { randomCandidate } from '../src/evolve/candidate.js';
+import { createEvolution } from '../src/lab/evolution.js';
+import { genesText, mutationText } from '../src/lab/birth-text.js';
+import { lineage, memberOf, parentsOf } from '../src/lab/lineage.js';
+import type { BoutRequest, WorkerReply } from '../src/lab/protocol.js';
+import { createRunner } from '../src/lab/runner.js';
+import { arena } from '../src/maps/arena.js';
+import { bout, fakeWorker, finishes, settings } from './lab-fakes.js';
+
+/**
+ * Родословная и Рождение словами (тикет 34): предки по Поколениям
+ * и то, что карточка пишет о мутациях.
+ */
+
+const scoredBy = (request: BoutRequest): WorkerReply => ({ kind: 'bout', job: request.job, bout: bout(request, -request.job) });
+
+async function run(budget: number, generations = 8) {
+  const evolution = createEvolution(createRunner(() => fakeWorker(scoredBy)), arena, () => {}, () => {}, budget);
+  expect(await finishes(evolution.start(settings({ size: 6, generations })))).toBe(true);
+  return evolution.state.generations;
+}
+
+describe('Родословная', () => {
+  it('предки по Поколениям: каждый уровень — ровно родители предыдущего, без повторов, до первого Поколения', async () => {
+    const generations = await run(10_000);
+    const ref = { generation: 8, number: 4 };
+    const levels = lineage(generations, ref);
+
+    expect(levels.map((level) => level.generation)).toEqual([7, 6, 5, 4, 3, 2, 1]);
+    let below = [memberOf(generations, ref)!];
+    for (const level of levels) {
+      const expected = [...new Set(below.flatMap((member) => parentsOf(member.birth)))].sort((a, b) => a - b).map((index) => index + 1);
+      expect(level.members.map((member) => member.ref.number)).toEqual(expected);
+      below = [...level.members];
+    }
+  });
+
+  it('у выцветших предков нет Правил, но есть Рождение и Оценка', async () => {
+    const generations = await run(12);
+    const levels = lineage(generations, { generation: 8, number: 4 });
+    const old = levels.filter((level) => level.generation <= 5).flatMap((level) => level.members);
+
+    expect(old.length).toBeGreaterThan(0);
+    for (const member of old) {
+      expect(member.entry).toBeNull();
+      expect(Number.isFinite(member.score)).toBe(true);
+    }
+    expect(levels.find((level) => level.generation === 7)?.members.every((member) => member.entry !== null)).toBe(true);
+  });
+
+  it('у первого Поколения предков нет', async () => {
+    const generations = await run(10_000, 2);
+    expect(lineage(generations, { generation: 1, number: 2 })).toEqual([]);
+    expect(memberOf(generations, { generation: 9, number: 1 })).toBeNull();
+  });
+});
+
+describe('мутации словами', () => {
+  const candidate = randomCandidate(createRng(4), arena.roads.map((road) => road.id));
+  const rule = candidate.behaviour.ranger[0]!;
+  const other = candidate.behaviour.scout[0]!;
+  const wave = candidate.waves[0]!;
+
+  it.each([
+    [{ gene: 'ranger', change: 'changed', at: 2, before: rule, after: other }, /^Стрелок, Правило 3: «если .*» → «если .*»$/],
+    [{ gene: 'tank', change: 'inserted', at: 0, after: rule }, /^Танк: вставлено Правило 1 — «/],
+    [{ gene: 'scout', change: 'removed', at: 4, before: rule }, /^Разведчик: удалено Правило 5 — «/],
+    [{ gene: 'ranger', change: 'swapped', at: 0, other: 3 }, /^Стрелок: Правило 1 и правило 4 поменялись местами$/],
+    [{ gene: 'waves', change: 'changed', at: 1, before: wave, after: wave }, /^Волны, Волна 2: «.*Дорога.*» → «/],
+    [{ gene: 'scout', change: 'same' }, /^Разведчик: мутация ничего не изменила/],
+  ] as [Mutation, RegExp][])('%o', (mutation, text) => {
+    expect(mutationText(mutation)).toMatch(text);
+  });
+
+  it('у выцветшего — только что и где', () => {
+    expect(mutationText({ gene: 'ranger', change: 'changed', at: 2 })).toBe('Стрелок: изменено Правило 3');
+    expect(mutationText({ gene: 'waves', change: 'removed', at: 0 })).toBe('Волны: удалена Волна 1');
+    expect(mutationText({ gene: 'waves', change: 'inserted', at: 2 })).toBe('Волны: вставлена Волна 3');
+  });
+});
+
+describe('Гены словами', () => {
+  const child = (parents: number[], genes: Record<'scout' | 'tank' | 'ranger' | 'waves', number>, fromReady?: true) =>
+    ({ kind: 'child', parents, genes, mutations: [], ...(fromReady ? { fromReady } : {}) }) as const;
+
+  it('какой Ген от какого родителя', () => {
+    expect(genesText(child([4, 8], { scout: 0, tank: 1, ranger: 1, waves: 0 }), 3)).toBe(
+      'Правила Разведчика, Волны — от 2·5; Правила Танка, Правила Стрелка — от 2·9',
+    );
+  });
+
+  it('у мутанта одного родителя и у скрещённого с собой — все Гены от одного', () => {
+    expect(genesText(child([4], { scout: 0, tank: 0, ranger: 0, waves: 0 }), 3)).toBe('Все Гены — от 2·5');
+    expect(genesText(child([4, 4], { scout: 0, tank: 1, ranger: 0, waves: 1 }), 3)).toBe('Все Гены — от 2·5');
+    expect(genesText(child([1], { scout: 0, tank: 0, ranger: 0, waves: 0 }, true), 1, ['Раш', 'Черепаха'])).toBe('Все Гены — от «Черепаха»');
+  });
+});

@@ -1,4 +1,5 @@
 import type { Snapshot } from './evolution.js';
+import type { Ref } from './lineage.js';
 import { fadedBoard, leaderboard, type Entry } from './view.js';
 
 /**
@@ -25,7 +26,8 @@ export interface BoardInput {
   readonly examined: number;
   readonly readyNames: readonly string[];
   readonly on: {
-    select(number: number): void;
+    /** Открыть карточку Претендента: Поколение и номер. */
+    select(ref: Ref): void;
     back(): void;
     pane(pane: Pane): void;
   };
@@ -74,9 +76,11 @@ export function boardOf(input: BoardInput): Board {
   }
 
   // Выцветшее Поколение — без Правил: своя таблица, без выбора.
+  const of = past?.number ?? (showAssembled ? generation + 1 : generation);
+  const select = (number: number): void => on.select({ generation: of, number });
   if (past?.faded) {
-    return { elements: [title, ...fadedBoard(past.faded, input.examined, past.children, input.readyNames)], entries: [], snapshot: past };
+    return { elements: [title, ...fadedBoard(past.faded, input.examined, past.children, input.readyNames, select)], entries: [], snapshot: past };
   }
-  const table = leaderboard(shown, input.examined, input.selected, on.select, children, input.readyNames, showAssembled ? 'birth' : 'rank');
+  const table = leaderboard(shown, input.examined, input.selected, select, children, input.readyNames, showAssembled ? 'birth' : 'rank');
   return { elements: shown.length === 0 ? [] : [title, table], entries: shown, snapshot: past };
 }
